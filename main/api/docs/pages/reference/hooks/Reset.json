@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/Reset.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Reset.md",
+  "route": "/reference/hooks/Reset",
+  "title": "Reset",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Reset",
+  "markdown": "---\ntitle: \"Reset\"\nseo:\n  description: \"Clear Error (guide) and LastResult (guide). Does not cancel or affect any in-flight RunAsync (guide) call.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Summary [#summary]\n\nClear [Error](/microsoft-ui-reactor/main/reference/hooks/Error) ([guide](/microsoft-ui-reactor/main/guides/hooks)) and [LastResult](/microsoft-ui-reactor/main/reference/hooks/LastResult) ([guide](/microsoft-ui-reactor/main/guides/hooks)). Does not cancel or affect any\nin-flight [RunAsync](/microsoft-ui-reactor/main/reference/hooks/RunAsync) ([guide](/microsoft-ui-reactor/main/guides/hooks)) call.\n"
+}

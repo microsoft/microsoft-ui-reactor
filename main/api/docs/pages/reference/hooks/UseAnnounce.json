@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseAnnounce.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounce.md",
+  "route": "/reference/hooks/UseAnnounce",
+  "title": "UseAnnounce",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounce",
+  "markdown": "---\ntitle: \"UseAnnounce\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseAnnounce(Component)`](#useannouncecomponent)\n- [`UseAnnounce(RenderContext)`](#useannouncerendercontext)\n\n## `UseAnnounce(Component)` [#useannouncecomponent]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.Component)`\n\n### Summary [#summary]\n\nCreates an [AnnounceHandle](/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle) ([guide](/microsoft-ui-reactor/main/guides/hooks)) for making screen reader announcements.\n\n## `UseAnnounce(RenderContext)` [#useannouncerendercontext]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.RenderContext)`\n\n### Summary [#summary_1]\n\nCreates an [AnnounceHandle](/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle) ([guide](/microsoft-ui-reactor/main/guides/hooks)) for making screen reader announcements.\nThe handle persists across re-renders.\n\nYou must include [Region](/microsoft-ui-reactor/main/reference/hooks/Region) ([guide](/microsoft-ui-reactor/main/guides/hooks)) in your rendered tree:\n```csharp\nvar announce = UseAnnounce();\nreturn VStack(\nannounce.Region,\nButton(\"Save\", () => { Save(); announce.Announce(\"Document saved\"); }),\n);\n```\n"
+}

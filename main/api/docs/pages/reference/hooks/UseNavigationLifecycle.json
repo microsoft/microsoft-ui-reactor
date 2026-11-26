@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseNavigationLifecycle.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigationLifecycle.md",
+  "route": "/reference/hooks/UseNavigationLifecycle",
+  "title": "UseNavigationLifecycle",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigationLifecycle",
+  "description": "Registers lifecycle callbacks that fire during navigation events.",
+  "markdown": "---\ntitle: \"UseNavigationLifecycle\"\ndescription: \"Registers lifecycle callbacks that fire during navigation events.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n- `onNavigatedTo` — fires after this page becomes active.\n- `onNavigatingFrom` — fires before navigating away. Call `ctx.Cancel()` to block.\n- `onNavigatedFrom` — fires after this page is no longer active.\n\nCallbacks are always updated to the latest references on every render.\n"
+}

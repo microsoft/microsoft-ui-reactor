@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseColorScheme.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseColorScheme.md",
+  "route": "/reference/hooks/UseColorScheme",
+  "title": "UseColorScheme",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseColorScheme",
+  "description": "Returns the app-global ColorScheme — ColorScheme.Light or ColorScheme.Dark, read from Application.Current.RequestedTheme.",
+  "markdown": "---\ntitle: \"UseColorScheme\"\ndescription: \"Returns the app-global ColorScheme — ColorScheme.Light or ColorScheme.Dark, read from Application.Current.RequestedTheme.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n\nThe value is re-evaluated on every render — when the app theme changes,\n`ReactorHost` triggers a re-render so this hook\nnaturally picks up the new value.\n\n\n\nThis hook does **not** observe per-element `RequestedTheme` overrides: it\nconsults the application, not the calling component's position in the tree, so a\ncomponent inside a `.RequestedTheme(Dark)` subtree still reports the app theme.\nIt also never returns `ColorScheme.HighContrast` in a running app — use\n[UseHighContrast](/microsoft-ui-reactor/main/reference/hooks/UseHighContrast) ([guide](/microsoft-ui-reactor/main/guides/hooks)) for forced-colors mode.\n"
+}

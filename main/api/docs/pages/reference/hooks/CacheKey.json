@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/CacheKey.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheKey.md",
+  "route": "/reference/hooks/CacheKey",
+  "title": "CacheKey",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheKey",
+  "description": "Overrides the generated cache key; null uses a key derived from deps. When set, the key identifies the query; deps changes alone do not cancel an in-flight request or start a new fetch. Include values that select different data in the key, for example $\"user:{userId}\".",
+  "markdown": "---\ntitle: \"CacheKey\"\ndescription: \"Overrides the generated cache key; null uses a key derived from deps. When set, the key identifies the query; deps changes alone do not cancel an in-flight request or start a new fetch. Include values that select different data in the key, for example $\\\"user:{userId}\\\".\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

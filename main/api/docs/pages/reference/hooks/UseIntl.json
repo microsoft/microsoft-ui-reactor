@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseIntl.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIntl.md",
+  "route": "/reference/hooks/UseIntl",
+  "title": "UseIntl",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIntl",
+  "description": "Returns an IntlAccessor for the current locale. Re-renders this component when the locale changes via a parent LocaleProvider. If no LocaleProvider is present, returns a default accessor using the OS locale. Uses Context internally — the context system handles re-renders automatically.",
+  "markdown": "---\ntitle: \"UseIntl\"\ndescription: \"Returns an IntlAccessor for the current locale. Re-renders this component when the locale changes via a parent LocaleProvider. If no LocaleProvider is present, returns a default accessor using the OS locale. Uses Context internally — the context system handles re-renders automatically.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

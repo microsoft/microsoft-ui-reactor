@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "description": "Read the Reactor docs instead of answering from memory. Declarative UI framework for native Windows desktop apps in pure C#. Use when a task involves Reactor: how it works, how to set it up or configure it, or its API.",
+      "digest": "sha256:f3e5e9fd4494e1b6844a9aa3c9fba63c2d959e73ae53d21dc275d84eb694e153",
+      "name": "reactor",
+      "type": "skill-md",
+      "url": "/microsoft-ui-reactor/main/.well-known/agent-skills/reactor/SKILL.md"
+    }
+  ]
+}

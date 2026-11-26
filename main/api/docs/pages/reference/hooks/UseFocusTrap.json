@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseFocusTrap.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap.md",
+  "route": "/reference/hooks/UseFocusTrap",
+  "title": "UseFocusTrap",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap",
+  "markdown": "---\ntitle: \"UseFocusTrap\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseFocusTrap(Component, bool)`](#usefocustrapcomponent-bool)\n- [`UseFocusTrap(RenderContext, bool)`](#usefocustraprendercontext-bool)\n\n## `UseFocusTrap(Component, bool)` [#usefocustrapcomponent-bool]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseFocusTrapExtensions.UseFocusTrap(Microsoft.UI.Reactor.Core.Component,System.Boolean)`\n\n### Summary [#summary]\n\nCreates a focus trap handle for this component.\n\n## `UseFocusTrap(RenderContext, bool)` [#usefocustraprendercontext-bool]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseFocusTrapExtensions.UseFocusTrap(Microsoft.UI.Reactor.Core.RenderContext,System.Boolean)`\n\n### Summary [#summary_1]\n\nCreates a focus trap handle that traps keyboard focus within a container\nwhen active. Use with the .FocusTrap() element modifier.\n\n```csharp\n// UseFocusTrap is an extension on Component / RenderContext, so it needs\n// an explicit receiver — there is no unqualified Component wrapper.\nvar trap = this.UseFocusTrap(isDialogOpen);\nreturn Border(\nVStack(\nTextBlock(\"Confirm delete?\"),\nButton(\"Cancel\", () => setOpen(false)),\nButton(\"Delete\", onDelete)\n)\n).FocusTrap(trap);\n```\n"
+}

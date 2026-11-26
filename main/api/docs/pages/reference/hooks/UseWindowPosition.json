@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseWindowPosition.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowPosition.md",
+  "route": "/reference/hooks/UseWindowPosition",
+  "title": "UseWindowPosition",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowPosition",
+  "description": "Subscribes to the host window's PositionChanged event and re-renders on change. Returns (0, 0) outside a window. (spec 054 §5.5)",
+  "markdown": "---\ntitle: \"UseWindowPosition\"\ndescription: \"Subscribes to the host window's PositionChanged event and re-renders on change. Returns (0, 0) outside a window. (spec 054 §5.5)\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

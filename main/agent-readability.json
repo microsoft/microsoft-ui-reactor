@@ -1,0 +1,27 @@
+{
+  "artifacts": {
+    "markdown": {
+      "pattern": "https://microsoft.github.io/microsoft-ui-reactor/main/{route}.md"
+    },
+    "api": {
+      "openapi": "https://microsoft.github.io/microsoft-ui-reactor/main/openapi.json",
+      "pages": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages.json"
+    },
+    "llmsFullTxt": "https://microsoft.github.io/microsoft-ui-reactor/main/llms-full.txt",
+    "llmsTxt": "https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt",
+    "aiCatalog": "https://microsoft.github.io/microsoft-ui-reactor/main/.well-known/ai-catalog.json",
+    "apiCatalog": "https://microsoft.github.io/microsoft-ui-reactor/main/.well-known/api-catalog",
+    "agentSkills": "https://microsoft.github.io/microsoft-ui-reactor/main/.well-known/agent-skills/index.json",
+    "sitemap": "https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml"
+  },
+  "description": "Declarative UI framework for native Windows desktop apps in pure C#.",
+  "generator": "blume@2.2.7",
+  "name": "Reactor",
+  "site": "https://microsoft.github.io",
+  "contentUsage": {
+    "search": true,
+    "ai-input": true,
+    "ai-train": true
+  },
+  "repository": "https://github.com/microsoft/microsoft-ui-reactor"
+}

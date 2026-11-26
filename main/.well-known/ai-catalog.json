@@ -1,0 +1,44 @@
+{
+  "entries": [
+    {
+      "displayName": "reactor",
+      "identifier": "urn:air:microsoft.github.io:skill:reactor",
+      "representativeQueries": [
+        "load the reactor agent skill",
+        "how do I use reactor"
+      ],
+      "type": "application/agent-skills+md",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/.well-known/agent-skills/reactor/SKILL.md",
+      "description": "Read the Reactor docs instead of answering from memory. Declarative UI framework for native Windows desktop apps in pure C#. Use when a task involves Reactor: how it works, how to set it up or configure it, or its API."
+    },
+    {
+      "displayName": "Reactor docs API",
+      "identifier": "urn:air:microsoft.github.io:api:docs",
+      "representativeQueries": [
+        "fetch a page of the Reactor docs as JSON",
+        "list the pages in the Reactor docs",
+        "get the navigation tree of the Reactor docs"
+      ],
+      "type": "application/vnd.oai.openapi+json",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/openapi.json",
+      "description": "REST API over the Reactor documentation: the page index, each page as JSON or Markdown, and the navigation tree, described by this OpenAPI document."
+    },
+    {
+      "displayName": "Reactor llms.txt",
+      "identifier": "urn:air:microsoft.github.io:docs:llms-txt",
+      "representativeQueries": [
+        "what is Reactor",
+        "overview of the Reactor documentation"
+      ],
+      "type": "text/plain",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt",
+      "description": "llms.txt index of the Reactor documentation: every page with a one-line summary, plus the agent-facing resources on this site."
+    }
+  ],
+  "host": {
+    "displayName": "Reactor",
+    "documentationUrl": "https://microsoft.github.io/microsoft-ui-reactor/main",
+    "identifier": "did:web:microsoft.github.io"
+  },
+  "specVersion": "1.0"
+}

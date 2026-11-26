@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/SetLoading.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetLoading.md",
+  "route": "/reference/hooks/SetLoading",
+  "title": "SetLoading",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetLoading",
+  "description": "Update token's loading state. Silently ignored if the token was never registered (defensive — avoids forcing the caller to track whether they registered).",
+  "markdown": "---\ntitle: \"SetLoading\"\ndescription: \"Update token's loading state. Silently ignored if the token was never registered (defensive — avoids forcing the caller to track whether they registered).\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

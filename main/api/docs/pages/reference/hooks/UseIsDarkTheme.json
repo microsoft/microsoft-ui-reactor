@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseIsDarkTheme.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsDarkTheme.md",
+  "route": "/reference/hooks/UseIsDarkTheme",
+  "title": "UseIsDarkTheme",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsDarkTheme",
+  "description": "Convenience wrapper — returns true when the app-global color scheme is ColorScheme.Dark. Exactly UseColorScheme() == ColorScheme.Dark, so it inherits that hook's semantics: it does not observe per-element RequestedTheme.",
+  "markdown": "---\ntitle: \"UseIsDarkTheme\"\ndescription: \"Convenience wrapper — returns true when the app-global color scheme is ColorScheme.Dark. Exactly UseColorScheme() == ColorScheme.Dark, so it inherits that hook's semantics: it does not observe per-element RequestedTheme.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

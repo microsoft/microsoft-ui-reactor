@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseElementRef.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRef.md",
+  "route": "/reference/hooks/UseElementRef",
+  "title": "UseElementRef",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRef",
+  "markdown": "---\ntitle: \"UseElementRef\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseElementRef<T>(Component)`](#useelementreftcomponent)\n- [`UseElementRef<T>(RenderContext)`](#useelementreftrendercontext)\n\n## `UseElementRef<T>(Component)` [#useelementreftcomponent]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.Component)`\n\n### Summary [#summary]\n\nComponent-extension overload of [UseElementRef](/microsoft-ui-reactor/main/reference/hooks/UseElementRef#useelementreftrendercontext) ([guide](/microsoft-ui-reactor/main/guides/hooks)).\nEquivalent to calling the `RenderContext`-extension form against\n`component.Context`.\n\n### Parameters [#parameters]\n\n- **component** — The component whose render context owns the hook slot.\n\n## `UseElementRef<T>(RenderContext)` [#useelementreftrendercontext]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.RenderContext)`\n\n### Summary [#summary_1]\n\nReturns a stable `ElementRef` for the current component scope.\n"
+}

@@ -1,0 +1,523 @@
+---
+title: "Architecture Overview"
+description: "This page maps Reactor's runtime end-to-end so the rest of the Under-the-hood track has a shared diagram to point at."
+sidebar:
+  label: "Architecture overview"
+---
+
+Microsoft.UI.Reactor (Reactor) is a declarative shell over WinUI. You write a `Component` whose
+`Render()` method returns an immutable tree of element records — value
+types that describe what you want on screen, not the WinUI controls that
+implement it. A single reconciler diffs the new tree against the previous
+one and edits a long-lived WinUI control tree in place, renting and
+returning controls through an element pool so the heavy classes
+([`Button`](/microsoft-ui-reactor/main/controls/text-and-media), [`TabView`](/microsoft-ui-reactor/main/guides/navigation),
+[`ItemsRepeater`](/microsoft-ui-reactor/main/controls/collections)) survive across renders. Hooks like
+[`UseState`](/microsoft-ui-reactor/main/guides/hooks) hold the state that drives the loop, and effects
+fire after the reconciler has committed property writes, so the UI you
+observe in an effect is the UI on screen. The most common mistake is
+reading this page as "Reactor wraps XAML" — the element tree is not a
+shadow XAML graph, it is a new authoring surface that happens to
+materialize WinUI.
+
+Read it once, then jump to the section you care about: [Reactivity
+Model](/microsoft-ui-reactor/main/how-it-works/reactivity-model), [Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation), [Hooks
+Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals), or [Effects
+Scheduling](/microsoft-ui-reactor/main/how-it-works/effects-scheduling).
+
+## The render loop [#the-render-loop]
+
+![Reactor render loop: state setter, component render, element tree, reconciler, WinUI tree, composition, frame](/microsoft-ui-reactor/main/images/architecture-overview/overview.svg)
+
+The flow is one-way. A hook setter writes a new value into a
+[`RenderContext`](/microsoft-ui-reactor/main/how-it-works/hooks-internals) slot, the context calls back into
+the host with a re-render request, the component's `Render()` produces a
+new element tree, the reconciler walks both trees in lockstep and writes
+the differences to existing WinUI controls. Nothing pulls. There is no
+binding expression listening to a property; the element tree is the
+single source of truth for the frame after a re-render, and the
+reconciler is the single mutator.
+
+| Subsystem | Files | What it owns |
+|---|---|---|
+| Component shell | `src/Reactor/Core/Component.cs` | `Render()` contract, `ShouldUpdate`, hook convenience methods |
+| Hook table | `src/Reactor/Core/RenderContext.cs` | Slot table, hook implementations, UI-thread invariant |
+| Elements | `src/Reactor/Core/Element.cs`, `ElementFactory.cs` | Immutable records, factory plumbing for ItemsRepeater |
+| Reconciler | `src/Reactor/Core/Reconciler*.cs`, `ChildReconciler.cs` | Mount / Update / Unmount, keyed LIS diff |
+| Pool | `src/Reactor/Core/ElementPool.cs` | `TryRent` / `Return` for poolable leaf controls |
+| Modifiers | `src/Reactor/Elements/ElementExtensions*.cs` | Fluent modifier fold |
+| Hosting | `src/Reactor/Hosting/` | Window/app bootstrap, UI dispatcher capture |
+| Diagnostics | `src/Reactor/Core/Diagnostics/` | ETW provider, overlay hooks |
+| Advanced sibling package | `src/Reactor.Advanced/` | Optional heavy dependencies; first inhabitant is [Win2D canvas](/microsoft-ui-reactor/main/controls/win2d-canvas) |
+
+Every section below zooms into one row of that table.
+
+```csharp
+public abstract class Component
+{
+    // Settable so the reconciler can transfer a live RenderContext (hooks +
+    // cleanups) onto a freshly-constructed instance when a Hot Reload edit
+    // mints a new component Type token (spec 049 §7 subtree migration). Outside
+    // that path the value is the per-instance context created here.
+    internal RenderContext Context { get; set; } = new();
+
+    /// <summary>
+    /// Override to describe the UI. Use UseState, UseEffect, etc. from the context.
+    /// Must call hooks in the same order every render.
+    /// </summary>
+    public abstract Element Render();
+
+    /// <summary>
+    /// Controls whether this propless component should re-render when its parent re-renders.
+    /// Default: false — propless components only re-render from their own state changes or context changes.
+    /// Override and return true to always re-render when the parent re-renders.
+    /// </summary>
+    protected internal virtual bool ShouldUpdate() => false;
+```
+
+`Component` is the surface — a single `abstract Element Render()` plus
+the `ShouldUpdate()` hook that lets a propless component opt out of
+parent-driven renders. Everything else is convenience wiring around the
+[`RenderContext`](/microsoft-ui-reactor/main/how-it-works/hooks-internals) that holds the hook slot table.
+Function components (`Memo(ctx => ...)`) skip the class declaration but
+go through the same `RenderContext` machinery.
+
+> **Caveat:** The reconciler never recreates the WinUI control tree on a re-render.
+> If you cache a control reference outside Reactor (e.g. stash a `Button`
+> from a captured ref in a long-lived field) and the element it
+> materialized later gets replaced because its type changed, your stash
+> points at an unmounted control — one that may already have been
+> returned to the [element pool](/microsoft-ui-reactor/main/how-it-works/element-pool), stripped of its
+> element tag, and re-rented by an unrelated part of the tree. Use
+> [`UseElementRef`](/microsoft-ui-reactor/main/how-it-works/hooks-internals) and read `.Current` inside an
+> effect — the ref is the only thing the reconciler keeps current.
+
+## Element records — the immutable description [#element-records-the-immutable-description]
+
+```csharp
+public abstract record Element
+{
+    /// <summary>
+    /// Optional key for stable identity across re-renders (like React's key prop).
+    /// When set, the reconciler uses it to match elements across list reorderings.
+    /// </summary>
+    public string? Key { get; init; }
+
+    /// <summary>
+    /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
+    /// Modifiers are stored inline so the concrete element type is preserved through chaining.
+    /// </summary>
+    public ElementModifiers? Modifiers { get; init; }
+```
+
+Every node in the tree is a `record` deriving from `Element`. The shape
+matters: records are value-like, structurally immutable, and cheap to
+allocate. A render produces a fresh tree on the heap; the previous
+tree's records become garbage as soon as the reconciler finishes the
+pass. The `Key` slot is the identity primitive — set it via `.WithKey()`
+on collection items so the [child reconciler](/microsoft-ui-reactor/main/how-it-works/reconciliation) can
+match elements across reorderings.
+
+Modifiers ride inside `ElementModifiers`. A chain like
+`TextBlock("hi").FontSize(24).Margin(8)` produces one `TextBlockElement` with a
+merged `Modifiers` record, not three nested wrappers — the
+[modifier system](/microsoft-ui-reactor/main/how-it-works/modifier-system) folds them so the reconciler only
+sees one shape per concept.
+
+```csharp
+public UIElement GetElement(ElementFactoryGetArgs args)
+{
+    // Resolve the realized data → (key, dataIndex). Three paths:
+    //   1. Spec 042: args.Data is ReactorRow — read both off the row.
+    //   2. Legacy: args.Data is int — index directly, synthetic key.
+    //   3. Fallback: unknown shape, treat as index 0.
+    string key;
+    int index;
+    bool keyed;
+    switch (args.Data)
+    {
+        case ReactorRow row:
+            key = row.Key;
+            index = row.Index;
+            keyed = true;
+            break;
+        case int i:
+            index = i;
+            key = i.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+            keyed = false;
+            break;
+        default:
+            index = 0;
+            key = "0";
+            keyed = false;
+            break;
+    }
+
+    if (index < 0 || index >= _items.Count)
+        return new TextBlock { Text = "" };
+
+    using var restoreContext = _reconciler.EnterRealization(_hostCapture ?? _ownCapture, args.Parent);
+
+    var item = _items[index];
+    var element = BuildOrCache(key, item, index, keyed);
+    TryTakeCompatibleFromPool(element, out var reused, out var oldElement, out var parkedVisibility);
+    // Rows realize during layout, outside any root pass: inherit the repeater's theme.
+    using var realizationTheme = _reconciler.EnterRealizationTheme(args.Parent, reused);
+
+    UIElement? control;
+    if (reused is not null && oldElement is not null)
+    {
+        // Reuse a previously-recycled container. The framework still has
+        // it parented to the ItemsRepeater, so the ViewManager.cpp:866
+        // Append-skip kicks in and the visual tree stays stable.
+        //
+        // Undo the parking collapse from RecycleElement BEFORE reconciling.
+        // Restore the exact pre-park value source rather than forcing
+        // Visible: an in-place diff whose Visibility modifier is unchanged
+        // writes nothing, so forcing Visible would silently un-collapse a
+        // row the author asked to hide.
+        RestoreParkedVisibility(parkedVisibility);
+        var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
+        if (replacement is not null && !ReferenceEquals(replacement, reused))
+        {
+            // Pass-2 reuse: the row's key changed, so Reconcile unmounted the old
+            // component (effect cleanups ran) and built a fresh wrapper. Move that
+            // subtree back into the container we already have — returning the
+            // replacement instead would strand `reused`, which cannot be un-parented
+            // from an ItemsRepeater (see DetachFromParent). (Issues #326, #919.)
+            //
+            // A pass-1 selection can land here too: CanUpdate was true, but a
+            // decorator-style handler substituted a different instance. Re-check
+            // CanSafelyAdopt so only wrappers whose entire state lives in the
+            // component subtree are adopted; everything else takes the fresh
+            // replacement and parks the container.
+            if (CanSafelyAdopt(reused, oldElement, element)
+                && _reconciler.TryAdoptRealizedReplacement(reused, replacement))
+            {
+                control = reused;
+                // Same as the adopt path above: refresh the back-pointer the
+                // adoption itself does not move, so the reported source
+                // location follows the row that is actually live (spec 010).
+                if (reused is FrameworkElement adoptedFe)
+                    Reconciler.SetElementTagIfNeeded(adoptedFe, element);
+                if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+                    Reconciler.AdoptPublishedSource(reused, replacement);
+            }
+            else
+            {
+                // Nothing can install `replacement` into `reused`. Retire `reused`
+                // — park it hidden with its Reactor state detached — rather than
+                // leaving a live ghost row painted over the list. Do NOT return it to
+                // the pool: it was unmounted inside Reconcile, so its tracked Element
+                // no longer describes it.
+                RetireAlreadyUnmounted(reused);
+                control = replacement;
+            }
+        }
+        else
+        {
+            control = reused;
+        }
+    }
+    else
+    {
+        control = _reconciler.Mount(element, _requestRerender);
+    }
+
+    _mountedElements[key] = element;
+    if (control is not null)
+    {
+        if (control is FrameworkElement realizedElement)
+            Reconciler.GetOrCreateReactorState(realizedElement).RealizationTheme = realizationTheme.Theme;
+        _keyByControl[control] = key;
+        _controlByKey[key] = control;
+        _lastElementByControl[control] = element;
+        if (_keyByControl.Count > _maxRealized) _maxRealized = _keyByControl.Count;
+
+        // Issue #383: arm the multi-select checkmark flicker guard on the
+        // realized container. Idempotent per container instance.
+        // Intentionally scoped to ItemContainer (the ItemsView item-root
+        // wrapper): LazyVStack/LazyHStack realize into plain panels via
+        // ItemsRepeater, not ItemContainer, and the MultiSelectStates.Multiple
+        // storyboard the guard collapses only ever runs for multi-select
+        // ItemContainers — so widening this to all controls would be inert
+        // work everywhere else. Do not "generalize" it.
+        if (control is ItemContainer itemContainer)
+            ItemContainerSelectionFlickerGuard.Ensure(itemContainer);
+    }
+
+    return control ?? new TextBlock { Text = "" };
+}
+```
+
+Element factories show the shape from the other side: the
+[collections](/microsoft-ui-reactor/main/controls/collections) layer hands an `ItemsRepeater` an
+`ElementFactory` which, on demand, builds a new element for an item
+index, mounts a control through the same reconciler, and hands the
+control back. The `_viewBuilder` is the closure you passed to
+`ForEach(items, viewBuilder)`; the reconciler ensures that re-rendering
+re-uses the same control whenever the keyed identity matches.
+
+## Reconciler — the only mutator [#reconciler-the-only-mutator]
+
+```csharp
+public UIElement? Reconcile(
+    Element? oldElement,
+    Element? newElement,
+    UIElement? existingControl,
+    Action requestRerender)
+{
+    // A top-level pass is an outermost Reactor frame for render-error propagation
+    // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+    using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Reconcile, newElement);
+    // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
+    // update, or unmount are announced only once the whole pass has finished.
+    using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
+    ReferenceDirtySet.BeginCommit();
+    try
+    {
+    // Trace only top-level reconcile passes (depth == 0) to avoid flooding
+    // the provider with per-subtree entries; nested Reconcile() calls during
+    // the same pass don't emit their own start/stop. Gate the depth counter
+    // and Start emit on IsEnabled so the disabled path pays nothing extra.
+    // `traceEnabled` and `emitTrace` are tracked separately: every enabled
+    // call must decrement the depth it incremented, but only the outermost
+    // one emits. Decrementing on `emitTrace` alone would leak the counter
+    // once a pass contained a nested reconcile, permanently suppressing
+    // every later top-level trace.
+    bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
+        global::System.Diagnostics.Tracing.EventLevel.Informational,
+        Diagnostics.ReactorEventSource.Keywords.Reconcile);
+    bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
+    if (emitTrace)
+    {
+        Diagnostics.ReactorEventSource.Log.ReconcileStart(
+            newElement?.GetType().Name ?? "null");
+    }
+    if (_debugReconcileDepth++ == 0)
+    {
+        DebugElementsDiffed = 0;
+        DebugElementsSkipped = 0;
+        DebugUIElementsCreated = 0;
+        DebugUIElementsModified = 0;
+        // Drop destination references a previous pass queued but never flushed. Every
+        // shipped host flushes at the end of each render, but a pass that threw
+        // mid-reconcile — or a Reconcile() caller that never flushes (tests,
+        // embedders) — must not accumulate strong UIElement refs. A list clear, so
+        // nothing here can throw and strand the depth counter incremented just above.
+        _pendingConnectedAnimationStarts.Clear();
+        _preparedConnectedAnimationKeys.Clear();
+        if (ReactorFeatureFlags.HighlightReconcileChanges)
+        {
+            (_highlightMounted ??= new()).Clear();
+            (_highlightModified ??= new()).Clear();
+        }
+        // Consume the hot-reload and resource-refresh signals exactly once per
+        // top-level pass so every component re-runs Render() even when props/deps
+        // are unchanged (and, for a resource refresh, no element is skipped).
+        bool hostPass = _realizationThemeDepth == 0;
+        var theme = hostPass ? InheritedRequestedTheme(ThemeAnchor) : _realizationTheme;
+        _resourceRefreshActive = hostPass
+            ? _resourceRefreshArmed || theme != _renderedHostTheme
+            : _realizationResourceRefresh;
+        if (hostPass)
+            _resourceRefreshArmed = false;
+        _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
+        ForceFullRenderPending = false;
+        _hotReloadRetryActive = HotReloadRetryPending;
+        HotReloadRetryPending = false;
+        _ambientRequestedTheme = theme;
+
+        // Build the dirty-ancestor path. For every component node
+        // whose SelfTriggered is true, walk up the realized visual
+        // tree and add each ancestor control. Consumed by Update's
+        // shallow-equality short-circuit so the walk can reach the
+        // self-triggered descendant even when its ancestor element
+        // records are structurally unchanged.
+        PopulateDirtyAncestorPath();
+    }
+    try {
+    try
+    {
+        UIElement? result;
+        if (newElement is null or EmptyElement)
+        {
+            if (existingControl is not null)
+                Unmount(existingControl);
+            result = null;
+        }
+        else if (oldElement is null or EmptyElement || existingControl is null)
+            result = Mount(newElement, requestRerender);
+        else
+            result = ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        if (_debugReconcileDepth == 1 && _realizationThemeDepth == 0)
+            _renderedHostTheme = _ambientRequestedTheme;
+        return result;
+```
+
+`Reconcile` is a tri-state dispatch: `(oldElement, newElement)` resolves
+into Unmount, Mount, or [Update](/microsoft-ui-reactor/main/how-it-works/reconciliation). A `newElement` that
+is `null` *or* `EmptyElement` unmounts; a missing `oldElement` (or a
+missing `existingControl`) mounts; anything else falls through to
+`ReconcileImperative`, the update walk. The Mount path allocates WinUI
+controls (or rents them from the [element pool](/microsoft-ui-reactor/main/how-it-works/element-pool)); the
+update path uses `CanUpdate(old, new)` to decide whether to patch the
+existing control in place or unmount-and-remount. The Unmount path
+returns to the pool and walks effect cleanups in slot order.
+
+The reconciler is split across partial files: `Reconciler.Mount.cs`
+and `Reconciler.Update.cs` hold the dispatch logic plus the
+composition-primitive handlers, registered descriptors/handlers hold
+per-control mount/update logic, and [`ChildReconciler.cs`](/microsoft-ui-reactor/main/how-it-works/reconciliation)
+holds the keyed-vs-positional child diff. The remaining reconciler concerns
+each have their own `Reconciler.<Topic>.cs` partial (`Modifiers`, `Unmount`,
+`Keyframes`, `Transitions`, `ReactorState`, …), while `Reconciler.cs` keeps the
+orchestration. Helpers that need none of the reconciler's private state
+(`ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents`,
+`ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`) are separate
+`internal static` classes. There is one reconciler instance per host; component
+recursion shares the dispatch.
+
+## Hooks — slot table per RenderContext [#hooks-slot-table-per-rendercontext]
+
+```csharp
+public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = false)
+{
+    if (_hookIndex >= _hooks.Count)
+    {
+        _hooks.Add(new ValueHookState<T>(initialValue, threadSafe));
+    }
+
+    var currentIndex = _hookIndex;
+    _hookIndex++;
+
+    if (_hooks[currentIndex] is not ValueHookState<T> hook)
+        throw new HookOrderException(
+            $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(T).Name}> (UseState). " +
+            "Hooks must be called in the same order every render.");
+```
+
+Each component instance owns a [`RenderContext`](/microsoft-ui-reactor/main/how-it-works/hooks-internals)
+with a `List<HookState>` indexed by call order. `BeginRender` resets
+`_hookIndex` to zero; each hook call reads or creates the slot at the
+current index and advances. Slot type mismatches throw
+`HookOrderException` immediately — this is why
+[hook rules](/microsoft-ui-reactor/main/get-started/rules-of-reactor) (no conditional hooks, no hooks in
+loops with varying counts) exist. Without the positional invariant, a
+setter on render N would write the wrong slot on render N+1.
+
+Hook setters are the entry point into the render loop. They do not
+mutate the UI directly; they store a value, equality-check against the
+previous, and call `_requestRerender` on the host if anything changed.
+The host coalesces requests through `DispatcherQueue.TryEnqueue`, so a
+synchronous handler that calls three setters produces one re-render.
+
+## Patterns [#patterns]
+
+### Tracing a render end-to-end [#tracing-a-render-end-to-end]
+
+When you need to know what happened on a single frame, enable the
+reconcile overlay from the [dev menu](/microsoft-ui-reactor/main/guides/dev-tooling) and watch the ETW
+`ReactorEventSource` provider. The keywords are split so you can subscribe
+to `State`, `Render`, `Reconcile`, and `Effect` independently — each
+roughly corresponds to one box on the diagram above. The
+[perf-instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation) page covers the
+attribution side; the [devtools-internals](/microsoft-ui-reactor/main/how-it-works/devtools-internals) page
+covers the overlay rendering.
+
+```csharp
+public abstract class Component
+{
+    // Settable so the reconciler can transfer a live RenderContext (hooks +
+    // cleanups) onto a freshly-constructed instance when a Hot Reload edit
+    // mints a new component Type token (spec 049 §7 subtree migration). Outside
+    // that path the value is the per-instance context created here.
+    internal RenderContext Context { get; set; } = new();
+
+    /// <summary>
+    /// Override to describe the UI. Use UseState, UseEffect, etc. from the context.
+    /// Must call hooks in the same order every render.
+    /// </summary>
+    public abstract Element Render();
+
+    /// <summary>
+    /// Controls whether this propless component should re-render when its parent re-renders.
+    /// Default: false — propless components only re-render from their own state changes or context changes.
+    /// Override and return true to always re-render when the parent re-renders.
+    /// </summary>
+    protected internal virtual bool ShouldUpdate() => false;
+```
+
+Setting a state cell turns into a `StateChange` event, the request
+fires `RenderStart`, the reconciler emits `ReconcileStart` and
+`ReconcileStop` with elements-diffed / elements-skipped counters, and
+each effect emits its own `EffectStart`/`EffectStop`. Following the
+sequence in PerfView for a single frame is the fastest way to confirm
+the runtime is doing what you expect.
+
+## Common Mistakes [#common-mistakes]
+
+### Treating the element tree as a retained graph [#treating-the-element-tree-as-a-retained-graph]
+
+```csharp
+// Don't:
+private TextBlockElement _label = TextBlock("hello");
+public override Element Render() => _label;  // same record every render
+```
+
+```csharp
+public abstract record Element
+{
+    /// <summary>
+    /// Optional key for stable identity across re-renders (like React's key prop).
+    /// When set, the reconciler uses it to match elements across list reorderings.
+    /// </summary>
+    public string? Key { get; init; }
+
+    /// <summary>
+    /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
+    /// Modifiers are stored inline so the concrete element type is preserved through chaining.
+    /// </summary>
+    public ElementModifiers? Modifiers { get; init; }
+```
+
+The reconciler compares the new tree against the old to decide what to
+patch. Returning the same instance defeats `with` expressions on the
+modifier chain and prevents any state-driven property update from
+reaching the WinUI control; the comparison short-circuits as
+"unchanged" and nothing flows. Always describe the UI freshly inside
+`Render()` and let element identity follow position (or `Key`) — the
+records are cheap.
+
+## Tips [#tips]
+
+**The diagram is the API contract.** When you read a new corner of
+`src/Reactor/`, locate it on the render-loop diagram first. The four
+boxes (Render, Reconcile, Effects, Composition) are mutually exclusive
+in time; anything that doesn't fit one of them is either hosting glue
+or diagnostics.
+
+**`Reconciler.cs` is partial on purpose.** Don't grep for a Mount
+implementation in `Reconciler.cs` itself — the dispatch lives there,
+the handlers live in `Reconciler.Mount.cs`. Same for Update, and for
+modifiers, unmount and animations, which each have their own
+`Reconciler.<Topic>.cs`. Events, gestures and drag-drop live in
+`ModifierEvents.cs`, `GestureDispatch.cs` and `DragDropDispatch.cs`.
+
+**The element pool is opt-in by type.** If a custom control needs
+pooling, the type must be in `ElementPool.PoolableTypes` and survive a
+`CleanElement` reset pass. Interactive controls (`Button`, `TextBox`,
+`ToggleSwitch`) *are* pooled today — safe because their event
+trampolines resolve the live element through the attached DP rather
+than capturing it; the [element-pool](/microsoft-ui-reactor/main/how-it-works/element-pool) page documents
+the current set.
+
+## Next Steps [#next-steps]
+
+- **[Reactor vs XAML](/microsoft-ui-reactor/main/get-started/reactor-vs-xaml)** — Same diagram, but mapped onto the XAML concepts you already know.
+- **[Reactivity Model](/microsoft-ui-reactor/main/how-it-works/reactivity-model)** — Zooms into the state-setter → re-render arrow.
+- **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — Zooms into the diff box.
+- **[Hooks Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Zooms into the slot table.
+- **[Effects Scheduling](/microsoft-ui-reactor/main/how-it-works/effects-scheduling)** — Zooms into the effect-flush box and the async layer above it.

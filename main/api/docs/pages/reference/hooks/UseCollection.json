@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseCollection.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCollection.md",
+  "route": "/reference/hooks/UseCollection",
+  "title": "UseCollection",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCollection",
+  "description": "Subscribes to an ObservableCollection and re-renders on Add/Remove/Reset. Returns the collection as IReadOnlyList.",
+  "markdown": "---\ntitle: \"UseCollection\"\ndescription: \"Subscribes to an ObservableCollection and re-renders on Add/Remove/Reset. Returns the collection as IReadOnlyList.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

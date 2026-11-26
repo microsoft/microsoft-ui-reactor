@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/CursorFromPageIndex.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CursorFromPageIndex.md",
+  "route": "/reference/hooks/CursorFromPageIndex",
+  "title": "CursorFromPageIndex",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CursorFromPageIndex",
+  "description": "Optional: computes the cursor for an arbitrary page index directly, bypassing the \"wait for page N-1\" constraint. Used by UseDataSource to expose the offset semantics of IDataSource's ContinuationToken, so deep scrolls fetch pages in parallel instead of walking the chain one round-trip at a time.",
+  "markdown": "---\ntitle: \"CursorFromPageIndex\"\ndescription: \"Optional: computes the cursor for an arbitrary page index directly, bypassing the \\\"wait for page N-1\\\" constraint. Used by UseDataSource to expose the offset semantics of IDataSource's ContinuationToken, so deep scrolls fetch pages in parallel instead of walking the chain one round-trip at a time.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

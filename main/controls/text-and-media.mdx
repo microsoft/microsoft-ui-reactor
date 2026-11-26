@@ -1,0 +1,843 @@
+---
+title: "Text and Media"
+description: "This page covers display text, inline rich text, rich-text editing, and media controls in Reactor."
+sidebar:
+  label: "Text and media"
+---
+
+Text and media controls are the display, rich-text, and media half of the Microsoft.UI.Reactor (Reactor)
+catalog: surfaces that show content the user is reading, watching, or
+inspecting, plus `RichEditBox` for rich-text editing. Most of them are thin wrappers over the
+WinUI text and media surface, so the modifier names and accessibility
+behavior match what a WinUI developer already knows. The two outliers are
+[`Markdown(string)`](#markdown-reactor-original) — a Reactor-original
+renderer that parses GFM-style Markdown into the same element tree the
+rest of your UI uses, no WebView round trip — and the semantic text
+variants [`Heading`](#text-variants) / [`SubHeading`](#text-variants),
+which preset typography so that accessibility
+tooling can infer document outline without manually setting
+`AutomationProperties`. The trade-off the catalog makes here is bias
+toward composition: rich layouts come from many small text elements in a
+[`VStack`](/microsoft-ui-reactor/main/guides/layout), not from one giant `RichTextBlock` carrying
+manually-tuned `Inline` records. Skim the modifier tables before the
+prose, then jump to the control you need.
+
+For single-line input controls (`TextBox`, `PasswordBox`), see
+[Forms](/microsoft-ui-reactor/main/controls/forms). For data-bound collections, see
+[Collections](/microsoft-ui-reactor/main/controls/collections).
+
+> **WinUI reference:** For the full property surface and design guidance, see [Text Controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls).
+
+## Text variants [#text-variants]
+
+```csharp
+Title(string)           // WinUI title text style, ~28pt
+Heading(string)         // semantic heading, ~28pt
+SubHeading(string)      // sub-section header, ~20pt
+Subtitle(string)        // supporting line under a heading
+BodyLarge(string)       // lead paragraph
+TextBlock(string)       // body prose
+BodyStrong(string)      // body prose, semibold
+Caption(string)         // ~12pt metadata text
+```
+
+```csharp
+class TextVariantsDemo : Component
+{
+    public override Element Render() => VStack(8,
+        Title("Title — the largest variant"),
+        Heading("Heading — page or section title"),
+        SubHeading("SubHeading — region header"),
+        Subtitle("Subtitle — supporting line under a heading"),
+        BodyLarge("BodyLarge — lead paragraph."),
+        TextBlock("Body text. The default size and weight for prose."),
+        BodyStrong("BodyStrong — emphasis within body copy."),
+        Caption("Caption — secondary metadata, dates, labels.")
+    ).Padding(24);
+}
+```
+
+![Heading / SubHeading / TextBlock / Caption stacked](/microsoft-ui-reactor/main/images/text-and-media/text-variants.png)
+
+`Heading`, `SubHeading`, and `Caption` return [`TextBlockElement`](/microsoft-ui-reactor/main/guides/components)
+with preset text sizing; `Heading` and `SubHeading` also set heading
+automation levels.
+They are the right tool for document outline — screen readers and the
+[accessibility scanner](/microsoft-ui-reactor/main/guides/accessibility) treat them as hierarchical
+landmarks, where a bare `TextBlock` styled with `.FontSize(24).Bold()` is
+just visually large. Reach for the variants first; reach for the
+modifiers on `TextBlock` only when the position in the outline doesn't
+match the visual weight you want.
+
+| Factory | Default size | Use when |
+|---|---|---|
+| `Title` | ~28pt, semibold | WinUI title-ramp text without heading semantics. |
+| `Heading` | ~28pt, bold | One per page — the semantic document title. |
+| `SubHeading` | ~20pt, semibold | Section header inside a long page. |
+| `Subtitle` | ~20pt, regular | Supporting line directly under a heading. |
+| `BodyLarge` | ~18pt | Lead paragraph or callout prose. |
+| `TextBlock` | Body | Paragraphs, labels, inline help. |
+| `BodyStrong` | Body, semibold | Emphasis inside body copy without a size jump. |
+| `Caption` | ~12pt | Timestamps, metadata, helper text under a field. |
+
+WinUI design page: [Typography in Windows 11](https://learn.microsoft.com/en-us/windows/apps/design/style/typography).
+
+## TextBlock modifiers [#textblock-modifiers]
+
+```csharp
+class TextBlockModifiersDemo : Component
+{
+    public override Element Render() => VStack(8,
+        TextBlock("Bold + sized").Bold().FontSize(18),
+        TextBlock("Selectable so the user can copy.").IsTextSelectionEnabled(),
+        TextBlock(
+            "A long paragraph that demonstrates wrapping behavior. " +
+            "Without TextWrapping, content stays on one line and is " +
+            "clipped or scrolls. With TextWrapping.Wrap, the block " +
+            "flows across multiple lines inside its width.")
+            .TextWrapping()
+            .MaxLines(2)
+            .TextTrimming(Microsoft.UI.Xaml.TextTrimming.WordEllipsis)
+            .Width(320)
+    ).Padding(24);
+}
+```
+
+![TextBlock with bold/size, selectable, wrapped + trimmed variants](/microsoft-ui-reactor/main/images/text-and-media/textblock-modifiers.png)
+
+The fluents you reach for most often:
+
+| Fluent | Effect |
+|---|---|
+| `.Bold()` / `.SemiBold()` | Sets `FontWeight`. Use `Heading` instead if it's a section title. |
+| `.FontSize(double)` | Override the variant default. |
+| `.FontFamily(string)` | Family name or `Microsoft.UI.Xaml.Media.FontFamily`. |
+| `.TextWrapping()` | Default is no-wrap; call this to flow across lines. |
+| `.MaxLines(int)` | Caps the visible line count — pairs with `TextTrimming`. |
+| `.TextTrimming(mode)` | `CharacterEllipsis` / `WordEllipsis` / `Clip` / `None`. |
+| `.TextAlignment(alignment)` | `Left` / `Right` / `Center` / `Justify`. |
+| `.LineHeight(double)` | Override the line-box height (useful for dense lists). |
+| `.IsTextSelectionEnabled()` | Lets the user select and copy the text. |
+| `.CharacterSpacing(int)` | Hundredths of an em — `30` ≈ 0.3em tracking. |
+
+> **Caveat:** `TextBlock` has a fast-path renderer that activates only when you set the
+> `Text` via the factory string overload (`TextBlock("…")`). The moment you
+> switch to inlines via `RichTextBlock`, change `CharacterSpacing` to a
+> non-zero value, or set `TextTrimming` to `Clip`, layout falls back to the
+> slow path and CPU cost per measure roughly doubles. For thousand-row
+> lists this matters; for static prose it does not. The WinUI debug
+> property `IsTextPerformanceVisualizationEnabled` highlights fast-path
+> text in green — turn it on when profiling a scroll-heavy screen and
+> demote any controls that aren't green to plain `TextBlock` with
+> modifiers.
+
+## RichTextBlock [#richtextblock]
+
+```csharp
+RichTextBlock(string text)
+RichTextBlock(RichTextParagraph[] paragraphs)
+```
+
+```csharp
+class RichTextDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Inline-formatted prose"),
+        RichTextBlock([
+            Paragraph(
+                Run("Tap the "),
+                Hyperlink("docs",
+                    new Uri("https://learn.microsoft.com/windows/apps/")),
+                Run(" to keep reading.")),
+            Paragraph(
+                Run("Reactor builds the paragraph tree from value-typed " +
+                    "records. No XAML inlines, no DataTemplate."))
+        ]).LineHeight(22).Width(420)
+    ).Padding(24);
+}
+```
+
+![RichTextBlock with an inline hyperlink across two paragraphs](/microsoft-ui-reactor/main/images/text-and-media/rich-text.png)
+
+`RichTextBlock` is for paragraphs that mix runs and inline elements —
+hyperlinks, mid-sentence bolds, color swaps. Use it sparingly: a list of
+fields lives better in [`Forms`](/microsoft-ui-reactor/main/controls/forms), and a multi-screen article
+lives better in [`Markdown(string)`](#markdown-reactor-original).
+`RichTextBlock` is the right tool when the structure is dynamic (a chat
+message with @-mentions, a search result with bolded query terms)
+because you build the `Paragraph[]` from data per render.
+
+| Helper | Use |
+|---|---|
+| `Paragraph(params RichTextInline[])` | A paragraph; one per visual break. |
+| `Run(string text)` | A plain text fragment. |
+| `Hyperlink(string text, Uri target)` | Inline link with a navigate target. |
+| `Hyperlink(string text, Action onClick)` | Clickable inline fragment — fires the delegate and suppresses platform navigation. Use to make a single rich-text run interactive (open an editor, dispatch a command) without escaping to a hosted native subtree. |
+| `InlineUI(Element child)` | Embeds a live control (chart, slider, button) mid-paragraph via `InlineUIContainer`. |
+
+Modifiers — `.MaxLines`, `.LineHeight`, `.TextAlignment`,
+`.TextTrimming`, `.CharacterSpacing` — match `TextBlock`. Inline runs do
+not get the fast-path renderer, so prefer plain `TextBlock` for static
+text.
+
+Use `RichTextBlock("Hello").Foreground(Theme.PrimaryText)` to set the block's
+default text brush. WinUI resolves the [theme token](/microsoft-ui-reactor/main/guides/theming-tokens) for the
+block's effective theme and updates the brush when that theme changes. An
+inline run can still supply its own foreground.
+
+> **Caveat:** Embedding live controls with `InlineUI(...)` and then mutating a `Run` in
+> the same paragraph used to scroll the surrounding `ScrollViewer`/`ScrollView`
+> to the top: WinUI's text engine re-measures the paragraph from scratch and
+> the embedded elements contribute zero height for one layout pass, so the
+> scroll host silently clamps its offset down and never restores it (issue
+> #487). Reactor now handles this for you — `ScrollViewer(RichTextBlock(...))`
+> preserves the user's scroll offset across inline-UI mutations automatically,
+> with no extra API or per-app workaround. Just wrap the `RichTextBlock` in a
+> scroll host as usual.
+
+WinUI design page: [Rich text block](https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-text-block).
+
+## RichEditBox [#richeditbox]
+
+```csharp
+RichEditBox(Optional<string> text = default, Action<string>? onTextChanged = null)
+```
+
+```csharp
+class RichEditDemo : Component
+{
+    public override Element Render()
+    {
+        var (text, setText) = UseState(
+            "Edit me. RichEditBox supports paste-with-formatting, " +
+            "spell-check, and Enter for new paragraphs.");
+
+        return VStack(8,
+            SubHeading("RichEditBox"),
+            RichEditBox(text, setText)
+                .AcceptsReturn()
+                .IsSpellCheckEnabled()
+                .TextWrapping()
+                .Height(160).Width(420)
+        ).Padding(24);
+    }
+}
+```
+
+![RichEditBox sized for paragraph editing](/microsoft-ui-reactor/main/images/text-and-media/rich-edit.png)
+
+`RichEditBox` is the editable counterpart of `RichTextBlock` — multi-line
+text with paste-from-formatted-source, spell-check, IME composition, and
+selection. The change handler fires with the plain text content; for
+formatted output you read `RichEditBox.Document` through `.Set(...)` and
+serialize the text range yourself. Single-line text input belongs in
+[`TextBox`](/microsoft-ui-reactor/main/controls/forms), not here.
+
+The document stores every line break as `\r`, so the text the handler
+reports uses `\r` between paragraphs: `"a\nb"` written from state comes
+back as `"a\rb"` after the first edit. Reactor treats `\r\n`, `\n` and
+`\r` as the same break when it compares state with the document, so
+storing the reported text back into state doesn't rewrite the document.
+Trailing breaks are part of the text: `"abc\n"` and `"abc"` are different
+values, and pressing Enter at the end reports `"abc\r"`. Only the
+document's own final paragraph mark, which `Document.GetText` always
+appends, is left out.
+
+| Fluent | Effect |
+|---|---|
+| `.AcceptsReturn(bool)` | Enter starts a new paragraph instead of submitting. |
+| `.TextWrapping()` | Wrap (default) or NoWrap. |
+| `.MaxLength(int)` | Cap input length. |
+| `.IsSpellCheckEnabled(bool)` | Toggle squiggle underline. |
+| `.SelectionHighlightColor(brush)` | Override selection background. |
+| `.TextChanged(Action<string>)` | Subscribe outside the constructor argument. |
+
+WinUI design page: [Rich edit box](https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-edit-box).
+
+## Markdown (Reactor-original) [#markdown-reactor-original]
+
+```csharp
+Markdown(string markdown)
+Markdown(string markdown, MarkdownOptions options)
+```
+
+> **Package note.** `Markdown(...)` ships in the optional
+> `Microsoft.UI.Reactor.Advanced` package (spec 062 §7). Add a
+> `<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.18" />` and import
+> its factories alongside the core ones:
+> `using static Microsoft.UI.Reactor.Advanced.Factories;`. Both overloads
+> return the base `Element`, and `MarkdownOptions` stays in
+> `Microsoft.UI.Reactor.Markdown` — so the options overload also needs
+> `using Microsoft.UI.Reactor.Markdown;`.
+
+```csharp
+class MarkdownDemo : Component
+{
+    public override Element Render()
+    {
+        const string source =
+            "# Release notes\n\n" +
+            "Reactor **0.42** ships:\n\n" +
+            "- Compositor animations via `UseAnimation`.\n" +
+            "- A new [Markdown](https://example.com) renderer.\n" +
+            "- Bug fixes for `LazyVStack` keyed reorder.\n\n" +
+            "> Migration guide lives in the spec.\n";
+
+        return VStack(8,
+            SubHeading("Markdown"),
+            Markdown(source)
+        ).Padding(24).Width(440);
+    }
+}
+```
+
+![Markdown rendering — heading, list, link, blockquote](/microsoft-ui-reactor/main/images/text-and-media/markdown.png)
+
+`Markdown` is the largest Reactor-original control on this page. It
+parses GitHub-flavored Markdown with the embedded `md4c` parser and
+emits a Reactor element tree: headings become `TextBlock` with the
+heading variant, list items become two-column `Grid`s (`Auto` marker / `*`
+content), links become inline
+hyperlinks, code spans become monospace `TextBlock`. No WebView, no HTML
+round-trip — the output composes with every other modifier on this page
+(`.Padding`, `.Width`, `.TextWrapping`).
+
+### Selecting across an assembled message [#selecting-across-an-assembled-message]
+
+Selection across separate paragraphs, headings, list items, code blocks and
+table cells is opt-in. The default Markdown tree and behavior are unchanged.
+All helpers below ship in Advanced under `Microsoft.UI.Reactor.Markdown`.
+Use **one scope around the complete message**, even when the app renders it
+with several `Markdown(...)` calls:
+
+```csharp
+class MarkdownSelectionDemo : Component
+{
+    public override Element Render()
+    {
+        var (expanded, setExpanded) = UseState(false);
+        var (feedback, setFeedback) = UseState("");
+        var selection = new MarkdownTextSelectionOptions
+        {
+            OnCopyResult = (_, succeeded) => setFeedback(succeeded ? "Copied." : "Copy failed.")
+        };
+        var options = new MarkdownOptions { TextSelection = selection };
+        var message = VStack(
+            Markdown("# Answer\n\nFirst paragraph.", options),
+            MarkdownTextSelection.Surface("Details", TextBlock("Details")),
+            Expander("Show details", MarkdownTextSelection.Visibility(expanded,
+                Markdown("- First item\n- Second item", options)),
+                expanded, setExpanded),
+            Markdown("Final paragraph.", options));
+        return VStack(8,
+            MarkdownTextSelection.Scope(selection, message),
+            TextBlock(feedback)).Padding(24);
+    }
+}
+```
+
+Keep timeline rows, toolbars, and surrounding `ItemsView` chrome **outside**
+the text surfaces. Registration stops at the message scope; nested scopes are
+independent. `TextSelection` is only a parser opt-in: surfaces belong to the
+nearest scope, regardless of options identity, and only the scope's options
+supply `OnCopyResult`. Omitting the scope leaves no selection controller and
+emits a diagnostic warning. Key the scope by message identity with
+`.WithKey(message.Id)` when a virtualized row can switch to another message.
+As a fallback for unkeyed reuse, a text-changing update resets the selection
+and caret to the start when no nonblank surface text survives and no reused
+surface retains nonblank prefix/suffix text. Shared text can belong to a different
+message too, so this heuristic does not replace an explicit identity key.
+The parser emits semantic text and explicit separators, rather
+than guessing meaning from `Grid`/`StackPanel` shapes. `Surface(text, content,
+separatorAfter: "\n")` supplies exact **visible plain text**, never Markdown
+or HTML source. List markers have no separator before their content; table
+cells use tabs and rows use newlines. No final separator is copied.
+
+With a mouse, click to place the caret, Shift+click to extend selection,
+double-click to select a word (including trailing spaces), and triple-click
+to select a text surface such as a paragraph, table cell, or code block.
+Triple-click excludes the separator between surfaces; dragging can extend
+selection by whole words or surfaces and includes any separators crossed.
+An ordinary click activates a link. Dragging from a link selects text instead,
+including on custom `LinkBuilder` buttons that use the default release click
+mode. A primary click outside the message's text clears its highlight and collapses the
+text range without consuming the new click. Keyboard link activation stays native.
+
+Surface wrappers own outer margins, sizing, alignment and Grid/Canvas/Flex
+placement; these are lifted off the inner element and applied exactly once.
+Inner padding and presentation styling remain on the content. Apps can normalize
+a returned block's `Margin` without leaving a second margin on an invisible child.
+
+For custom `CodeBlock` or `HtmlBlock` callbacks, explicitly wrap the visible
+body with `Surface` and leave toolbar siblings outside it. Paragraph and
+heading presentation callbacks still receive the default `RichTextBlockElement`,
+so existing typography/type checks work. The parser annotates the returned
+presentation element afterwards. If replacing the text itself, explicitly
+return a `Surface` with the replacement's visible text.
+For app-owned disclosures, render the summary once as a surface, and wrap
+the native Expander's body in `Visibility(expanded, body)`. This helper gates
+selection only: it does not change native visibility or own expansion state.
+Nested gates compose; collapsed descendants leave the selection document and
+return on expansion.
+
+The scope supports mouse drag (touch/pen remain available for native panning),
+Shift+arrow/PageUp/PageDown, Ctrl+A and
+Ctrl+C; keyboard navigation includes fully clipped blocks. Modern `ScrollView`
+(including the internal one in `ItemsView`) and legacy `ScrollViewer` provide
+clipping, bring-into-view and drag autoscroll. Drag autoscroll starts beyond the
+visible scroll viewport's top or bottom, not at an individual message boundary,
+and stops when the pointer returns inside the viewport or the drag ends.
+Offsets are UTF-16; horizontal
+caret movement follows grapheme boundaries. Streaming updates preserve
+selection endpoints against surviving surface identities where possible.
+The scope exposes UIA TextPattern with range-scoped embedded-control children.
+
+Idle scopes do not poll window-wide layout updates. Text, membership and
+geometry refresh on selection input, copy or automation access; only an active
+selection, drag or focused caret tracks layout continuously. This keeps unrelated
+composer typing independent of the number of idle message scopes. Keep using one
+scope per message, including in an `ItemsView`; no shared controller is required.
+
+`OnCopyResult` is an optional `Action<string, bool>` **notification**, not a
+copy delegate. Reactor calls it after its single clipboard-write attempt.
+Recognized clipboard-access failures report `false`; unexpected exceptions
+propagate. Never call an app helper that writes the clipboard again from this
+callback. The app owns localized feedback and shows success only after `true`.
+
+`UnifiedRichText` alone is insufficient for cross-block selection because
+lists/code/tables are embedded controls. When `TextSelection` is supplied,
+semantic surfaces take precedence over `UnifiedRichText`.
+
+`MarkdownOptions.LinkBuilder` overrides rendering for links whose absolute URI
+passes the Markdown URI policy (`http`, `https`, or `mailto`). It receives a
+`MarkdownLink` with three properties:
+
+- `Text`: the label as plain text, with image alt text in place of images,
+  entities decoded, and line breaks as spaces. Use it for an accessible name or
+  tooltip.
+- `Label`: the label as one selectable `RichTextBlockElement` with its inline
+  formatting, default heading/table-header typography, and images preserved,
+  or `null` for an empty label.
+- `Uri`: the validated target.
+
+Don't use `Text` to tell the user where a link goes: the document author writes
+the label, and `[https://bank.example](https://other.example)` is a valid link.
+A confirmation prompt must show `Uri`, as the example below does.
+
+```csharp
+class ReviewedLinksDemo : Component
+{
+    public override Element Render()
+    {
+        var (pending, setPending) = UseState<Uri?>(null);
+
+        var options = new MarkdownOptions
+        {
+            LinkBuilder = link =>
+            {
+                Element content = link.Label is { } label
+                    ? label with { IsTextSelectionEnabled = false }
+                    : TextBlock(link.Uri.ToString());
+                return Button(content, () => setPending(link.Uri))
+                    .AutomationName(link.Text.Length > 0 ? link.Text : link.Uri.ToString())
+                    .ToolTip(link.Uri.ToString());
+            },
+        };
+
+        return VStack(8,
+            Markdown("Read [the **review** notes](https://example.com/review) first.", options),
+            TextBlock(pending is null ? "" : $"Open {pending}?")
+        ).Padding(24);
+    }
+}
+```
+
+Return a non-null `Element` for a confirmation action, preview, or other custom
+link UI; exceptions propagate and a null result is an error. The returned
+element is embedded through `InlineUIContainer`, retaining its own styling,
+lifecycle, and accessibility properties. Like other embedded controls, it has
+its own text-selection boundary. Leave the callback unset for ordinary native
+inline hyperlinks and continuous surrounding prose selection; a custom
+horizontal stack is not equivalent to a text hyperlink. The callback owns
+custom styling and interaction. Set an explicit accessible name on the
+returned control (`Text` is a good default) and verify its role, keyboard
+activation, and pointer behavior in your app. If the returned control is a
+button containing `Label`, set that label's `IsTextSelectionEnabled` to `false`
+rather than asking it to select text. This configuration is not a guarantee of
+physical input behavior for every custom control.
+
+With `LinkBuilder` set, links inside image alternative text are plain alt
+text, not separate actions. Nested parser autolinks remain part of the outer
+link's label: only the outer target is considered for rendering. If that
+target is rejected by the URI policy, the entire label stays plain text;
+a safe-looking URL in the label does not become a separate link. These
+nesting rules describe the callback path, not changes to the default renderer.
+
+The trade-off vs. [WebView2](#webview2) is fidelity: `Markdown` does not
+support arbitrary HTML, embedded `<script>`, or CSS. It supports paragraphs,
+headings (h1–h6), lists (bullet, ordered, nested), inline code, fenced code
+blocks with optional language, links, images, bold, italic, strikethrough,
+blockquotes, hard line breaks, and tables. Anything beyond that — embedded
+videos, custom layouts, syntax-highlighted code with theming — falls back to
+WebView2 with an HTML-rendered fallback or a separate viewer.
+
+Reach for it for release notes, in-app help, conversational AI output,
+user-authored long-form prose (commit descriptions, knowledge-base
+articles), or any surface where the source is plain text and a thin
+formatting layer is what the reader needs.
+
+| Use Markdown when | Use RichTextBlock when |
+|---|---|
+| Source is authored as a string (LLM output, README, user comment) | Inline structure is computed from typed data |
+| You need lists, code blocks, blockquotes | Plain paragraphs with mid-line formatting suffice |
+| The full GFM subset is acceptable | You need arbitrary `Inline` element types |
+| Round-trip from `.md` files | Round-trip from a `RichTextParagraph[]` schema |
+
+No WinUI parallel: WinUI ships a `MarkdownTextBlock` in the Community
+Toolkit, but the API surface and behavior differ. The Reactor factory is
+the canonical reference for this control.
+
+## Image [#image]
+
+```csharp
+Image(string source)
+```
+
+```csharp
+class ImageDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("Image"),
+        // Resource Uri — ms-appx:// for packaged assets, file:// for disk,
+        // https:// for remote.
+        Image("ms-appx:///Assets/StoreLogo.png")
+            .AutomationName("Reactor app logo")
+            .Set(img => img.Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill)
+            .Width(96).Height(96),
+        TextBlock("Stretch.UniformToFill for cover art; " +
+                  "ImageFailed to detect missing assets.").Opacity(0.6)
+    ).Padding(24);
+}
+```
+
+![Image control rendering a packaged 96x96 asset](/microsoft-ui-reactor/main/images/text-and-media/image.png)
+
+`Image` accepts the standard WinUI URI schemes — `ms-appx:///` for
+assets packaged with the app, `ms-appdata:///` for app-data files,
+`file:///` for arbitrary disk paths, and `http(s)://` for remote
+sources. The factory delegates source decoding to the WinUI
+`BitmapImage` — same caching, same DPI awareness.
+
+| Fluent | Effect |
+|---|---|
+| `.Width(double)` / `.Height(double)` | Layout size. Without one of these the image takes its natural pixel size. |
+| `.NineGrid(Thickness)` | Stretch the middle, preserve the borders (chrome-style backgrounds). |
+| `.Set(img => img.Stretch = ...)` | Stretch mode: `None` / `Uniform` (default) / `UniformToFill` / `Fill`. |
+| `.ImageOpened(Action)` | Decode succeeded. |
+| `.ImageFailed(Action<string>)` | Decode failed — fire to swap in a fallback. |
+
+> **Don't:** decode large remote images on the UI thread by setting
+> `Source` to a full-size `http://` URL inside a tight list-item
+> render. The WinUI decoder spawns work off the UI thread, but the
+> network fetch still blocks the visual tree from drawing the row
+> until the bytes arrive. For lazy-loaded media inside a virtualized
+> list, route through a [`UseResource`](/microsoft-ui-reactor/main/guides/async-resources) that
+> fetches a downscaled blob and only render `Image` once `Pending` is
+> resolved.
+
+WinUI design page: [Images and image brushes](https://learn.microsoft.com/en-us/windows/apps/design/controls/images-imagebrushes).
+
+## MediaPlayerElement [#mediaplayerelement]
+
+```csharp
+MediaPlayerElement(string? source = null)
+```
+
+```csharp
+class MediaPlayerDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("MediaPlayerElement"),
+        MediaPlayerElement(
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4")
+            .Width(420).Height(240)
+            .Set(m =>
+            {
+                m.AreTransportControlsEnabled = true;
+                m.AutoPlay = false;
+            }),
+        TextBlock("Use AreTransportControlsEnabled for play/pause UI.")
+            .Opacity(0.6)
+    ).Padding(24);
+}
+```
+
+![MediaPlayerElement with transport controls](/microsoft-ui-reactor/main/images/text-and-media/media-player.png)
+
+`MediaPlayerElement` wraps the WinUI `MediaPlayerElement`, which itself
+hosts a `MediaPlayer` that drives audio and video playback. The factory
+accepts a string URL for the common case; for stream sources, set the
+player through `.Set(m => m.MediaPlayer.Source = ...)`.
+
+| Knob | Set via |
+|---|---|
+| `AreTransportControlsEnabled` | `.Set(m => m.AreTransportControlsEnabled = true)` |
+| `AutoPlay` | `.Set(m => m.AutoPlay = false)` |
+| `IsFullWindow` | `.Set(m => m.IsFullWindow = true)` |
+| `MediaOpened` / `MediaEnded` / `MediaFailed` | Dedicated fluent overloads |
+
+> **Don't:** mount and unmount `MediaPlayerElement` on every render to
+> drive playback. The WinUI control owns an underlying `MediaPlayer`
+> that re-initializes hardware decoders on each remount; thrash kills
+> playback smoothness. Render the element once with a stable position
+> in the tree and drive `Source` / play state through a hook
+> ([`UseRef`](/microsoft-ui-reactor/main/guides/hooks) holding the player), not through unmounts.
+
+WinUI design page: [Media player](https://learn.microsoft.com/en-us/windows/apps/design/controls/media-playback).
+
+## WebView2 [#webview2]
+
+```csharp
+WebView2(Uri? source = null)
+```
+
+```csharp
+class WebViewDemo : Component
+{
+    public override Element Render()
+    {
+        var (loaded, setLoaded) = UseState(false);
+
+        return VStack(8,
+            SubHeading("WebView2"),
+            WebView2(new Uri("about:blank"))
+                .NavigationCompleted(_ => setLoaded(true))
+                .Width(420).Height(240),
+            TextBlock(loaded ? "Loaded." : "Loading…").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+![WebView2 hosting about:blank](/microsoft-ui-reactor/main/images/text-and-media/webview.png)
+
+`WebView2` embeds a Chromium-based browser. Use it for content that
+genuinely needs HTML/CSS/JavaScript — a markdown page does not, an
+embedded Office viewer does. The control raises lifecycle events for
+navigation and exposes a `WebMessageReceived` channel for postMessage
+interop.
+
+| Event fluent | Fires when |
+|---|---|
+| `.NavigationStarting(Action<Uri>)` | A navigation begins — cancel via `.Set`. |
+| `.NavigationCompleted(Action<Uri>)` | Page finished loading. |
+| `.WebMessageReceived(Action<string>)` | Page called `window.chrome.webview.postMessage(...)`. |
+| `.CoreWebView2Initialized(Action)` | The underlying CoreWebView2 is ready — configure it via `.Set(w => w.CoreWebView2....)`. |
+
+> **Don't:** lay out `WebView2` inside an indeterminate-sized parent
+> like an `HStack` without explicit dimensions. WebView2 measures to
+> its content, which for a real web page is the viewport — without
+> bounds it grows to fill the available size and triggers a layout
+> oscillation when the page reflows. Always pin `.Width` and `.Height`
+> (or place the control in a fixed-size `Grid` cell).
+
+WinUI design page: [WebView2](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution).
+
+## MapControl [#mapcontrol]
+
+```csharp
+MapControl(string? mapServiceToken = null, double zoomLevel = 1)
+```
+
+```csharp
+class MapControlDemo : Component
+{
+    public override Element Render() => VStack(8,
+        SubHeading("MapControl"),
+        // Token blank — replace with a real Bing Maps key for tile fetch.
+        // Without a token the control renders the grid background only.
+        MapControl(mapServiceToken: null, zoomLevel: 4)
+            .Width(420).Height(240)
+    ).Padding(24);
+}
+```
+
+![MapControl at zoom level 4](/microsoft-ui-reactor/main/images/text-and-media/map-control.png)
+
+`MapControl` wraps `Microsoft.UI.Xaml.Controls.Maps.MapControl`. The
+service token comes from the Bing Maps developer portal — without it,
+the grid background renders but no tiles fetch. For full customization
+(pushpins, overlays, scenes), reach through `.Set(m => ...)` to the
+underlying control; the Reactor surface today exposes the factory
+arguments and direct passthrough.
+
+> **Don't:** ship `MapControl` to an offline-tolerant app without a
+> fallback. Tile fetch failures don't throw — the control just shows
+> the grid. Subscribe to the underlying `MapControl.MapServiceErrorOccurred`
+> through `.Set` and swap in an `Image` of a static map (or a "map
+> unavailable" panel) when offline.
+
+WinUI design page: [Map control](https://learn.microsoft.com/en-us/windows/apps/develop/maps/) (Windows App SDK).
+
+## Reference [#reference]
+
+| Control | Factory | Reactor-original? | WinUI doc |
+|---|---|---|---|
+| `TextBlock` | `TextBlock(string)` | No | [Text block](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-block) |
+| `Title` / `Heading` / `SubHeading` / `Subtitle` / `BodyLarge` / `BodyStrong` / `Caption` | `Heading(string)` etc. | Variant presets | — |
+| `RichTextBlock` | `RichTextBlock(string)` or `RichTextBlock(RichTextParagraph[])` | No | [Rich text block](https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-text-block) |
+| `RichEditBox` | `RichEditBox(text, onChanged)` | No | [Rich edit box](https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-edit-box) |
+| `Markdown` | `Markdown(string)` — `Microsoft.UI.Reactor.Advanced` | **Yes** | — |
+| `Image` | `Image(string)` | No | [Images and image brushes](https://learn.microsoft.com/en-us/windows/apps/design/controls/images-imagebrushes) |
+| `MediaPlayerElement` | `MediaPlayerElement(string?)` | No | [Media player](https://learn.microsoft.com/en-us/windows/apps/design/controls/media-playback) |
+| `WebView2` | `WebView2(Uri?)` | No | [WebView2](https://learn.microsoft.com/en-us/microsoft-edge/webview2/) |
+| `MapControl` | `MapControl(token, zoom)` | No | [Map control](https://learn.microsoft.com/en-us/windows/apps/develop/maps/) |
+| `InkCanvas` | *Not wrapped* — see [gap analysis](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/002-winui3-gap-analysis.md) | — | [Ink controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/inking-controls) |
+
+## Patterns [#patterns]
+
+### Long-form prose with Markdown [#long-form-prose-with-markdown]
+
+The release-notes / changelog pattern: parse a string of GFM into the
+element tree, then style the container — not the inner elements. Pad,
+constrain width to ~640 logical pixels for readability, and let the
+Markdown renderer hand back the hierarchy. Wrap the call in a
+[`UseMemo`](/microsoft-ui-reactor/main/guides/hooks) keyed on the source string when the renderer is
+inside a frequently-rendered parent; the parser is cheap but allocates,
+and memoization keeps GC pressure flat:
+
+```csharp
+class LongFormProseDemo : Component
+{
+    const string Source = "# Release notes\n\nShipped **today**.\n";
+
+    public override Element Render()
+    {
+        // The parser is cheap but allocates; memoize on the source string so a
+        // frequently-rendered parent doesn't re-parse unchanged prose.
+        var rendered = UseMemo(() => Markdown(Source), Source);
+        return Border(rendered).Padding(20).Width(640);
+    }
+}
+```
+
+This is the same shape as the [`recipes/master-detail`](/microsoft-ui-reactor/main/recipes/master-detail)
+content pane and the [chat sample](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/chat)
+message bubble.
+
+### Inline data display with RichTextBlock [#inline-data-display-with-richtextblock]
+
+When a list-row needs `Name (status) — 3 hours ago` with the status
+bold and the timestamp dim, build a `RichTextBlock` per row out of the
+typed data. Keep the paragraph construction inline in the row
+[`Component`](/microsoft-ui-reactor/main/guides/components) so it re-runs only when the row's data
+changes; `RichTextBlock` is not the bottleneck for moderate row counts
+but the inline-element allocation can show up in profiles when a
+[`LazyVStack`](/microsoft-ui-reactor/main/controls/collections) scrolls thousands of rows at 60fps.
+
+## Common Mistakes [#common-mistakes]
+
+### Using `TextBlock` for everything [#using-textblock-for-everything]
+
+```csharp
+// Don't:
+VStack(8,
+    TextBlock("Settings").FontSize(28).Bold(),
+    TextBlock("Display").FontSize(20).Bold(),
+    TextBlock("Adjust resolution and orientation.")
+)
+```
+
+```csharp
+class TextVariantsDemo : Component
+{
+    public override Element Render() => VStack(8,
+        Title("Title — the largest variant"),
+        Heading("Heading — page or section title"),
+        SubHeading("SubHeading — region header"),
+        Subtitle("Subtitle — supporting line under a heading"),
+        BodyLarge("BodyLarge — lead paragraph."),
+        TextBlock("Body text. The default size and weight for prose."),
+        BodyStrong("BodyStrong — emphasis within body copy."),
+        Caption("Caption — secondary metadata, dates, labels.")
+    ).Padding(24);
+}
+```
+
+The "don't" form ships visual hierarchy but no semantic hierarchy —
+the accessibility scanner reports no headings and screen-reader users
+get no document outline. The correct form uses the `Heading` /
+`SubHeading` / `TextBlock` factories so [`accessibility.md`](/microsoft-ui-reactor/main/guides/accessibility)
+landmark detection works.
+
+### Rendering Markdown inside a tight scroll loop without memoizing [#rendering-markdown-inside-a-tight-scroll-loop-without-memoizing]
+
+```csharp
+// Don't:
+LazyVStack<Message>(messages, m => m.Id, (m, i) =>
+    Markdown(m.Body))  // re-parses on every scroll recycle
+```
+
+```csharp
+class MarkdownRowsDemo : Component
+{
+    public override Element Render()
+    {
+        var messages = new List<Message>
+        {
+            new("m1", "**First** message."),
+            new("m2", "Second message with `code`."),
+        };
+
+        // Memo(key, factory) — the cross-recycle row cache. A scroll recycle
+        // re-asks for the key and gets the same element instance back, so the
+        // parser never runs again for an unchanged row.
+        //
+        // Key on the row identity *and* the body, not the body alone: this is a
+        // per-row cache, and two messages that happen to share text would
+        // otherwise collide on one entry. Including Id also reparses correctly
+        // when a single message's body is edited.
+        return LazyVStack<Message>(messages, m => m.Id, (m, i) =>
+            Memo((m.Id, m.Body), () => Markdown(m.Body))).Height(200);
+    }
+}
+```
+
+Markdown parsing is fast but not free — at 60fps × hundreds of visible
+rows × every state change, parser allocation shows up in GC. Use the
+keyed [`Memo(key, factory)`](/microsoft-ui-reactor/main/controls/collections#memoizing-rows-across-recycles)
+overload here, **not** `Memo(ctx => …, deps)`. They share a name but the
+compiler picks by argument shape, and only the keyed form owns the
+cross-recycle row cache: a scroll recycle re-asks for the key and gets the
+same element instance back, so the parser never runs again for an unchanged
+row. `Memo(ctx => …, deps)` only skips work when the *parent re-renders*,
+which is not what happens on a pure scroll.
+
+## Tips [#tips]
+
+**Pick the smallest control that does the job.** `TextBlock` >
+`RichTextBlock` > `Markdown` > `WebView2` in increasing layout cost.
+Promote only when the lower tier can't represent the structure.
+
+**Use `.IsTextSelectionEnabled()` on any text the user might want to copy.** Error
+messages, IDs, paths, log lines, command output — all of them are more
+useful when the user can drag-select and Ctrl+C. The cost is one
+modifier per `TextBlock`.
+
+**Pin dimensions on media controls.** `Image`, `MediaPlayerElement`,
+`WebView2`, and `MapControl` all default to "fill available space" or
+"natural content size", which interacts badly with `VStack`/`HStack`
+auto-layout. Set `.Width` and `.Height` (or place them in a fixed
+[`Grid`](/microsoft-ui-reactor/main/guides/layout) cell).
+
+**`Markdown` is the right choice for LLM output.** Treat AI-generated
+text as a markdown stream — parse it, render it, theme the container.
+The renderer composes with the rest of the catalog and stays accessible.
+
+## Next Steps [#next-steps]
+
+- **[Forms and Input](/microsoft-ui-reactor/main/controls/forms)** — Previous: editable input controls and the validation system.
+- **[Status and Info](/microsoft-ui-reactor/main/controls/status-and-info)** — Next: `Progress`, InfoBar, badges, and non-interactive feedback.
+- **[Styling](/microsoft-ui-reactor/main/guides/styling)** — Theme tokens and font fluents applied across every text element.
+- **[Accessibility](/microsoft-ui-reactor/main/guides/accessibility)** — How `Heading` / `SubHeading` map to document landmarks.
+- **[Markdown samples](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/chat)** — End-to-end LLM-output rendering in the chat sample.

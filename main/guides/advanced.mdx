@@ -1,0 +1,971 @@
+---
+title: "Advanced Patterns"
+description: "Escape hatches for the few jobs the declarative model doesn't fit: error boundaries, memoized subtrees, element refs, direct property writes, view-model bridges, and custom hooks."
+sidebar:
+  label: "Advanced patterns"
+---
+
+Advanced is the layer where Microsoft.UI.Reactor (Reactor)'s declarative ceiling meets the
+imperative WinUI runtime underneath. Most of the framework is shaped to
+make the declarative path the right path — render is a function of
+state, the reconciler turns the next element record into a control
+tree, you never new up a `Button` yourself. But every real app has a
+handful of jobs that don't fit: focusing the password field after a
+login error, integrating an existing MVVM view model that already owns
+its INPC story, recovering from a crash inside a third-party
+component's render, hand-tuning a 4,900-cell ticker that allocates
+during scroll. The tools on this page — `ErrorBoundary`, `Memo`,
+`UseElementRef`, `.Set(...)`, `UseObservableTree`, custom hooks, direct
+record-initializer cell construction — are the escape hatches.
+Reach for them when the declarative shape is genuinely wrong for the
+job; reach back for the declarative shape the moment the escape
+hatch's scope is fulfilled.
+
+## Escape-hatch reference [#escape-hatch-reference]
+
+| Tool | When it's the right hammer | When it isn't |
+|---|---|---|
+| `ErrorBoundary` | Wrap a third-party subtree (plugin, marketplace component) that may throw during render. | App-wide error handling — use [`RenderErrorHandler`](#app-wide-render-error-handling) instead. |
+| `Memo(ctx => ..., deps)` | Skip re-render of an expensive subtree when none of `deps` changed by reference. | Cheap subtrees — Memo's bookkeeping costs more than the render itself. |
+| `UseElementRef<T>()` | Imperative WinUI calls scoped to one element: focus, scroll, animation handles. | Reading state from the control — your component state is the source of truth. |
+| `.Set(control => ...)` | A WinUI property Reactor doesn't expose. | Properties Reactor does expose — `.Set` bypasses reconciliation's property diff. |
+| `UseObservableTree` | Bridging an existing INPC view model with nested objects. | New code — prefer `UseState` and `UseReducer` from [hooks](/microsoft-ui-reactor/main/guides/hooks). |
+| `UseCollection` | Wrapping an `ObservableCollection<T>` you don't own. | Owned lists — use `UseState<ImmutableList<T>>` or `ImmutableArray<T>`. |
+| Custom hook (`this RenderContext`) | Reusing a hook combination across components. | One-off compositions inside a single Render. |
+| [Win2D canvas](/microsoft-ui-reactor/main/controls/win2d-canvas) (`Reactor.Advanced`) | Immediate-mode drawing, game loops, and virtual tiled surfaces that retained WinUI controls cannot represent cheaply. | Ordinary retained UI — stay with elements, modifiers, and animation. |
+| Direct record-initializer cells | Profiled hot loops (tickers, stress grids). | Ordinary screens. Keep them fluent. |
+
+## Error Boundary [#error-boundary]
+
+`ErrorBoundary` wraps a subtree and catches exceptions during render.
+Instead of crashing the whole app, the boundary displays a fallback
+element:
+
+```csharp
+class ErrorBoundaryDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            SubHeading("Error Boundary"),
+            ErrorBoundary(
+                Component<BuggyComponent>(),
+                (Exception ex) => VStack(8,
+                    TextBlock("Something went wrong").Bold()
+                        .Foreground(Theme.SystemCritical),
+                    TextBlock(ex.Message).FontSize(12).Opacity(0.7)
+                ).Padding(12)
+                 .Background(Theme.SystemCriticalBackground)
+                 .CornerRadius(8)
+            )
+        ).Padding(24);
+    }
+}
+
+class BuggyComponent : Component
+{
+    public override Element Render()
+    {
+        var (crash, setCrash) = UseState(false);
+        if (crash) throw new InvalidOperationException("Oops!");
+        return Button("Click to crash", () => setCrash(true));
+    }
+}
+```
+
+![Error boundary with fallback](/microsoft-ui-reactor/main/images/advanced/error-boundary.png)
+
+The first argument is the child subtree. The second is a fallback —
+either a static element or a function that receives the caught
+`Exception`. When the boundary re-renders (e.g., its parent updates), it
+retries the child. That gives the user a chance to recover by changing
+the state that caused the crash.
+
+### Retrying a failed subtree [#retrying-a-failed-subtree]
+
+The retry pattern uses [`WithKey`](/microsoft-ui-reactor/main/guides/components) to assign a fresh
+identity to the child each retry — same shape as React's
+`resetKeys`. Bumping the key drops the previous subtree's mounted
+state, so a transient failure that left bad state behind doesn't
+persist:
+
+```csharp
+class ErrorBoundaryRetryDemo : Component
+{
+    public override Element Render()
+    {
+        var (resetKey, setResetKey) = UseState(0);
+
+        return VStack(12,
+            SubHeading("ErrorBoundary with retry"),
+            ErrorBoundary(
+                Component<FlakyComponent>().WithKey($"flaky-{resetKey}"),
+                ex => VStack(8,
+                    TextBlock("Couldn't load.").Bold().Foreground(Theme.SystemCritical),
+                    TextBlock(ex.Message).FontSize(12).Opacity(0.7),
+                    // Bumping resetKey reassigns identity to the child, so the
+                    // ErrorBoundary mounts a fresh subtree on the next render.
+                    Button("Retry", () => setResetKey(resetKey + 1))
+                ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8)
+            )
+        ).Padding(24);
+    }
+}
+
+class FlakyComponent : Component
+{
+    public override Element Render()
+    {
+        var (attempt, _) = UseState(Random.Shared.Next(0, 3));
+        if (attempt == 0) throw new InvalidOperationException("Service unavailable");
+        return TextBlock("Loaded.").Foreground(Theme.SystemSuccess);
+    }
+}
+```
+
+![Retryable error boundary](/microsoft-ui-reactor/main/images/advanced/error-boundary-retry.png)
+
+The Retry button bumps `resetKey`, the child gets a new key, and the
+reconciler mounts a fresh subtree on the next render. This is the same
+identity-reset trick used by [navigation](/microsoft-ui-reactor/main/guides/navigation) cache
+invalidation and by list-item-identity recovery in
+[collections](/microsoft-ui-reactor/main/controls/collections).
+
+### App-wide render error handling [#app-wide-render-error-handling]
+
+Outside any `ErrorBoundary`, Reactor catches render-time exceptions itself
+and shows a built-in fallback containing the full exception text — type,
+message, stack trace and inner exceptions. That is useful while developing,
+but in a shipped app the text reaches the end user. A `RenderErrorHandler`
+replaces it. Set one app-wide, per window, or per host:
+
+```csharp
+static class RenderErrorHandlerSetup
+{
+    public static void Configure(WindowSpec settingsSpec, ReactorHost host)
+    {
+        // App-wide default, consulted by every host without its own handler,
+        // including windows opened later, tray flyouts and ReactorHostControl embeds.
+        ReactorApp.DefaultRenderErrorHandler = error =>
+        {
+            Telemetry.Record(error.Exception);   // de-duplicated: see Telemetry below
+            return TextBlock("Something went wrong.");
+        };
+
+        // Per window, applied before the window's first render.
+        ReactorApp.OpenWindow(
+            settingsSpec with { RenderErrorHandler = error => TextBlock($"Settings could not load ({error.Source}).") },
+            _ => TextBlock("Settings"));
+
+        // Per host (ReactorHost or ReactorHostControl).
+        host.RenderErrorHandler = _ => null;   // null keeps the built-in fallback
+    }
+}
+
+static class Telemetry
+{
+    // The handler runs again each time a failing component re-renders, so record each
+    // exception once. The weak table lets recorded exceptions be collected.
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Exception, object> Recorded = new();
+
+    public static void Record(Exception exception)
+    {
+        if (Recorded.TryAdd(exception, Recorded))
+            System.Diagnostics.Debug.WriteLine(exception);
+    }
+}
+```
+
+A host's own handler wins; otherwise `ReactorApp.DefaultRenderErrorHandler`
+is used, resolved when the error happens. `host.EffectiveRenderErrorHandler`
+reports which one applies. The handler runs on the UI thread and receives a
+`RenderError`:
+
+| Member | Meaning |
+|---|---|
+| `Exception` | The exception Reactor caught. |
+| `Source` | `RootRender`, `ComponentRender`, `Reconcile` (reconciling, installing content, or a post-render host callback such as `OnRenderComplete`), `Effects`, or `Cleanup` (an effect cleanup during host disposal). |
+| `ComponentName` | The failing component's type name, when known. |
+| `IsHostLevel` | `true` when the returned element replaces the whole host content; `false` when it fills only the failing component's slot. For `Cleanup`, `true` means the host's root component registered the cleanup and `false` a child component. |
+| `Propagate()` | Show no fallback and route the exception to `ReactorApplication.OnUnhandledException` instead. If that returns `true` the app keeps running; otherwise see [Propagating to the unhandled-exception path](#propagating-to-the-unhandled-exception-path). |
+
+Return an element to show it instead of the built-in fallback, or `null` to
+keep the built-in one. The handler covers every place Reactor used to show the
+built-in fallback: the root render, child renders, the reconcile pass, and
+effect bodies and cleanups. Exceptions an `ErrorBoundary` catches stay with
+that boundary.
+
+Failure is closed, not open: once a handler is configured, the detailed
+fallback appears only when the handler returns `null`. If the handler throws,
+or the element it returns throws while rendering, Reactor shows a neutral
+"Something went wrong." message without exception details, and does not call
+the handler again for that failure.
+
+The handler can run many times for the same fault. Reactor does not latch a
+failing component: every later render retries it, which is how recovery works,
+and if it throws again the handler is called again — once per re-render of a
+failing child, once per host render for a host-level failure. De-duplicate side
+effects such as telemetry, for example by remembering the exceptions you have
+already recorded.
+
+Independently of the handler, every component failure — a `Render()` or an
+effect flush that throws, at any depth including the host's root — is also
+reported on the `Microsoft-UI-Reactor` ETW `RenderError` event (`Errors`
+keyword), naming the component — see [diagnostics](/microsoft-ui-reactor/main/guides/diagnostics). The event is
+emitted before the handler runs, so it fires once per throw whatever the handler
+does, including when it calls `Propagate()`. Errors an `ErrorBoundary` catches
+are reported there too, even though they never reach the handler. `Reconcile`
+and `Cleanup` failures have no failing render and are not reported on that
+event.
+
+`Cleanup` reports an effect cleanup that threw while a host was being
+disposed — a window closing, or a `ReactorHostControl` being disposed. There
+is nothing left to display, so the return value is ignored and the handler only
+reports. Every other cleanup still runs.
+
+#### Propagating to the unhandled-exception path [#propagating-to-the-unhandled-exception-path]
+
+When the handler calls `Propagate()` and `ReactorApplication.OnUnhandledException`
+does not return `true`, Reactor rethrows the exception out of whatever ran the
+render:
+
+- Re-renders, and every render of a `ReactorHostControl`, run from a
+  `DispatcherQueue` callback. WinUI ends the process for an exception that
+  escapes one, without raising `Application.UnhandledException` or
+  `AppDomain.UnhandledException`
+  ([microsoft-ui-xaml#8940](https://github.com/microsoft/microsoft-ui-xaml/issues/8940)).
+  The `OnUnhandledException` call Reactor makes first is the only managed hook
+  the app gets, and returning `false` (or leaving it unset) ends the process.
+- The first render of a `ReactorHost` runs synchronously inside `Mount` /
+  `ReactorApp.OpenWindow`, so there the exception is thrown to that caller.
+
+`ReactorApplication.OnUnhandledException` is static, and Reactor calls it even
+when the app's `Application` is not a `ReactorApplication` — for example a XAML
+app that hosts Reactor screens in `ReactorHostControl`. For such an app it is
+the only way to observe a propagated render error.
+
+## Memo [#memo]
+
+`Memo(ctx => ..., deps)` skips re-rendering an entire subtree when its
+dependencies have not changed by reference. The parent can re-render
+freely — the memoized subtree stays frozen:
+
+```csharp
+class MemoSubtreeDemo : Component
+{
+    public override Element Render()
+    {
+        var (count, setCount) = UseState(0);
+        var (label, setLabel) = UseState("Expensive");
+
+        return VStack(12,
+            SubHeading("Memo"),
+            TextBlock($"Parent renders: click count = {count}"),
+            Button("Increment", () => setCount(count + 1)),
+            Memo(ctx =>
+            {
+                // This subtree only re-renders when label changes
+                return Border(
+                    VStack(4,
+                        TextBlock($"Memoized: {label}").Bold(),
+                        TextBlock("Skips re-render when deps unchanged")
+                            .FontSize(12).Opacity(0.6)
+                    ).Padding(12)
+                ).Background(Theme.CardBackground).CornerRadius(8);
+            }, label)
+        ).Padding(24);
+    }
+}
+```
+
+![Memo skipping re-render](/microsoft-ui-reactor/main/images/advanced/memo-subtree.png)
+
+`Memo` takes a render function and a list of dependencies. The subtree
+only re-renders when at least one dependency changes by reference
+equality. Clicking "Increment" re-renders the parent, but the memoized
+border stays untouched because `label` hasn't changed.
+
+Use Memo for expensive subtrees — large [collections](/microsoft-ui-reactor/main/controls/collections),
+complex [charts](/microsoft-ui-reactor/main/controls/charting), or deeply nested
+[component](/microsoft-ui-reactor/main/guides/components) trees that don't depend on frequently-changing
+state. For per-cell memoization inside long lists, see
+[Memoizing list cells](#memoizing-list-cells).
+
+## Imperative refs — UseElementRef [#imperative-refs-useelementref]
+
+`UseElementRef<T>()` returns a stable `ElementRef<T>` whose `.Current`
+the reconciler keeps in sync with the mounted control. Attach the ref
+to an element with `.Ref(ref)`, then call into `.Current` from an event
+handler or `UseEffect` for the imperative operations Reactor doesn't
+wrap declaratively:
+
+```csharp
+class ElementRefFocusDemo : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("");
+        var fieldRef = this.UseElementRef<TextBox>();
+
+        return VStack(12,
+            SubHeading("Imperative focus via ElementRef<T>"),
+            TextBox(name, setName, placeholderText: "Name")
+                .AutomationName("Name")
+                .Ref(fieldRef),
+            Button("Focus the field", () =>
+                fieldRef.Current?.Focus(FocusState.Programmatic))
+        ).Padding(24);
+    }
+}
+```
+
+The ref instance is identity-stable across re-renders (the hook returns
+the same instance every time), so it's safe to use in dep arrays and
+`UseEffect` capture. `.Current` is null until the element mounts; null-
+check before dereferencing.
+
+> **Caveat:** Holding a raw `FrameworkElement` (the WinUI control underneath, not the
+> Reactor `ElementRef<T>`) across renders is unsafe. The reconciler may
+> unmount, pool, or replace the underlying control between renders — the
+> control you cached in a `static` field or in a captured local is
+> no longer attached to the tree, and any property you set on it has no
+> effect. `UseElementRef<T>` is the supported shape: the ref instance is
+> stable, but `.Current` is **re-read each time** through a property the
+> reconciler updates on mount and unmount. The analyzer
+> `REACTOR_HOOKS_005` catches the common forms (caching a control in a
+> field, dereferencing without null-checking), but indirect caches
+> through helper methods aren't visible to it — keep the rule in your
+> head: never store the control, always go through the ref.
+
+## .Set() escape hatch [#set-escape-hatch]
+
+`.Set()` gives you direct access to the underlying WinUI control. Use
+it for the properties Reactor doesn't expose as modifiers — and only
+those. Check for a fluent modifier first: tooltips are `.ToolTip("…")`
+(or `.WithToolTip(element)` for rich content, plus
+`.ToolTipPlacement(...)` / `.ToolTipPlacementTarget(...)` for the two
+`ToolTipService` positioning properties), not a hand-rolled
+`ToolTipService.SetToolTip` inside `.Set()`. Padding, text wrapping,
+character spacing, and selection all have modifiers too. Anything you
+route through `.Set()` sits outside the property diff, so prefer the
+modifier whenever one exists:
+
+```csharp
+class SetEscapeHatchDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            SubHeading(".Set() Escape Hatch"),
+            // Tooltip and padding are first-class modifiers — reach for those
+            // first. ClickMode has no modifier, so it needs the escape hatch.
+            Button("Custom Tooltip", () => { })
+                .ToolTip("This is a native tooltip")
+                .Padding(20, 10, 20, 10)
+                .Set(btn => btn.ClickMode = ClickMode.Press),
+            TextBlock("Styled via .Set()")
+                .TextWrapping(TextWrapping.WrapWholeWords)
+                .CharacterSpacing(80)
+                .IsTextSelectionEnabled()
+                .Set(tb =>
+                {
+                    // No TextBlockElement modifiers for these two.
+                    tb.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+                    tb.IsTextScaleFactorEnabled = false;
+                })
+        ).Padding(24);
+    }
+}
+```
+
+![.Set() escape hatch](/microsoft-ui-reactor/main/images/advanced/set-escape-hatch.png)
+
+Each element type has a typed `.Set()` overload. `Button` receives an
+`Action<Microsoft.UI.Xaml.Controls.Button>`, `Text` receives
+`Action<TextBlock>`, and so on. The callback runs at both mount and
+update, so set properties idempotently — don't accumulate event
+handlers. Use `.OnMount(...)` instead when you need a one-shot
+attachment.
+
+`.Set` bypasses the property-diff path in reconciliation — the
+reconciler doesn't know about state you write through the callback, so
+the next render that touches a real modifier will not unwind it. Treat
+`.Set` as one-way: you're driving the control, not letting Reactor
+manage it.
+
+## `Optional<T>` and authority [#optionalt-and-authority]
+
+`Optional<T>` is Reactor's authority marker for controlled props. A
+controlled element property such as `SliderElement.Value` is not just a
+`double`; it is either `Optional<double>.Of(value)` (Reactor is asserting
+the value) or `Optional<double>.Unset` (the WinUI control owns the value).
+This distinction exists because C# records cannot tell "property
+omitted" from "property set to the default" the way JSX can.
+
+<!-- phantom:skip "Optional.Of" -->
+`Of` is a static member **on the generic struct**, so the type argument
+goes on `Optional<T>`, never on `Of` — `Optional<double>.Of(5.0)`, not
+`Optional.Of(5.0)` and not `Optional.Of<double>(5.0)`.
+
+### Snap-back recipe [#snap-back-recipe]
+
+Sometimes the app deliberately wants to clamp a user-editable control
+to a fixed value. Keep the element value `HasValue` and force a
+re-render from the change callback:
+
+```csharp
+class SnapBackDemo : Component
+{
+    public override Element Render()
+    {
+        // RenderContext.UseReducer<T>(T initialValue) returns
+        // (T Value, Action<Func<T, T>> Update). Toggling the bool guarantees
+        // a changed reducer result and therefore a re-render.
+        var (_, bump) = UseReducer(false);
+
+        return Slider(
+            value: Optional<double>.Of(5.0),
+            onValueChanged: _ => bump(b => !b));
+    }
+}
+```
+
+Flow: the user drags the slider away from 5, the callback toggles the
+reducer state, the next render produces `Optional<double>.Of(5.0)`, and the
+controlled Update gate sees `HasValue` plus drift and writes 5 back
+with echo suppression. Use this only when the snap-back is intentional;
+ordinary inputs should bind to state (`Slider(value, setValue)`) or use
+`Optional<T>.Unset` when the control should own the value.
+
+### `ClearValue` channel for one-way fallback [#clearvalue-channel-for-one-way-fallback]
+
+For DP-backed one-way props, `Optional<T>` also expresses "release the
+local value":
+
+```csharp
+public sealed record CardElement : Element
+{
+    public Optional<Brush?> Background { get; init; } = Optional<Brush?>.Unset;
+}
+
+static class CardDescriptorHost
+{
+    public static readonly ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border> Descriptor =
+        new ControlDescriptor<CardElement, Microsoft.UI.Xaml.Controls.Border>()
+            .OneWay(
+                get: static e => e.Background,
+                set: static (c, v) => c.Background = v,
+                dp: Microsoft.UI.Xaml.Controls.Border.BackgroundProperty);
+}
+```
+
+`Background = Optional<Brush?>.Of(brush)` writes a local brush;
+`Background = Optional<Brush?>.Unset` calls `ClearValue` so WinUI's
+style, template, inherited value, or registered default can show
+through. Be explicit with nulls: `with { Background = null }` uses the
+implicit conversion and means `Optional<Brush?>.Of(null)`, not `Unset`.
+
+## Custom hooks [#custom-hooks]
+
+Custom hooks compose existing hooks into reusable shapes. They're
+extension methods on `RenderContext` — the same shape as the built-in
+hooks, called from any function-component `Memo(ctx => ...)` or from
+a class component's `Context`:
+
+```csharp
+// Custom hook — composes UseState + UseEffect on RenderContext. Treated like
+// a built-in hook from any function-component Render. Same hook-rules apply:
+// call unconditionally, at the top of render, in the same order every time.
+static class TogglerHook
+{
+    public static (bool IsOn, Action Toggle) UseToggler(this RenderContext ctx, bool initial = false)
+    {
+        var (on, setOn) = ctx.UseState(initial);
+        return (on, () => setOn(!on));
+    }
+}
+
+class CustomHookDemo : Component
+{
+    public override Element Render() => Memo(ctx =>
+    {
+        var (isOn, toggle) = ctx.UseToggler();
+        return VStack(8,
+            SubHeading("Custom hook: UseToggler"),
+            Button(isOn ? "On" : "Off", toggle)
+                .AutomationName("Toggle state"),
+            TextBlock(isOn ? "State is on." : "State is off.")
+                .Foreground(isOn ? Theme.SystemSuccess : Theme.SecondaryText)
+        ).Padding(24);
+    });
+}
+```
+
+The same hook rules apply (see [rules-of-reactor](/microsoft-ui-reactor/main/get-started/rules-of-reactor)):
+call unconditionally, at the top of render, in the same order every
+time, never inside loops or conditionals. The analyzer
+`REACTOR_HOOKS_001` enforces these rules across custom hooks as well as
+built-ins — it walks the call graph through extension methods.
+
+## Observable bridges — UseObservableTree [#observable-bridges-useobservabletree]
+
+`UseObservableTree` bridges `INotifyPropertyChanged` view models into
+the declarative render cycle. It subscribes to property changes at
+every depth and re-renders the component when any nested property
+fires.
+
+Define a standard INPC view model:
+
+```csharp
+class SettingsViewModel : INotifyPropertyChanged
+{
+    private string _userName = "Alice";
+    private bool _darkMode;
+    private int _fontSize = 14;
+
+    public string UserName
+    {
+        get => _userName;
+        set { _userName = value; Notify(nameof(UserName)); }
+    }
+    public bool DarkMode
+    {
+        get => _darkMode;
+        set { _darkMode = value; Notify(nameof(DarkMode)); }
+    }
+    public int FontSize
+    {
+        get => _fontSize;
+        set { _fontSize = value; Notify(nameof(FontSize)); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void Notify(string n) =>
+        PropertyChanged?.Invoke(this, new(n));
+}
+```
+
+Then bind it in a component with `UseObservableTree`:
+
+```csharp
+class ObservableTreeDemo : Component
+{
+    private static readonly SettingsViewModel _vm = new();
+
+    public override Element Render()
+    {
+        var vm = UseObservableTree(_vm);
+
+        return VStack(12,
+            SubHeading("UseObservableTree"),
+            TextBox(vm.UserName, v => vm.UserName = v,
+                header: "User Name"),
+            ToggleSwitch(vm.DarkMode, v => vm.DarkMode = v,
+                header: "Dark Mode"),
+            Slider(vm.FontSize, 10, 32, v => vm.FontSize = (int)v)
+                .AutomationName("Font size"),
+            TextBlock($"Preview: {vm.UserName}")
+                .FontSize(vm.FontSize).Bold()
+        ).Padding(24);
+    }
+}
+```
+
+![Observable view model](/microsoft-ui-reactor/main/images/advanced/observable-viewmodel.png)
+
+The view model is a plain C# class with `INotifyPropertyChanged`. You
+mutate it directly (`vm.UserName = v`) and Reactor re-renders. This is
+the migration bridge for teams arriving with existing MVVM view models
+— they work without modification.
+
+`UseObservable(source)` is the shallow variant: it only subscribes to
+the source object's own `PropertyChanged` events, not nested objects.
+Prefer it for flat view models — `UseObservableTree` walks the entire
+graph on every render and the cost shows up on deep object trees.
+
+## UseCollection [#usecollection]
+
+`UseCollection` tracks an `ObservableCollection<T>` and re-renders the
+component when items are added, removed, or the collection resets:
+
+```csharp
+class ObservableCollectionDemo : Component
+{
+    private record TaskItem(int Id, string Title);
+
+    private static int _nextId = 3;
+    private static readonly ObservableCollection<TaskItem> _tasks = new()
+        { new TaskItem(1, "Review pull request"), new TaskItem(2, "Update documentation") };
+
+    public override Element Render()
+    {
+        var tasks = UseCollection(_tasks);
+        var (input, setInput) = UseState("");
+
+        return VStack(12,
+            SubHeading("UseCollection"),
+            HStack(8,
+                TextBox(input, setInput, placeholderText: "New task")
+                    .AutomationName("New task")
+                    .Width(200),
+                Button("Add", () => {
+                    if (!string.IsNullOrWhiteSpace(input))
+                    { _tasks.Add(new TaskItem(_nextId++, input.Trim())); setInput(""); }
+                })
+            ),
+            TextBlock($"{tasks.Count} tasks:").SemiBold(),
+            VStack(4, tasks.Select((task, i) =>
+                HStack(8,
+                    // The index is fine for display; it must not become the key.
+                    TextBlock($"{i + 1}. {task.Title}"),
+                    Button("Remove", () => _tasks.Remove(task))
+                        .AutomationName($"Remove {task.Title}")
+                ).WithKey(task.Id.ToString())   // stable identity survives removal
+            ).ToArray())
+        ).Padding(24);
+    }
+}
+```
+
+![Observable collection](/microsoft-ui-reactor/main/images/advanced/observable-collection.png)
+
+The hook returns `IReadOnlyList<T>` — you read from it in render and
+mutate the original `ObservableCollection` in event handlers. Reactor
+subscribes to `CollectionChanged` and triggers a re-render on any
+modification. For owned lists (collections you created in the same
+component), prefer `UseState<ImmutableList<T>>` — the immutable shape
+fits the render-from-state model without an observable middleman.
+
+## Hot loops [#hot-loops]
+
+The fluent modifier chain is ergonomic but allocates an
+`ElementModifiers` clone per `with`-step. For ordinary UI that cost is
+invisible — a button with five modifiers means two extra small records
+allocated on a click handler. For inner-loop cell construction in a
+4,900-cell grid that re-renders 30× per second, those clones dominate
+the allocation profile.
+
+The escape hatch is to construct the `Element` and its
+`ElementModifiers` record directly, skipping the fluent chain entirely.
+`LayoutModifiers` and `VisualModifiers` are public types specifically
+so perf-critical code can build them once instead of having the fluent
+chain rebuild them step-by-step.
+
+```csharp
+static class HotLoopCells
+{
+    record Quote(bool IsUp);
+
+    static readonly Brush GreenBrush = new SolidColorBrush(Colors.Green);
+    static readonly Brush RedBrush = new SolidColorBrush(Colors.Red);
+
+    public static void Build(string label, int r, int c)
+    {
+        var item = new Quote(IsUp: true);
+
+        // Fluent — five clones per cell. Right tool for ordinary UI.
+        var fluentCell = TextBlock(label)
+            .FontSize(8)
+            .Foreground(item.IsUp ? GreenBrush : RedBrush)
+            .Padding(2, 1, 2, 1)
+            .Grid(row: r, column: c);
+
+        // Direct record initializer — one TextBlockElement, one ElementModifiers,
+        // two bucket sub-records, one Attached dictionary. Use only when the
+        // allocation cost shows up in profiles.
+        var directCell = new TextBlockElement(label)
+        {
+            FontSize = 8,
+            Modifiers = new ElementModifiers
+            {
+                Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
+                Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
+            },
+            Attached = new Dictionary<Type, object>(1)
+            {
+                [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
+            },
+        };
+
+        _ = (fluentCell, directCell);
+    }
+}
+```
+
+**Registration contract.** Factory methods (`TextBlock(...)`, `Button(...)`,
+…) carry a one-time handler-registration touch that runs the first time the
+factory is called — that is how the reconciler learns which WinUI control to
+mount for an element record. Direct-record construction (`new
+TextBlockElement(...)`) deliberately bypasses the factory, so it also bypasses
+that registration. The idiom is fully supported, but **the caller must ensure
+the handler is registered before the element is first mounted**, otherwise the
+reconciler throws `InvalidOperationException` on mount. Pick one:
+
+- call the matching factory once at startup (`_ = TextBlock("");`), or
+- opt into the full built-in catalog with
+  `ReactorApp.RegisterAllBuiltIns()` at startup (simplest; the right choice
+  unless you are publishing a trimmed/NativeAOT binary that deliberately keeps
+  only the controls it uses), or
+- register the specific handler explicitly with
+  `ControlRegistry.Register<TElement, TControl>(...)` (control-backed
+  elements) or `ControlRegistry.RegisterDecorator<TElement>(...)`
+  (decorator-backed elements that wrap/forward to a child).
+
+The reference app below calls `ReactorApp.RegisterAllBuiltIns()` once in
+`Main` before the hot loop runs, so its `new TextBlockElement(...)` cells mount
+without paying a per-cell factory call.
+
+**Workload shape.** Use this idiom in lists or grids with hundreds-plus
+elements per render — tickers, log tables, observability dashboards.
+Don't adopt it for ordinary screens. The fluent chain is the right tool
+for everything except the inner cell loop.
+
+**Trade-offs.** Roughly halves the allocation cost of cell construction
+on the 4,900-cell stress grid, but loses fluent ergonomics. The direct
+form is more brittle to refactor — changing one field touches an
+explicit initializer block instead of a chain step. Restrict it to the
+identifiable hot loop and keep the rest of the file fluent. See
+[modifier-system](/microsoft-ui-reactor/main/how-it-works/modifier-system) for the under-the-hood explanation
+of why the fluent chain allocates.
+
+**Reference implementation.** The canonical before/after pair lives in
+`tests/stress_perf/StressPerf.Reactor` (naive — fluent chain, the shape
+unaware users write) and `tests/stress_perf/StressPerf.ReactorOptimized`
+(idiomatic perf-tuned variant). Same workload, side-by-side diffable.
+
+## Memoizing list cells [#memoizing-list-cells]
+
+`UseMemoCells` skips the cell-build for indices whose item value (and
+declared dependencies) haven't changed since the previous render. The
+reconciler's `ReferenceEquals` shortcut means a reused cell allocates
+nothing and skips diffing entirely.
+
+```csharp
+class MemoCellsDemo : Component
+{
+    record Stock(string Symbol, double Price);
+
+    static Element Cell(Stock item, ColorScheme scheme) =>
+        TextBlock($"{item.Symbol} {item.Price:F2}")
+            .Foreground(scheme == ColorScheme.Dark ? Theme.PrimaryText : Theme.SecondaryText);
+
+    public override Element Render() => Memo(ctx =>
+    {
+        var stocks = new[] { new Stock("MSFT", 431.2), new Stock("GOOG", 176.5) };
+
+        var scheme = ctx.UseColorScheme();
+        var children = ctx.UseMemoCells(
+            stocks,
+            (item, i) => Cell(item, scheme),
+            scheme);   // ← deps; framework invalidates on change
+
+        return VStack(4, children);
+    });
+}
+```
+
+**When it's the right hammer.** Tickers, log tables, file lists, large
+read-only grids — anywhere the cell content is a pure function of `T`
+plus a small set of declared deps.
+
+**When it's the wrong hammer.** Rows whose chrome depends on focus,
+drag, selection, or hover state that you aren't capturing in deps.
+Memo silently renders stale when an external state change isn't
+declared as a dep — the analyzer below catches the obvious cases, but
+indirect captures through helper methods aren't visible to it.
+
+**Three overloads:**
+
+| Overload | Use when |
+|---|---|
+| `UseMemoCells<T>` | Per-item value equality. Default choice. |
+| `UseMemoCellsByKey<T, TKey>` | Items have stable identity but mutable interior. Hashes by key, value-compares for content. Reordered keys reuse cells via the reconciler's keyed-children path. |
+| `UseMemoCellsByIndex<T>` | Data source already knows which indices changed. Skips the per-cell equality scan; only the named indices run the builder. |
+
+**gen2 caveat.** Memo trades short-lived gen0 churn for longer-lived
+gen1/gen2 retention. Many memoized lists across an app can compound
+gen2 pressure even when bytes-per-tick drops. Profile before adopting
+across the board — see
+[perf-instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation) for ETW-driven sampling
+and [performance](/microsoft-ui-reactor/main/guides/performance) for the top-down walkthrough.
+
+**Compile-time safety net.** The companion Roslyn analyzer
+`REACTOR_HOOKS_007` warns when a builder closure captures a value that
+isn't declared in the deps list. Codefix is "add the missing capture to
+deps". Indirect captures through intermediate methods are a documented
+blind spot — the analyzer can't see through a method call without
+whole-program analysis (same blind spot as React's
+`react-hooks/exhaustive-deps`).
+
+**Recycle-boundary sibling.** `UseMemoCells` runs at the parent's **render**
+boundary — it skips cell-builds when the list component re-renders. It does
+*not* help during pure fast-scroll, where a virtualized list recycles
+containers without re-rendering the parent. For that, wrap the row in
+[`Memo(key, factory)`](/microsoft-ui-reactor/main/controls/collections#memoizing-rows-across-recycles) — the
+opt-in cross-recycle row cache. The two compose: `UseMemoCells` covers
+re-renders, `Memo(key, …)` covers scroll recycles.
+
+## Patterns [#patterns]
+
+### Custom hook authoring [#custom-hook-authoring]
+
+Custom hooks let you bundle a hook combination behind a single name —
+`UseDebouncedValue`, `UseWindowScroll`, `UsePersistedToggle` — and reuse
+it across components. They're plain `RenderContext` extension methods.
+The [rules-of-reactor](/microsoft-ui-reactor/main/get-started/rules-of-reactor) page covers naming
+conventions (`Use*` prefix) and call-order discipline; the
+[hooks-internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals) page explains why custom hooks
+work — Reactor doesn't distinguish them from built-ins, the slot table
+just counts hook invocations in order.
+
+### ErrorBoundary with retry key [#errorboundary-with-retry-key]
+
+The retry pattern shown above scales to async failures, transient
+network errors, and any subtree whose state should reset on user
+acknowledgment. Pair the retry key with an [async resource](/microsoft-ui-reactor/main/guides/async-resources)
+that holds the in-flight task — bumping the key cancels the previous
+attempt by reassigning identity, so a slow fetch from the failed
+attempt doesn't race with the new one.
+
+### Imperative focus from an event handler [#imperative-focus-from-an-event-handler]
+
+A login form that focuses the password field when the username is
+valid is the canonical `UseElementRef` shape — see the snippet above
+for the call site. The same shape covers focusing a list item after a
+keyboard shortcut, scrolling a `VirtualList` to a known index via
+[`VirtualListRef`](/microsoft-ui-reactor/main/controls/collections), and starting a Composition
+animation on a known control. For the broader focus model (focus trap,
+enter-to-advance, automation tree), see
+[accessibility](/microsoft-ui-reactor/main/guides/accessibility) and
+[focus-and-input-internals](/microsoft-ui-reactor/main/how-it-works/focus-and-input-internals).
+
+## Common Mistakes [#common-mistakes]
+
+### Caching elements (or controls) in module-level statics [#caching-elements-or-controls-in-module-level-statics]
+
+```csharp
+// Don't — the FrameworkElement underneath is pool-managed.
+static TextBox? _passwordField;
+
+public override Element Render()
+{
+    var (pwd, setPwd) = UseState("");
+    return TextBox(pwd, setPwd).Set(c => _passwordField = c);
+}
+
+// Elsewhere:
+static void FocusPassword() => _passwordField?.Focus(FocusState.Programmatic);
+```
+
+The reconciler may unmount, swap, or pool the underlying control
+between renders. The static field outlives every one of those events
+and ends up pointing at a detached or recycled instance. Use
+[`UseElementRef<T>`](#imperative-refs-useelementref) — the ref's
+`.Current` is null when the control isn't attached and is repopulated
+when it remounts.
+
+### Calling `setState` from a `UseEffect` cleanup [#calling-setstate-from-a-useeffect-cleanup]
+
+```csharp
+// Don't — setState inside cleanup runs during unmount/dispose.
+UseEffect(() =>
+{
+    var sub = Subscribe();
+    return () => { sub.Dispose(); setState(false); };  // ← stale state, may throw
+}, []);
+```
+
+Cleanup runs after the component has stopped being part of the tree;
+calling `setState` from there either no-ops (the disposed render
+context refuses the call) or schedules a render against state that no
+longer matters. Put state resets in the effect body or in an event
+handler that explicitly transitions the parent. See
+[effects-scheduling](/microsoft-ui-reactor/main/how-it-works/effects-scheduling) for cleanup ordering.
+
+### Subscribing to control events from a parent that captures the wrong `this` [#subscribing-to-control-events-from-a-parent-that-captures-the-wrong-this]
+
+```csharp
+// Don't — `.Set` runs on every mount AND update, so each render adds another
+// subscription, and the lambda captures the parent component instance that was
+// current when the closure was created.
+class WrongThisCaptureDemo : Component
+{
+    public override Element Render()
+    {
+        // Don't do this:
+        // return Button("Load").Set(b => b.Loaded += (s, e) => this.OnChildLoaded());
+        return Button("Load");
+    }
+
+    void OnChildLoaded() { }
+}
+```
+
+The commented `.Set(control => ...)` line is the bug: `.Set` runs on
+every mount and update, so every render would add another event
+subscription. The `this` inside the lambda is the parent component,
+captured at the lambda's closure site, which keeps a strong reference
+to a stale render's component instance after the parent has re-rendered.
+Two fixes: lift the handler to a stable `UseCallback` in the parent and
+pass it via [props](/microsoft-ui-reactor/main/guides/components), or use `.OnMount(...)` for a one-shot
+subscription with explicit cleanup.
+
+(`.Set` is generated per control-backed element — `ButtonElement.Set(Action<Button>)`,
+`TextBoxElement.Set(Action<TextBox>)`, and so on. Component elements returned by
+`Component<T>()` have no `.Set`; to reach a child's control, put the `.Set` on the
+control-backed element inside that child's own `Render`.)
+
+### Reaching for `.Set` when a modifier exists [#reaching-for-set-when-a-modifier-exists]
+
+```csharp
+// Don't — Reactor exposes .RequestedTheme() as a modifier.
+Button("Save", onSave).Set(c => c.RequestedTheme = ElementTheme.Dark);
+```
+
+The modifier participates in property diffing — the next render that
+removes the modifier clears the local value, handing the property back
+to whatever the style (or inheritance) supplies. `.Set` is
+imperative and one-way; the next render won't undo it. Prefer the
+modifier when one exists; reserve `.Set` for properties Reactor
+genuinely doesn't expose. The `REACTOR_THEME_003` analyzer catches this
+specific case for `RequestedTheme`; the same shape applies broadly.
+
+## Tips [#tips]
+
+**Wrap third-party components in `ErrorBoundary`.** If a plugin or
+marketplace component throws during render, the boundary stops it from
+taking down your entire app. Pair with a Retry button keyed by a
+`UseState` counter to let users recover without restarting the app.
+
+**Profile before memoizing.** `Memo` adds bookkeeping cost and a
+second hook slot per subtree. Only reach for it when you have measured
+a re-render bottleneck on a profiler. Most subtrees re-render fast
+enough without it.
+
+**Prefer declarative modifiers over `.Set()`.** Every `.Set()` call is
+an escape hatch that bypasses Reactor's property diff. Reserve it for
+WinUI properties Reactor doesn't expose. If you find yourself reaching
+for `.Set` frequently, the right next step is a Reactor feature
+request — the framework should grow a modifier for the common case.
+
+**Keep view models outside the component.** Store them as `static`
+fields or inject them via [context](/microsoft-ui-reactor/main/guides/context). Creating a new view
+model inside `Render()` would allocate a fresh object on every render
+and lose all state, plus break the `UseObservableTree` subscription on
+every render.
+
+**Use `UseObservable` when depth is one level.** `UseObservableTree`
+walks the entire object graph on every change. For flat view models
+with no nested INPC objects, `UseObservable` is cheaper and produces
+fewer event subscriptions.
+
+## Next Steps [#next-steps]
+
+- **[Data System](/microsoft-ui-reactor/main/controls/data-system)** — DataGrid with sort, filter, and inline editing
+- **[WinForms Interop](/microsoft-ui-reactor/main/guides/winforms-interop)** — host Reactor components inside WinForms applications
+- **[Charting](/microsoft-ui-reactor/main/controls/charting)** — data visualization with line, bar, area, pie, and force-directed charts
+- **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — review the hook system that `UseObservableTree`, `UseCollection`, and custom hooks build on
+- **[Effects and Lifecycle](/microsoft-ui-reactor/main/guides/effects)** — side-effect scheduling alongside observable data binding
+- **[Hooks internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Under-the-hood: how hooks actually store their values
+- **[Modifier system](/microsoft-ui-reactor/main/how-it-works/modifier-system)** — Under-the-hood: why the fluent chain allocates, and what the direct-initializer escape buys
+- **[Rules of Reactor](/microsoft-ui-reactor/main/get-started/rules-of-reactor)** — hook rules, render purity, and the dos and don'ts of custom hook authoring

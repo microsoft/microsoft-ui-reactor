@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/MutationOptions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/MutationOptions.md",
+  "route": "/reference/hooks/MutationOptions",
+  "title": "MutationOptions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/MutationOptions",
+  "markdown": "---\ntitle: \"MutationOptions\"\nseo:\n  description: \"Callbacks and side-effects for the UseMutation hook. All callbacks are optional; all run on the dispatcher thread except OnOptimistic which runs synchronously on the caller of RunAsync (guide) — the typical case is a render-thread click handler, so the optimistic update lands in the very next frame without a dispatcher hop.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Summary [#summary]\n\nCallbacks and side-effects for the `UseMutation` hook.\nAll callbacks are optional; all run on the dispatcher thread except [OnOptimistic](/microsoft-ui-reactor/main/reference/hooks/MutationOptions)\nwhich runs synchronously on the caller of [RunAsync](/microsoft-ui-reactor/main/reference/hooks/RunAsync) ([guide](/microsoft-ui-reactor/main/guides/hooks))\n— the typical case is a render-thread click handler, so the optimistic update lands in the\nvery next frame without a dispatcher hop.\n\n## Discussion [#discussion]\n\n\n\n**InvalidateKeys.** On success, each key is passed to\n`QueryCache.Invalidate`. Sibling `UseResource` hooks subscribed to\nthose keys will observe the invalidation and refetch on their next render.\n\n\n\nError path: [OnError](/microsoft-ui-reactor/main/reference/hooks/MutationOptions) fires but [InvalidateKeys](/microsoft-ui-reactor/main/reference/hooks/MutationOptions) does\n**not** — the assumption is the server state didn't change, so the cache is still valid.\n"
+}

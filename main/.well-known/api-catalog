@@ -1,0 +1,19 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs",
+      "service-desc": [
+        {
+          "href": "https://microsoft.github.io/microsoft-ui-reactor/main/openapi.json",
+          "type": "application/json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://microsoft.github.io/microsoft-ui-reactor/main",
+          "type": "text/html"
+        }
+      ]
+    }
+  ]
+}

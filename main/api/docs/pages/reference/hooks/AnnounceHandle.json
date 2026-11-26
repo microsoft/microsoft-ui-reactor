@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/AnnounceHandle.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle.md",
+  "route": "/reference/hooks/AnnounceHandle",
+  "title": "AnnounceHandle",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle",
+  "markdown": "---\ntitle: \"AnnounceHandle\"\nseo:\n  description: \"Handle returned by UseAnnounce (guide). Provides an imperative Announce (guide) method for screen reader live-region announcements plus a zero-size Region (guide) element that must be included somewhere in the component's rendered tree.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Summary [#summary]\n\nHandle returned by [UseAnnounce](/microsoft-ui-reactor/main/reference/hooks/UseAnnounce#useannouncerendercontext) ([guide](/microsoft-ui-reactor/main/guides/hooks)).\nProvides an imperative [Announce](/microsoft-ui-reactor/main/reference/hooks/Announce#announcestring) ([guide](/microsoft-ui-reactor/main/guides/hooks)) method for screen reader\nlive-region announcements plus a zero-size [Region](/microsoft-ui-reactor/main/reference/hooks/Region) ([guide](/microsoft-ui-reactor/main/guides/hooks)) element\nthat must be included somewhere in the component's rendered tree.\n"
+}

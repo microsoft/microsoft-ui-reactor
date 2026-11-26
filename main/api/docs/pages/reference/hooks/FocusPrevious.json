@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/FocusPrevious.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusPrevious.md",
+  "route": "/reference/hooks/FocusPrevious",
+  "title": "FocusPrevious",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusPrevious",
+  "description": "Focuses the field before the given field in registration order.",
+  "markdown": "---\ntitle: \"FocusPrevious\"\ndescription: \"Focuses the field before the given field in registration order.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

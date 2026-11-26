@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/PendingComponent.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingComponent.md",
+  "route": "/reference/hooks/PendingComponent",
+  "title": "PendingComponent",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingComponent",
+  "markdown": "---\ntitle: \"PendingComponent\"\nseo:\n  description: \"Component backing the Pending element. Hosts a PendingScope (guide), subscribes to its Changed (guide) event, and chooses between Fallback and Child.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Summary [#summary]\n\nComponent backing the `Pending` element. Hosts a [PendingScope](/microsoft-ui-reactor/main/reference/hooks/PendingScope) ([guide](/microsoft-ui-reactor/main/guides/hooks)),\nsubscribes to its [Changed](/microsoft-ui-reactor/main/reference/hooks/Changed) ([guide](/microsoft-ui-reactor/main/guides/hooks)) event, and chooses between\n[Fallback](/microsoft-ui-reactor/main/reference/hooks/PendingProps) and [Child](/microsoft-ui-reactor/main/reference/hooks/PendingProps).\n\n## Discussion [#discussion]\n\nThe child subtree is always rendered. When the scope reports any loading resource,\nthe child's `Visibility` is flipped to `Collapsed` and the fallback is\nshown instead. Because the subtree stays mounted, its hooks keep running, their\nfetches complete in the background, and the UI swaps to the real content on the\nnext render frame after the scope reports clean.\n"
+}

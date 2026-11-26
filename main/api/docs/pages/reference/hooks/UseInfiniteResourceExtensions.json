@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseInfiniteResourceExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResourceExtensions.md",
+  "route": "/reference/hooks/UseInfiniteResourceExtensions",
+  "title": "UseInfiniteResourceExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResourceExtensions",
+  "description": "Extension methods providing UseInfiniteResource on RenderContext.",
+  "markdown": "---\ntitle: \"UseInfiniteResourceExtensions\"\ndescription: \"Extension methods providing UseInfiniteResource on RenderContext.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\nSee `docs/specs/020-async-resources-design.md` §7 for the pull-model contract and\n§11 for DataGrid integration notes.\n"
+}

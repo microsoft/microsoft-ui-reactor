@@ -1,0 +1,1055 @@
+<!DOCTYPE html><html dir="ltr" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="astro-view-transitions-enabled" content="true"><meta name="astro-view-transitions-fallback" content="animate"><script type="module" src="/microsoft-ui-reactor/main/_astro/ClientRouter.astro_astro_type_script_index_0_lang.5_s3_L-3.js"></script><script>(()=>{const sel='body link[rel="stylesheet"]';document.addEventListener("astro:before-preparation",(e)=>{const load=e.loader;e.loader=async()=>{await load();const links=[...e.newDocument.querySelectorAll(sel)].filter((l)=>!document.head.querySelector('link[rel="stylesheet"][href="'+l.getAttribute("href")+'"]'));await Promise.all(links.map((l)=>new Promise((done)=>{const c=document.createElement("link");for(const a of l.attributes){c.setAttribute(a.name,a.value);}c.onload=done;c.onerror=done;document.head.append(c);})));};});document.addEventListener("astro:before-swap",(e)=>{for(const l of e.newDocument.querySelectorAll(sel)){e.newDocument.head.append(l);}});})();</script><title>Extending Reactor with Native Controls - Reactor</title><link href="/microsoft-ui-reactor/main/favicon.png" rel="icon" type="image/png"><style>@font-face{font-family:Inter-bee4a7829ca556b7;src:url("/microsoft-ui-reactor/main/_astro/fonts/91753f8d8da3aeb7.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 700;font-style:italic;}@font-face{font-family:Inter-bee4a7829ca556b7;src:url("/microsoft-ui-reactor/main/_astro/fonts/e868cdf4720e9ea5.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 700;font-style:normal;}@font-face{font-family:"Inter-bee4a7829ca556b7 fallback: Arial";src:local("Arial");font-display:swap;font-weight:400 700;font-style:italic;size-adjust:107.7766%;ascent-override:89.885%;descent-override:22.3806%;line-gap-override:0%;}@font-face{font-family:"Inter-bee4a7829ca556b7 fallback: Arial";src:local("Arial");font-display:swap;font-weight:400 700;font-style:normal;size-adjust:107.7766%;ascent-override:89.885%;descent-override:22.3806%;line-gap-override:0%;}:root{--blume-ff-inter:Inter-bee4a7829ca556b7,"Inter-bee4a7829ca556b7 fallback: Arial",ui-sans-serif,system-ui,sans-serif;}</style><link rel="preload" href="/microsoft-ui-reactor/main/_astro/fonts/e868cdf4720e9ea5.woff2" as="font" type="font/woff2" crossorigin><style>@font-face{font-family:"Geist Mono-55651197e5cb41ba";src:url("/microsoft-ui-reactor/main/_astro/fonts/89a9b6ed1259cb6e.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 600;font-style:italic;}@font-face{font-family:"Geist Mono-55651197e5cb41ba";src:url("/microsoft-ui-reactor/main/_astro/fonts/181a29443484632f.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 600;font-style:normal;}@font-face{font-family:"Geist Mono-55651197e5cb41ba fallback: Courier New";src:local("Courier New");font-display:swap;font-weight:400 600;font-style:italic;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}@font-face{font-family:"Geist Mono-55651197e5cb41ba fallback: Courier New";src:local("Courier New");font-display:swap;font-weight:400 600;font-style:normal;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}:root{--blume-ff-geist-mono:"Geist Mono-55651197e5cb41ba","Geist Mono-55651197e5cb41ba fallback: Courier New",ui-monospace,"SF Mono",Menlo,monospace;}</style><link rel="preload" href="/microsoft-ui-reactor/main/_astro/fonts/181a29443484632f.woff2" as="font" type="font/woff2" crossorigin><link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls"><meta name="description" content="How to wrap a native Windows control as a Reactor element — a third-party WinUI control, a custom Control subclass, or an existing WinUI control that the built-in catalog has not yet covered."><meta property="og:type" content="website"><meta property="og:site_name" content="Reactor"><meta property="og:title" content="Extending Reactor with Native Controls - Reactor"><meta property="og:description" content="How to wrap a native Windows control as a Reactor element — a third-party WinUI control, a custom Control subclass, or an existing WinUI control that the built-in catalog has not yet covered."><meta property="og:url" content="https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls"><meta property="og:image" content="https://microsoft.github.io/microsoft-ui-reactor/main/og/how-it-works/extending-reactor-controls.png"><meta property="og:image:type" content="image/png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Extending Reactor with Native Controls - Reactor"><meta name="twitter:image" content="https://microsoft.github.io/microsoft-ui-reactor/main/og/how-it-works/extending-reactor-controls.png"><meta name="twitter:image:alt" content="Extending Reactor with Native Controls - Reactor"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Extending Reactor with Native Controls - Reactor"><meta name="twitter:description" content="How to wrap a native Windows control as a Reactor element — a third-party WinUI control, a custom Control subclass, or an existing WinUI control that the built-in catalog has not yet covered."><link href="/microsoft-ui-reactor/main/agent-readability.json" rel="describedby" type="application/json"><link href="/microsoft-ui-reactor/main/llms.txt" rel="describedby" type="text/plain"><link href="/microsoft-ui-reactor/main/.well-known/ai-catalog.json" rel="ai-catalog" type="application/ai-catalog+json"><link href="/microsoft-ui-reactor/main/.well-known/ard.json" rel="ard" type="application/json"><link href="/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls.md" rel="alternate" type="text/markdown"><script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@id":"https://microsoft.github.io#website","@type":"WebSite","name":"Reactor","url":"https://microsoft.github.io/microsoft-ui-reactor/main"},{"@id":"https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls#page","@type":"TechArticle","inLanguage":"en","name":"Extending Reactor with Native Controls","url":"https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls","headline":"Extending Reactor with Native Controls","description":"How to wrap a native Windows control as a Reactor element — a third-party WinUI control, a custom Control subclass, or an existing WinUI control that the built-in catalog has not yet covered.","isPartOf":{"@id":"https://microsoft.github.io#website"},"image":"https://microsoft.github.io/microsoft-ui-reactor/main/og/how-it-works/extending-reactor-controls.png"}]}</script><script data-mode="system">(()=>{const ds=document.currentScript?.dataset;const m=ds?.mode??"system";const fixed=ds?.fixed!==undefined;const apply=()=>{const r=document.documentElement;let s=null;let blocked=false;try{s=fixed?null:localStorage.getItem("blume-theme");}catch{blocked=true;}const sys=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.theme=s??(blocked&&r.dataset.theme?r.dataset.theme:m==="system"?sys:m);};apply();document.addEventListener("astro:before-swap",(e)=>{const t=document.documentElement.dataset.theme;if(t){e.newDocument.documentElement.dataset.theme=t;}});document.addEventListener("astro:after-swap",apply);let printed=null;addEventListener("beforeprint",()=>{const r=document.documentElement;if(r.dataset.theme==="dark"){printed="dark";r.dataset.theme="light";}});addEventListener("afterprint",()=>{if(printed){document.documentElement.dataset.theme=printed;printed=null;}});})();</script><link rel="stylesheet" href="/microsoft-ui-reactor/main/_astro/WebMcp.Bg4_uj4I.css"><link rel="stylesheet" href="/microsoft-ui-reactor/main/_astro/_..DVsIhHIC.css"><script type="module" src="/microsoft-ui-reactor/main/_astro/page.DZ88yi4l.js"></script></head><body class="bg-background font-sans text-foreground antialiased" data-blume-code-copy="" data-blume-image-zoom data-i18n-copied="Copied!" data-i18n-copy-code="Copy code" data-i18n-diagram-error="Could not render this diagram." data-i18n-show-less="Show less" data-i18n-show-more="Show more"><a class="absolute start-[-999px] top-0 z-[100] bg-accent px-4 py-2 text-accent-foreground focus:start-0" href="#blume-content">Skip to content</a><span hidden id="blume-new-tab-hint">Opens in a new tab</span><div class="relative flex items-center justify-center gap-x-2 gap-y-0.5 bg-foreground px-10 py-3 text-center text-background text-sm max-sm:flex-wrap dark:border-border dark:border-b dark:bg-background dark:text-foreground [:where([data-blume-banner-hidden])_&amp;]:hidden" data-banner-key="You're reading the docs for the unreleased main branch." data-blume-banner><span dir="auto">You&#39;re reading the docs for the unreleased main branch.</span><a class="inline-flex items-center gap-1 font-medium underline underline-offset-2" href="https://microsoft.github.io/microsoft-ui-reactor/">Go to the latest release<svg aria-hidden="true" class="rtl:-scale-x-100" height="14" width="14"><use href="#blume-i-arrow-right"></use></svg></a></div><header class="sticky top-0 z-40 flex h-16 items-center gap-2 bg-background/90 px-4 backdrop-blur sm:gap-3 md:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)]" data-blume-header><div class="flex min-w-0 items-center gap-2 sm:gap-3 lg:col-start-1"><button aria-controls="blume-nav-drawer" aria-expanded="false" aria-label="Toggle navigation" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden" data-blume-nav-toggle type="button"><svg aria-hidden="true" height="20" width="20"><use href="#blume-i-menu"></use></svg></button><a class="inline-flex min-w-0 items-center gap-2 font-semibold text-base text-foreground" href="/microsoft-ui-reactor/main"><span aria-hidden="true" class="inline-flex h-5 shrink-0 items-center [&amp;&gt;svg]:h-5 [&amp;&gt;svg]:w-auto"><svg width="113" height="113" viewBox="0 0 113 113" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M75.2982 9.4165H37.7014C32.655 9.4165 27.9919 12.1087 25.4687 16.479L6.73909 48.9199C5.40851 51.2246 4.70801 53.8387 4.70801 56.4998H56.4997C56.4997 56.2013 56.5783 55.965 56.7276 55.7065L82.3607 11.3089C80.2485 10.0896 77.8214 9.4165 75.2982 9.4165Z" fill="url(#paint0_linear_413_1660)"/>
+<path d="M75.2982 103.583H37.7014C32.655 103.583 27.9919 100.891 25.4688 96.5208L6.73909 64.0799C5.41802 61.7917 4.71794 59.1414 4.70801 56.5H56.4997C56.4997 56.7241 56.5585 57.001 56.6706 57.195L82.3602 101.691C80.2485 102.911 77.8214 103.583 75.2982 103.583Z" fill="url(#paint1_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint2_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint3_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint4_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint5_linear_413_1660)"/>
+<path d="M56.5329 23.5415L47.0189 40.0206L37.8088 55.9824C37.718 56.1396 37.6702 56.3219 37.6702 56.5036L37.6718 56.5568H19.2475L19.2471 56.4998C19.2471 55.8972 19.4022 55.2945 19.7124 54.7516C21.3281 51.9252 24.7123 46.0561 28.1969 40.0207H28.1856L36.3406 25.8957C37.1817 24.4389 38.736 23.5415 40.4181 23.5415H56.5329Z" fill="#D9D9D9"/>
+<path d="M56.5329 23.5415L47.0189 40.0206L37.8088 55.9824C37.718 56.1396 37.6702 56.3219 37.6702 56.5036L37.6718 56.5568H19.2475L19.2471 56.4998C19.2471 55.8972 19.4022 55.2945 19.7124 54.7516C21.3281 51.9252 24.7123 46.0561 28.1969 40.0207H28.1856L36.3406 25.8957C37.1817 24.4389 38.736 23.5415 40.4181 23.5415H56.5329Z" fill="url(#paint6_linear_413_1660)"/>
+<path d="M56.5329 23.5415L47.0189 40.0206L37.8088 55.9824C37.718 56.1396 37.6702 56.3219 37.6702 56.5036L37.6718 56.5568H19.2475L19.2471 56.4998C19.2471 55.8972 19.4022 55.2945 19.7124 54.7516C21.3281 51.9252 24.7123 46.0561 28.1969 40.0207H28.1856L36.3406 25.8957C37.1817 24.4389 38.736 23.5415 40.4181 23.5415H56.5329Z" fill="url(#paint7_linear_413_1660)"/>
+<path d="M47.0008 73.0118H47.0077L37.8088 57.0181C37.7275 56.8768 37.6807 56.7191 37.6718 56.5576L37.6702 56.5044H19.2471C19.2478 57.1056 19.4029 57.7069 19.7124 58.2484C21.3309 61.08 24.7242 66.9649 28.2151 73.0109H28.2039L36.3405 87.1038C37.1815 88.5606 38.7359 89.458 40.418 89.458H56.5371L47.0008 73.0118Z" fill="#D9D9D9"/>
+<path d="M47.0008 73.0118H47.0077L37.8088 57.0181C37.7275 56.8768 37.6807 56.7191 37.6718 56.5576L37.6702 56.5044H19.2471C19.2478 57.1056 19.4029 57.7069 19.7124 58.2484C21.3309 61.08 24.7242 66.9649 28.2151 73.0109H28.2039L36.3405 87.1038C37.1815 88.5606 38.7359 89.458 40.418 89.458H56.5371L47.0008 73.0118Z" fill="url(#paint8_linear_413_1660)"/>
+<path d="M65.7881 40.0207L75.3201 56.5333L65.8064 73.011L66.3159 73.8971L75.2966 89.4582L92.5724 59.5485L93.3172 58.2443C93.6261 57.7028 93.7805 57.1016 93.7805 56.5003C93.7805 55.899 93.6261 55.2983 93.3172 54.7563L92.5653 53.4399L84.8347 40.0543H84.8291L75.2966 23.5415L65.7881 40.0207Z" fill="#D9D9D9"/>
+<path d="M65.7881 40.0207L75.3201 56.5333L65.8064 73.011L66.3159 73.8971L75.2966 89.4582L92.5724 59.5485L93.3172 58.2443C93.6261 57.7028 93.7805 57.1016 93.7805 56.5003C93.7805 55.899 93.6261 55.2983 93.3172 54.7563L92.5653 53.4399L84.8347 40.0543H84.8291L75.2966 23.5415L65.7881 40.0207Z" fill="url(#paint9_linear_413_1660)"/>
+<defs>
+<linearGradient id="paint0_linear_413_1660" x1="32.958" y1="11.7707" x2="12.7748" y2="43.7692" gradientUnits="userSpaceOnUse">
+<stop stop-color="#3BD5FF"/>
+<stop offset="1" stop-color="#0FAFFF"/>
+</linearGradient>
+<linearGradient id="paint1_linear_413_1660" x1="32.958" y1="56.5" x2="29.3476" y2="104.055" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0FAFFF"/>
+<stop offset="1" stop-color="#0078D4"/>
+</linearGradient>
+<linearGradient id="paint2_linear_413_1660" x1="56.5" y1="11.3086" x2="134.478" y2="55.9923" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0FAFFF"/>
+<stop offset="1" stop-color="#0078D4"/>
+</linearGradient>
+<linearGradient id="paint3_linear_413_1660" x1="56.5" y1="11.3086" x2="134.478" y2="55.9923" gradientUnits="userSpaceOnUse">
+<stop stop-color="#3BD5FF"/>
+<stop offset="1" stop-color="#0FAFFF"/>
+</linearGradient>
+<linearGradient id="paint4_linear_413_1660" x1="56.5" y1="11.3086" x2="134.478" y2="55.9923" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0FAFFF"/>
+<stop offset="1" stop-color="#0078D4"/>
+</linearGradient>
+<linearGradient id="paint5_linear_413_1660" x1="60.8161" y1="11.3086" x2="135.234" y2="50.3988" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0078D4"/>
+<stop offset="1" stop-color="#004695"/>
+</linearGradient>
+<linearGradient id="paint6_linear_413_1660" x1="37.8901" y1="23.5415" x2="44.9841" y2="54.955" gradientUnits="userSpaceOnUse">
+<stop offset="0.173594" stop-color="#E6F9FE"/>
+<stop offset="1" stop-color="#9DEAFF"/>
+</linearGradient>
+<linearGradient id="paint7_linear_413_1660" x1="19.2471" y1="23.5415" x2="52.0195" y2="60.5532" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FEFEFE"/>
+<stop offset="1" stop-color="#E6F9FE"/>
+</linearGradient>
+<linearGradient id="paint8_linear_413_1660" x1="19.2471" y1="60.6039" x2="47.1774" y2="96.7004" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E6F9FE"/>
+<stop offset="1" stop-color="#9DEAFF"/>
+</linearGradient>
+<linearGradient id="paint9_linear_413_1660" x1="65.7881" y1="23.5415" x2="113.219" y2="43.6839" gradientUnits="userSpaceOnUse">
+<stop stop-color="#9DEAFF"/>
+<stop offset="1" stop-color="#3BD5FF"/>
+</linearGradient>
+</defs>
+</svg>
+</span><span class="truncate">Reactor</span></a><div class="flex items-center gap-1.5 hidden shrink-0 lg:block"><details class="group relative" data-blume-dropdown><summary aria-label="Version: Development (main)" class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground group-open:bg-muted group-open:text-foreground list-none [&amp;::-webkit-details-marker]:hidden"><span class="max-sm:hidden">Development (main)</span><svg aria-hidden="true" class="transition-transform group-open:rotate-180" height="14" width="14"><use href="#blume-i-chevron-down"></use></svg></summary><div class="absolute z-50 mt-2 rounded-blume border border-border bg-background p-1 shadow-xl min-w-56 max-w-[calc(100vw-1rem)] start-0" data-blume-dropdown-panel><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/latest/"><span class="flex-1"><span class="flex items-center gap-2">Latest release</span></span></a><a aria-current="true" class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="/microsoft-ui-reactor/main"><span class="flex-1"><span class="flex items-center gap-2">Development (main)</span></span><svg aria-hidden="true" height="14" width="14"><use href="#blume-i-check"></use></svg></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.18</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.17</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.16</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.15/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.15</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.14/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.14</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.13</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.12/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.12</span></span></a></div></details><script type="module" src="/microsoft-ui-reactor/main/_astro/NavSelector.astro_astro_type_script_index_0_lang.DvTlaxVU.js"></script></div></div><nav aria-label="Sections" class="hidden shrink-0 gap-1 md:flex lg:col-start-2"><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main">Home</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/get-started">Get started</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/guides/components">Guides</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/controls">Controls</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/recipes">Recipes</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/reference/hooks">API reference</a><a aria-current="page" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/how-it-works/architecture-overview">How it works</a></nav><div class="flex-1 lg:hidden"></div><div class="flex shrink-0 items-center gap-1 lg:col-start-3 lg:justify-self-end"><script type="module" src="/microsoft-ui-reactor/main/_astro/Search.astro_astro_type_script_index_0_lang.BhThJ-a_.js"></script><blume-search class="contents" data-i18n-all="All" data-i18n-ask="Assistant" data-i18n-ask-hint="Get an instant answer from AI" data-i18n-dev="Search is available in the production build." data-i18n-empty="No results found." data-i18n-error="Something went wrong. Please try again." data-i18n-latest="latest" data-i18n-popular="Popular" data-i18n-results="Results"><button aria-keyshortcuts="Meta+K Control+K" aria-label="Search" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" data-blume-search-open data-blume-tooltip="Search (⁦⌘K⁩)" data-label="Search" type="button"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-search"></use></svg></button><dialog aria-label="Search docs" class="mx-auto mt-[8vh] mb-auto h-[min(480px,90dvh)] w-[min(62.5rem,94vw)] flex-col overflow-hidden rounded-blume border border-border bg-background/80 p-0 text-foreground shadow-2xl outline-none backdrop-blur-xl backdrop:bg-black/30 open:flex sm:mt-auto" data-blume-search-dialog><div class="flex items-center gap-2.5 border-border border-b px-4 py-3 text-muted-foreground"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-search"></use></svg><input aria-autocomplete="list" aria-controls="blume-search-listbox" aria-expanded="false" aria-label="Search docs" autocomplete="off" class="flex-1 border-0 bg-transparent text-foreground text-sm pointer-coarse:text-base focus:outline-none [&amp;::-webkit-search-cancel-button]:appearance-none" data-blume-search-input placeholder="Search documentation…" role="combobox" type="search"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.7rem]">Esc</kbd></div><div class="grid min-h-0 flex-1 md:grid-cols-[22rem_minmax(0,1fr)]" data-blume-search-grid><div class="flex min-h-0 flex-col md:border-border md:border-e"><div class="flex max-h-[5.75rem] flex-wrap gap-1.5 overflow-x-hidden overflow-y-auto overscroll-contain border-border border-b px-3 py-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent" data-blume-search-filters hidden></div><div aria-label="Search docs" class="min-h-0 flex-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overflow-y-auto p-2" data-blume-search-results id="blume-search-listbox" role="listbox"></div><p class="m-0 px-4 py-6 text-center text-muted-foreground text-sm" data-blume-search-message hidden></p></div><div class="hidden min-h-0 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overflow-y-auto p-5 md:block" data-blume-search-preview></div></div><div class="flex items-center justify-between gap-3 border-border border-t px-3 py-2 text-muted-foreground text-xs"><span></span><div class="flex items-center gap-3"><span class="flex items-center gap-1"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]">↑</kbd><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]">↓</kbd>navigate</span><span class="flex items-center gap-1"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]">↵</kbd>open</span><span class="flex items-center gap-1 max-md:hidden"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]" data-blume-search-preview-kbd dir="ltr">⌘J</kbd>preview</span></div></div></dialog><script data-blume-search-popular type="application/json">[{"href":"/microsoft-ui-reactor/main/controls","label":"Controls"},{"href":"/microsoft-ui-reactor/main/controls/forms","label":"Forms and input"},{"href":"/microsoft-ui-reactor/main/controls/collections","label":"Collections"},{"href":"/microsoft-ui-reactor/main/controls/text-and-media","label":"Text and media"},{"href":"/microsoft-ui-reactor/main/controls/status-and-info","label":"Status and info"},{"href":"/microsoft-ui-reactor/main/controls/dialogs-and-flyouts","label":"Dialogs and flyouts"}]</script></blume-search><button aria-label="Toggle theme" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" data-blume-theme-toggle data-blume-tooltip="Toggle theme" type="button"><span class="inline-flex dark:hidden"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-sun"></use></svg></span><span class="hidden dark:inline-flex"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-moon"></use></svg></span></button></div></header><script>(()=>{const dr=()=>{const h=document.querySelector("[data-blume-header]");if(h){document.documentElement.style.setProperty("--blume-drawer-top",h.getBoundingClientRect().bottom+"px");}};const save=(k,v)=>{try{localStorage.setItem(k,v);}catch{}};document.addEventListener("click",(e)=>{const t=e.target.closest("[data-blume-theme-toggle]");if(t){const d=document.documentElement;const next=d.dataset.theme==="dark"?"light":"dark";const s=document.createElement("style");s.appendChild(document.createTextNode("*,*::before,*::after{transition:none!important}"));document.head.appendChild(s);d.dataset.theme=next;window.getComputedStyle(d).opacity;setTimeout(()=>document.head.removeChild(s),1);save("blume-theme",next);}const n=e.target.closest("[data-blume-nav-toggle]");if(n){const d=document.documentElement;const open=d.toggleAttribute("data-blume-nav-open");if(open){dr();}}const b=e.target.closest("[data-blume-banner-dismiss]");if(b){document.documentElement.setAttribute("data-blume-banner-hidden","");requestAnimationFrame(dr);const bar=b.closest("[data-blume-banner]");const k=bar&&bar.getAttribute("data-banner-key");if(k){save("blume-banner:"+k,"1");}}});addEventListener("resize",()=>{const d=document.documentElement;if(!d.hasAttribute("data-blume-nav-open")){return;}if(matchMedia("(min-width:64rem)").matches){d.removeAttribute("data-blume-nav-open");}else{dr();}});})();</script><div class="mx-auto grid grid-cols-1 items-start lg:grid-cols-[17.5rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1fr)_17.5rem]" data-blume-doc-grid><aside aria-label="Primary" data-blume-nav-drawer id="blume-nav-drawer" class="fixed top-[var(--blume-drawer-top,4rem)] start-0 z-[35] h-[calc(100dvh-var(--blume-drawer-top,4rem))] w-64 max-w-[80vw] -translate-x-[105%] overflow-y-auto border-border border-e bg-background px-5 pt-4 pb-6 transition-transform rtl:translate-x-[105%] [:where([data-blume-nav-open])_&amp;]:translate-x-0! lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100dvh-4rem)] lg:w-auto lg:max-w-none lg:translate-x-0! lg:scrollbar-thin lg:scrollbar-thumb-border lg:scrollbar-track-transparent lg:border-e-0 lg:bg-transparent lg:px-4"><div class="mb-4 flex flex-col gap-2 border-border border-b pb-4 lg:hidden"><details class="group relative w-full" data-blume-dropdown><summary aria-label="Version: Development (main)" class="inline-flex h-9 w-full cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background px-3 text-muted-foreground text-sm transition-colors hover:border-foreground hover:text-foreground list-none [&amp;::-webkit-details-marker]:hidden"><span class="flex-1 text-start">Development (main)</span><svg aria-hidden="true" class="transition-transform group-open:rotate-180" height="14" width="14"><use href="#blume-i-chevron-down"></use></svg></summary><div class="absolute z-50 mt-2 rounded-blume border border-border bg-background p-1 shadow-xl inset-x-0" data-blume-dropdown-panel><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/latest/"><span class="flex-1"><span class="flex items-center gap-2">Latest release</span></span></a><a aria-current="true" class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="/microsoft-ui-reactor/main"><span class="flex-1"><span class="flex items-center gap-2">Development (main)</span></span><svg aria-hidden="true" height="14" width="14"><use href="#blume-i-check"></use></svg></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.18</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.17</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.16</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.15/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.15</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.14/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.14</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.13</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.12/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.12</span></span></a></div></details></div><nav aria-label="Sections" class="mb-4 border-border border-b pb-4 md:hidden"><ul class="m-0 list-none p-0"><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main"><span class="flex-1 truncate">Home</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/get-started"><span class="flex-1 truncate">Get started</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/guides/components"><span class="flex-1 truncate">Guides</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/controls"><span class="flex-1 truncate">Controls</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/recipes"><span class="flex-1 truncate">Recipes</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/reference/hooks"><span class="flex-1 truncate">API reference</span></a></li><li><a aria-current="page" class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/how-it-works/architecture-overview"><span class="flex-1 truncate">How it works</span></a></li></ul></nav><nav data-blume-nav-tree><ul class="m-0 list-none space-y-px p-0"><li class="mt-0"><p class="blume-nav-heading"><span class="truncate">Runtime</span></p><div class="space-y-0.5"><ul class="m-0 list-none space-y-px p-0"><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/architecture-overview">Architecture overview</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/reactivity-model">Reactivity model</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/hooks-internals">Hooks internals</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/reconciliation">Reconciliation</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/effects-scheduling">Effects scheduling</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch">Threading and dispatch</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/element-pool">Element pool</a></li></ul></div></li><li class="mt-6"><p class="blume-nav-heading"><span class="truncate">Controls</span></p><div class="space-y-0.5"><ul class="m-0 list-none space-y-px p-0"><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol">Control reconciler protocol</a></li><li><a aria-current="page" class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls">Extending Reactor controls</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/modifier-system">Modifier system</a></li></ul></div></li><li class="mt-6"><p class="blume-nav-heading"><span class="truncate">Input and motion</span></p><div class="space-y-0.5"><ul class="m-0 list-none space-y-px p-0"><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/animation-pipeline">Animation pipeline</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/focus-and-input-internals">Focus and input internals</a></li></ul></div></li><li class="mt-6"><p class="blume-nav-heading"><span class="truncate">Tooling</span></p><div class="space-y-0.5"><ul class="m-0 list-none space-y-px p-0"><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/source-mapping">Source mapping</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/analyzer-architecture">Analyzer architecture</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/devtools-internals">DevTools internals</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/how-it-works/perf-instrumentation">Perf instrumentation</a></li></ul></div></li></ul></nav></aside><script>(()=>{const drawer=()=>document.querySelector("[data-blume-nav-drawer]");const center=()=>{const n=drawer();const s=n&&(n.querySelector("[data-blume-nav-tree]")||n);if(!s)return;let l=null;for(const a of s.querySelectorAll('a[aria-current="page"]')){if(a.getClientRects().length){l=a;break;}}if(!l)return;const r=n.getBoundingClientRect();const t=l.getBoundingClientRect();if(t.top>=r.top&&t.bottom<=r.bottom)return;n.scrollTop+=t.top-r.top-(n.clientHeight-t.height)/2;};let saved=-1;document.addEventListener("astro:before-swap",()=>{const n=drawer();saved=n?n.scrollTop:-1;});document.addEventListener("astro:after-swap",()=>{const n=drawer();if(n&&saved>=0){n.scrollTop=saved;}center();});center();})();</script><main class="px-6 pt-6 pb-10 lg:px-8 xl:px-10" id="blume-content"><nav aria-label="Breadcrumb" class="mb-2 text-muted-foreground text-sm mx-auto max-w-content"><span>Controls</span></nav><details class="group mx-auto mb-6 max-w-content rounded-blume border border-border xl:hidden"><summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 font-medium text-foreground text-sm [&amp;::-webkit-details-marker]:hidden"><span>On this page</span><svg aria-hidden="true" class="text-muted-foreground transition-transform group-open:rotate-180" height="16" width="16"><use href="#blume-i-chevron-down"></use></svg></summary><blume-toc class="block"><ul class="m-0 list-none border-border border-t p-2"><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#the-four-step-playbook">The four-step playbook</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-1-define-the-element-record">Step 1 — Define the Element record</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-2-choose-a-shape-descriptor-vs-hand-coded">Step 2 — Choose a shape (descriptor vs hand-coded)</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-3-wire-props">Step 3 — Wire props</a></li><li data-depth="3" style="padding-inline-start:0.75rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#values-the-native-control-mutates-on-its-own">Values the native control mutates on its own</a></li><li data-depth="3" style="padding-inline-start:0.75rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#reference-properties">Reference properties</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-4-wire-events-the-non-dp-case">Step 4 — Wire events (the non-DP case)</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-5-declare-a-child-strategy">Step 5 — Declare a child strategy</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#explicit-registration-the-narrow-escape-hatch">Explicit registration — the narrow escape hatch</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#patterns">Patterns</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#common-mistakes">Common Mistakes</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#tips">Tips</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#next-steps">Next Steps</a></li></ul></blume-toc><div data-blume-page-actions-mount></div></details><article class="prose mx-auto max-w-content" data-pagefind-body dir="ltr"><h1>Extending Reactor with Native Controls</h1><p class="text-lg text-muted-foreground">How to wrap a native Windows control as a Reactor element — a third-party WinUI control, a custom Control subclass, or an existing WinUI control that the built-in catalog has not yet covered.</p><p>Microsoft.UI.Reactor (Reactor) ships handlers for the built-in WinUI
+control gallery, but the protocol that drives them is the same surface
+authors use to add their own native controls. The contract you wire
+up — an immutable element record, a descriptor or hand-coded handler,
+and a factory holder whose static constructor registers the handler
+with the global <a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#registration"><code>ControlRegistry</code></a> — gives a custom control
+the same lifecycle, the same diff-and-write efficiency, the same pool
+reuse, and the same echo-safe two-way binding as <code>Button</code>,
+<a href="/microsoft-ui-reactor/main/controls/forms"><code>TextBox</code></a>, and <code>TabView</code>. The factory holder pattern is
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">trim-clean by construction</a>:
+if the app never calls the factory, the handler and the underlying
+WinUI control type are unreachable and NativeAOT publishing drops both.
+This page is the cookbook for that flow. By the end you will have
+added a <code>StarMeter</code> element to a Reactor app, wired it to WinUI’s
+<code>RatingControl</code>, and matched the built-in performance bar without
+writing a line of imperative interpreter code. Read the reference
+companion <a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol">The Control Reconciler Protocol</a>
+for the model the steps here plug into.</p>
+<p>The walk-through ports <code>Microsoft.UI.Xaml.Controls.RatingControl</code> end-to-end
+so the shape of every step is concrete; the patterns transfer to anything
+that descends from <code>FrameworkElement</code>. Cross-reference the built-in
+descriptors in <code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/</code> as you
+adapt the example — they are the production examples of every shape this
+page mentions.</p>
+<h2 id="the-four-step-playbook"><a class="blume-heading-anchor" href="#the-four-step-playbook">The four-step playbook</a></h2>
+<p>The whole flow is four steps, plus an optional fifth for control
+families that need a derived-type registration. The same four steps
+cover every leaf control in the built-in catalog; do them in the
+listed order — the factory holder in Step 3 <em>must</em> exist before
+Step 4 can use the element, because that holder’s class-init is what
+registers the handler.</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What you write</th>
+<th>Where it lives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>An <code>Element</code> record subclass with one field per prop and one field per event callback, primary constructor <code>internal</code> so callers must reach it through the factory</td>
+<td>App code, next to the component that uses it</td>
+</tr>
+<tr>
+<td>2</td>
+<td>A <code>ControlDescriptor&lt;TElement, TControl&gt;</code> (or <code>IElementHandler&lt;TElement, TControl&gt;</code>) wiring each field to a WinUI property or event</td>
+<td>A <code>static class</code> in the same file or a sibling</td>
+</tr>
+<tr>
+<td>3</td>
+<td>A <code>public static class</code> factory holder whose <strong>static constructor</strong> calls <code>ControlRegistry.Register&lt;TElement, TControl&gt;(static () =&gt; new MyHandler())</code> and whose <code>Of(...)</code> method is the sole construction path for the element</td>
+<td>Co-located with the element record</td>
+</tr>
+<tr>
+<td>4</td>
+<td>A component that calls <code>MyControl.Of(...)</code> like any other factory in the <a href="/microsoft-ui-reactor/main/controls">DSL</a></td>
+<td>Anywhere — usage shape is up to you</td>
+</tr>
+</tbody>
+</table></div>
+<p>A fifth step — <code>ControlRegistry.RegisterForDerivedTypes</code> against a
+non-generic intermediate base — lets one registration catch every
+closed-T variant of a generic element family. It is what the typed
+templated-list ports use; you only need it if you are adding a
+similar family.</p>
+<blockquote>
+<p><strong>Caveat:</strong> <strong>Why a factory holder, not a manual <code>Register</code> call at startup?</strong> The
+<code>static</code> keyword on the lambda in Step 3 is mandatory, and the
+holder’s class-init being the registration trigger is what makes the
+control trim-clean under NativeAOT publishing (see
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a>).
+If no component ever calls <code>StarMeter.Of(...)</code>, the holder is
+unreachable; the trimmer follows that unreachability through the
+cctor to the handler class and the WinUI control type, and removes
+all three from the published binary. A manual
+<code>reconciler.RegisterHandler&lt;...&gt;</code> call at app bootstrap roots every
+custom control unconditionally and defeats that story — it is
+documented in <a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#registration">The Control Reconciler Protocol</a>
+as the explicit-override escape hatch for tests and host substitution,
+not the standard authoring path.</p>
+</blockquote>
+<h2 id="step-1-define-the-element-record"><a class="blume-heading-anchor" href="#step-1-define-the-element-record">Step 1 — Define the Element record</a></h2>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// An Element subclass with one controlled prop (Value), three one-way</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// props (MaxRating, Caption, IsClearEnabled), and one callback (OnValueChanged).</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// Controlled props use Optional&lt;T&gt;: Unset means the WinUI control owns the value.</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// Records give the reconciler value-equality for free — two StarMeterElement</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// instances with identical fields compare equal and Update becomes a no-op.</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">//</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// The primary constructor is `internal` (spec 048 §6 construction discipline):</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// external callers cannot `new StarMeterElement(...)` directly, so the only</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// reachable construction path is `StarMeter.Of(...)` below — whose class-init</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// installs the global handler registration. Init properties stay `public` so</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// `Of(...)` and its callers can configure the optional fields, and `with`</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// expressions still work across the assembly boundary.</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> sealed</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> record</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeterElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> : </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Element</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Optional</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt; </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Value</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; } </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> Optional&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;.Unset;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> int</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> MaxRating</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; } </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> string</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">? </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Caption</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> bool</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> IsClearEnabled</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; } </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> System</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Action</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;? </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">OnValueChanged</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    internal</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeterElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Optional</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt; </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">value</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">System</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Action</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;? </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">onValueChanged</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        Value </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> value;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        OnValueChanged </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> onValueChanged;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre>
+<p>The record encodes everything the element exposes — controlled props,
+one-way props, the optional caption, and the user’s
+<code>OnValueChanged</code> callback. The choice of <code>record</code> matters: the
+reconciler diffs elements with value equality, so two
+<code>StarMeterElement</code> instances with identical fields compare equal and
+the descriptor’s Update path becomes a no-op. Reach for <code>record class</code>
+when the element will be created millions of times per second (so the
+sealed-record allocation is the dominant cost); reach for <code>record struct</code> only after profiling shows the heap pressure matters — most
+custom controls are well-served by the default sealed-record shape.</p>
+<p>The primary constructor is <code>internal</code> on purpose: it closes off
+<code>new StarMeterElement(...)</code> from outside the assembly that owns the
+element, leaving <code>StarMeter.Of(...)</code> (Step 6) as the sole external
+construction path. That is the <em>construction discipline</em> spec 048 §6
+requires for the <a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">factory-holder trim story</a>
+to hold — if external callers could bypass <code>Of</code>, the holder’s class-
+init would not be guaranteed to run and the global registration could
+be missing when the element reached the reconciler. Init properties
+stay <code>public</code> so <code>Of(...)</code> (and <code>with</code> expressions for downstream
+authors) can configure the optional fields across the assembly
+boundary.</p>
+<p>The fields below are the only thing your component author touches.
+Every named property maps to one descriptor entry in Step 2.</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Kind</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Value</code></td>
+<td>controlled <code>Optional&lt;double&gt;</code></td>
+<td><code>HasValue</code> means Reactor force-asserts the value; <code>Unset</code> means the WinUI control owns it.</td>
+</tr>
+<tr>
+<td><code>MaxRating</code></td>
+<td>one-way <code>int</code></td>
+<td>Driven by the element, never edited on the WinUI side.</td>
+</tr>
+<tr>
+<td><code>Caption</code></td>
+<td>optional one-way <code>string?</code></td>
+<td>Demo uses an explicit skip predicate; DP-backed fallbacks should prefer <code>Optional&lt;T&gt;</code> + <code>dp:</code>.</td>
+</tr>
+<tr>
+<td><code>IsClearEnabled</code></td>
+<td>one-way <code>bool</code></td>
+<td>Same as MaxRating — declarative knob.</td>
+</tr>
+<tr>
+<td><code>OnValueChanged</code></td>
+<td>callback <code>Action&lt;double&gt;?</code></td>
+<td>Subscribes only when non-null; the descriptor gates the trampoline on it.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Inherit from <code>Element</code> (not <code>FrameworkElement</code>, not <code>Control</code>) — this
+is the Reactor record, not the WinUI control. The built-in fluent
+modifier chain (<code>.Width(...)</code>, <code>.Margin(...)</code>, <code>.Foreground(...)</code>)
+applies to the built-in element types it was authored against; a
+custom element does not get those modifiers for free. Authors who
+want chainable modifiers on their own element add an
+<code>Action&lt;TControl&gt;[] Setters</code> field and an extension-method namespace
+that appends to it, then point the descriptor’s <code>GetSetters</code> selector
+at the field. The
+<a href="/microsoft-ui-reactor/main/how-it-works/modifier-system">Modifier System</a> page walks through the chain
+shape; keeping the demo focused, the cookbook below omits it.</p>
+<h2 id="step-2-choose-a-shape-descriptor-vs-hand-coded"><a class="blume-heading-anchor" href="#step-2-choose-a-shape-descriptor-vs-hand-coded">Step 2 — Choose a shape (descriptor vs hand-coded)</a></h2>
+<p>Reactor’s handler protocol has two surfaces — declarative
+(<a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#descriptors-declarative-handlers"><code>ControlDescriptor</code></a>)
+and imperative
+(<a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#the-handler-contract"><code>IElementHandler</code></a>) — that
+land on the same dispatch table. New controls should default to a
+descriptor; reach for a hand-coded handler only when the descriptor
+escape hatches (<code>.Imperative</code>, <code>.HandCoded…</code>) still cannot express
+the diff.</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Use a descriptor when</th>
+<th>Reach for a hand-coded handler when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Props map 1:1 to WinUI properties, or jointly through a tuple <code>get</code></td>
+<td>Mount has irreducible imperative logic (template-part lookups via <code>OnApplyTemplate</code>, multi-control composition)</td>
+</tr>
+<tr>
+<td>Events follow <code>subscribe(handler) ↔ readBack(control)</code></td>
+<td>Events route through non-CLR shapes (raw routed events, native callbacks)</td>
+</tr>
+<tr>
+<td>The control fits one of the standard <code>ChildrenStrategy</code> shapes</td>
+<td>The control has a children-realization model the strategy set does not cover (custom virtualization, mixed item types per slot)</td>
+</tr>
+<tr>
+<td>You want the next reader to skim the spec, not the code</td>
+<td>You are wrapping a control whose contract the framework cannot yet express declaratively, and adding a new entry shape would not pay back</td>
+</tr>
+</tbody>
+</table></div>
+<p>Every built-in port in <code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/</code>
+is a descriptor. The few hand-coded <code>IElementHandler</code> implementations
+in <code>src/Reactor/Core/V1Protocol/Handlers/</code> are the ones whose diff
+shape genuinely does not fit a declarative entry list — read them as
+the bar for “complicated enough to write by hand.”</p>
+<h2 id="step-3-wire-props"><a class="blume-heading-anchor" href="#step-3-wire-props">Step 3 — Wire props</a></h2>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> static</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> class</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeterDescriptor</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> static</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> readonly</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> ControlDescriptor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">StarMeterElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RatingControl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt; </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Descriptor</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> ControlDescriptor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">StarMeterElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RatingControl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        {</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">            // Leaf control — no children. (See ChildrenStrategy survey for</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">            // the other shapes: SingleContent, Panel, NamedSlots, ItemsHost…)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">            Children </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> None</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">StarMeterElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RatingControl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        }</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // OneWay props: written on Mount, diff-and-written on Update.</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        .</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">OneWay</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.MaxRating,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            set</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">v</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c.MaxRating </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> v)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        .</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">OneWay</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.IsClearEnabled,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            set</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">v</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c.IsClearEnabled </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> v)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // OneWayConditional skips the write when the predicate is false —</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // leaves Caption at the control's default for elements that didn't</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // supply one, rather than forcing it to null and losing a style.</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        .</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">OneWayConditional</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:         </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.Caption,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            set</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:         </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">v</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c.Caption </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> v</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            shouldWrite</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.Caption </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">is</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> not</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // Controlled is the two-way binding shape. Its get lambda returns</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // Optional&lt;double&gt;: Unset skips framework writes so the control owns</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // the value; HasValue force-asserts on Mount and Update with echo</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // suppression, then forwards user input through OnValueChanged.</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // Subscription is gated on the callback being non-null.</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        .</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Controlled</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">object</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:         </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.Value,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            set</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:         </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">v</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c.Value </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> v,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            subscribe</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:   </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fe</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">h</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ((</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RatingControl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)fe).ValueChanged </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">s</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">e</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> h</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(s, e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">),</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            unsubscribe</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fe</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">h</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">/* trampoline anchored for control lifetime */</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> },</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            callback</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:    </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.OnValueChanged,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            readBack</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:    </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c.Value);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // The thin `new()`-able handler subclass that the `static` lambda in</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // StarMeter's cctor instantiates. Subclassing DescriptorHandler keeps</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // the descriptor accessible *only* through this handler — the trimmer</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // can drop both if the StarMeter factory is never called.</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    internal</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> sealed</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> class</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Handler</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> : </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">DescriptorHandler</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">StarMeterElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RatingControl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        public</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Handler</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">base</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(StarMeterDescriptor.Descriptor) { }</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre>
+<p>Each fluent builder call adds one
+<a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#propentry-shapes-the-prop-binding-vocabulary"><code>PropEntry</code></a>
+to the descriptor. The interpreter iterates them in declaration order
+during Mount and Update. The descriptor above uses three of the
+common shapes:</p>
+<p><code>.OneWay(get, set)</code> — <code>MaxRating</code> and <code>IsClearEnabled</code>. The
+interpreter writes the value at Mount; on Update it compares the old
+element’s value against the new and writes only when the values
+differ. Use this for <strong>always-write props with no callback</strong>: the
+element is authoritative and there is no user edit channel to echo.
+The default comparer is <code>EqualityComparer&lt;TValue&gt;.Default</code>; pass an
+explicit comparer to the optional <code>comparer</code> parameter for
+floating-point tolerance or custom-type equality.</p>
+<p><code>.OneWay(get, set, dp:)</code> — the DP-backed fallback channel. When the
+<code>get</code> lambda returns <code>Optional&lt;T&gt;</code>, <code>HasValue</code> writes through <code>set</code>
+and <code>Unset</code> calls <code>ClearValue(dp)</code>, releasing the local value so
+WinUI’s style / template / inherited / default precedence chain can
+win. Use this when the authoring question is <strong>one-way with WinUI
+fallback</strong> (for example, a themeable brush). If there is no DP or the
+predicate is not a simple set-vs-unset choice, keep
+<code>.OneWayConditional(get, set, shouldWrite)</code> as the explicit skip-write
+shape.</p>
+<p><code>.InitialOnly(get, set)</code> — the mount-only channel. It writes once at
+Mount and never on Update, the same role React’s <code>defaultValue</code> plays
+for uncontrolled inputs. Use it for props that seed a control and then
+must hand authority to WinUI forever.</p>
+<p><code>.Controlled&lt;TValue, TArgs&gt;(...)</code> — <code>Value</code>. Controlled props always
+use an <code>Optional&lt;TValue&gt;</code> element field and an Optional-returning
+<code>get:</code> lambda. <code>Unset</code> returns early on Mount and Update, meaning the
+WinUI control owns the value; <code>HasValue</code> force-asserts the element’s
+value (bare on Mount, echo-suppressed on Update) and user interaction
+round-trips through the callback. This is Reactor’s C# equivalent of
+React’s controlled-input split: React can tell <code>&lt;input&gt;</code> from
+<code>&lt;input value={x}&gt;</code> because JSX preserves prop omission, while C#
+records cannot distinguish an omitted property from a property set to
+its default. <code>Optional&lt;T&gt;</code> supplies that missing bit.</p>
+<p>Decision tree for descriptor authors:</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Intent</th>
+<th>Element prop type</th>
+<th>Builder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Controlled with user authority</td>
+<td><code>Optional&lt;T&gt;</code></td>
+<td><code>.Controlled(...)</code> / <code>.HandCodedControlled(...)</code></td>
+</tr>
+<tr>
+<td>One-way with WinUI fallback</td>
+<td><code>Optional&lt;T&gt;</code></td>
+<td><code>.OneWay(get, set, dp: SomeControl.SomeProperty)</code></td>
+</tr>
+<tr>
+<td>Mount-only seed</td>
+<td><code>T</code></td>
+<td><code>.InitialOnly(get, set)</code></td>
+</tr>
+<tr>
+<td>Always write, no callback</td>
+<td><code>T</code></td>
+<td><code>.OneWay(get, set)</code></td>
+</tr>
+<tr>
+<td>Reference to another realized element</td>
+<td><code>ElementRef&lt;TTarget&gt;?</code></td>
+<td><code>.Reference&lt;TTarget&gt;(get, set)</code></td>
+</tr>
+<tr>
+<td>Ordered references to several elements</td>
+<td><code>IReadOnlyList&lt;ElementRef&lt;TTarget&gt;&gt;?</code></td>
+<td><code>.ReferenceList&lt;TTarget&gt;(get, apply)</code></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="values-the-native-control-mutates-on-its-own"><a class="blume-heading-anchor" href="#values-the-native-control-mutates-on-its-own">Values the native control mutates on its own</a></h3>
+<p>Some control properties are written by the control itself in response to
+the user, not just by Reactor: <code>InfoBar.IsOpen</code> flips to <code>false</code> when the
+user clicks the bar’s close button, <code>TeachingTip.IsOpen</code> flips on a light
+dismiss, <code>SplitView.IsPaneOpen</code> and <code>NavigationView.IsPaneOpen</code> flip on a
+light dismiss or an adaptive display-mode change. Reactor’s diff compares
+the <strong>old element to the new element</strong>, never the live control, so after
+one of those native writes the declared value and the control’s value
+disagree — and nothing re-reconciles them.</p>
+<p>That is deliberate. Such a value is <strong>edge-triggered</strong>: the element
+declares a <em>transition</em>, not a mirror. Reactor writes the control only
+when the declared value <em>changes</em>, so a re-render that declares the same
+value again is a no-op and the user’s dismissal stands.</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">var</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">showBanner</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">setShowBanner</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> UseState</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> VStack</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    InfoBar</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Saved"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Your changes were saved."</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">).</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">IsClosable</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">with</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        IsOpen  </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> showBanner,</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // Without this the dismissal never reaches app state, so a later</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // `setShowBanner(true)` is a no-op — it is already true.</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        OnClosed </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> setShowBanner</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">false</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    },</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    Button</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Show again"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, () </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> setShowBanner</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)));</span></span></code></pre>
+<p>Wiring the change callback is what makes the value recoverable: the
+dismissal drives the declared value down to <code>false</code>, and the later
+<code>false → true</code> transition is a real edge that re-opens the control.</p>
+<p><code>OnClosed</code> also has a fluent form — <code>.Closed(() =&gt; setShowBanner(false))</code> —
+which composes with the rest of the chain when you are not already using a
+<code>with</code> expression for <code>IsOpen</code>. The equivalent hooks on the other three are
+<code>SplitView</code> / <code>NavigationView</code>’s <code>OnPaneOpenChanged</code> and <code>TeachingTip</code>’s
+<code>OnClosed</code>.</p>
+<p>The alternative — re-asserting the declared value against the live
+control on every render — is deliberately <strong>not</strong> what these four do. It
+would make a control the user cannot dismiss: <code>InfoBarElement.IsOpen</code>,
+<code>SplitViewElement.IsPaneOpen</code> and <code>NavigationViewElement.IsPaneOpen</code> all
+default to <code>true</code>, so any of them written without a change callback would
+snap back open on the next unrelated re-render.</p>
+<p>Re-asserting is safe only when the element cannot silently claim
+authority it was never given. Two built-ins do re-assert, and both clear
+that bar: <code>Expander.IsExpanded</code> is an <code>Optional&lt;bool&gt;</code> whose <em>unset</em>
+value means “the control owns this”, so the element only wins when the
+author explicitly declared it; <code>Popup.IsOpen</code> defaults to <code>false</code>, which
+is also the value a light-dismissed popup rests at, so the re-assert is a
+no-op in the direction that would otherwise fight the user.</p>
+<p>So, when wrapping a control of your own with a self-mutating property:</p>
+<ul>
+<li><strong>Default to edge-triggered</strong> — <code>.OneWay(get, set)</code> plus the control’s
+change event surfaced as a callback on the element record, so callers
+have a sync channel. This is always safe.</li>
+<li><strong>Only re-assert against the live control</strong> if authority is opt-in
+(an <code>Optional&lt;T&gt;</code> prop, unset by default) or the element’s default
+equals the value the control rests at after the user acts. A plain
+<code>bool</code> defaulting to the “showing” state fails both tests.</li>
+</ul>
+<h4 id="mount-is-not-an-edge-and-a-few-controls-need-parenting-first"><a class="blume-heading-anchor" href="#mount-is-not-an-edge-and-a-few-controls-need-parenting-first">Mount is not an edge — and a few controls need parenting first</a></h4>
+<p>Edge semantics describe the <em>steady state</em>. At mount there is no previous
+element, so the declared value is always written. What can still go wrong
+is <em>when</em>: Reactor configures a control fully before its parent takes it,
+and a handful of WinUI controls quietly discard a state change made while
+they are unparented.</p>
+<p><code>TeachingTip</code> is the built-in that does. An unparented tip holds a pending
+open only while nothing else is written to it, and a mount always writes
+something afterwards — later prop entries, setters, content slots, common
+modifiers. Ordering the entry last does not help, because most of those
+writes happen outside the descriptor. So its <code>IsOpen</code> entry defers a
+mount-time <code>true</code> to the control’s <code>Loaded</code> event, the first moment the
+tip is parented into a live tree and an open is guaranteed to stick (issue
+949). Post-mount edges are unaffected: by then the control is loaded and
+the write goes straight through.</p>
+<p>If a control you are wrapping only presents once it is in a live tree, use
+the same shape — an <code>.Imperative</code> entry that defers to <code>Loaded</code>, paired
+with <code>.WithUnmount(...)</code> so the pending write is dropped if the control
+leaves the tree first, and a falling edge that arrives meanwhile disarms
+it — rather than trusting mount ordering.</p>
+<p><code>.WithUnmount(...)</code> is the descriptor’s teardown seam in general: the
+engine already dispatched unmount to hand-coded handlers, and this
+surfaces the same hook to descriptor authors. Reach for it only for state
+the pool reset contract cannot see — a pending deferred write, a one-shot
+lifecycle subscription, a disposable. It is explicitly <em>not</em> for event
+trampolines, which anchor to the control’s lifetime by design.</p>
+<h3 id="reference-properties"><a class="blume-heading-anchor" href="#reference-properties">Reference properties</a></h3>
+<p>Use reference entries when a native control property points at another
+realized <code>FrameworkElement</code>: <code>TeachingTip.Target</code>, relationship
+properties such as automation <code>LabeledBy</code>, or custom owner/source slots
+on a control. The element record stores an <code>ElementRef&lt;TTarget&gt;</code> (or an
+ordered list of them). The descriptor declares the edge:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">descriptor.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Reference</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">FrameworkElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.Target,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    set</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">target</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c.Target </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> target);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">descriptor.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ReferenceList</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">FrameworkElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.Related,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    apply</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">targets</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        c.Related.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Clear</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        foreach</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">var</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> target</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> in</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> targets)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">            c.Related.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(target);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    });</span></span></code></pre>
+<p><code>.Reference</code> writes the current target on mount, subscribes to the
+cell, and rewrites the property when the target mounts later or
+unmounts. <code>.ReferenceList</code> rebuilds the target list in author
+declaration order and omits unresolved cells. Hand-coded handlers use
+<code>binding.Reference</code> / <code>binding.ReferenceList</code> for the same edge when no
+descriptor entry can express the control. <strong>D1 rule:</strong> do not read
+<code>ref.Current</code> inside a handler and assign it to a reference property;
+that is only a snapshot and breaks late binding and clear-on-unmount.
+<code>REACTOR_REF_001</code> steers that anti-pattern back to a reactive edge.</p>
+<blockquote>
+<p><strong>Caveat:</strong> For reference-type optionals, the implicit conversion is deliberate
+but easy to misread: <code>with { Background = null }</code> for an
+<code>Optional&lt;Brush&gt;</code> property becomes <code>Optional&lt;Brush&gt;.Of(null)</code> — an explicit
+force-assert of <code>null</code> — <strong>not</strong> <code>Optional&lt;Brush&gt;.Unset</code>. Write
+<code>Optional&lt;Brush&gt;.Unset</code> when the control should own the value.</p>
+</blockquote>
+<p>The <code>subscribe</code> lambda’s shape is <code>(FrameworkElement, EventHandler&lt;TArgs&gt;) → void</code>; the engine boxes the control identity
+through <code>FrameworkElement</code> to keep the entry generic across closed-T
+tuples. <code>TArgs</code> is whatever the WinUI event carries — for
+<code>RatingControl.ValueChanged</code> the args type is <code>object</code> because WinUI
+authors the event with <code>TypedEventHandler&lt;RatingControl, object&gt;</code>.
+Subscription is <strong>gated on <code>callback</code> returning non-null</strong> — if the
+element doesn’t carry <code>OnValueChanged</code>, no trampoline is wired and the
+dispatch cost for that prop stays at zero.</p>
+<blockquote>
+<p><strong>Caveat:</strong> The <code>unsubscribe</code> lambda is intentionally a no-op body — descriptor
+trampolines anchor to the control’s lifetime, not the element’s. The
+control returns to the pool, the pool reset contract clears the
+trampoline slot on the typed event-payload box, and the next Mount
+finds an empty slot and re-subscribes. Writing a real unsubscribe
+into the lambda double-frees the subscription when the control pools
+and is the most common source of “the event stops firing after a
+re-render” bugs. If your control genuinely needs explicit teardown on
+unmount — a pending deferred write, a one-shot lifecycle subscription,
+a disposable — declare <code>.WithUnmount(...)</code> on the descriptor. Reach for
+a hand-coded <code>IElementHandler.Unmount</code> only when you also need to
+control the unmount disposition or to see the element.</p>
+</blockquote>
+<h2 id="step-4-wire-events-the-non-dp-case"><a class="blume-heading-anchor" href="#step-4-wire-events-the-non-dp-case">Step 4 — Wire events (the non-DP case)</a></h2>
+<p><code>StarMeterElement.Value</code> is bound to a property and an event together,
+so it uses the <code>.Controlled</code> shape above. Events that <strong>do not</strong>
+round-trip a DP — <code>Button.Click</code>, <code>Image.ImageOpened</code>,
+<code>TextBox.SelectionChanged</code> — use a sibling builder:</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Builder</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.HandCodedEvent&lt;TPayload, TDelegate&gt;(subscribe, callbackPresent, trampoline, slotIsNull, setSlot)</code></td>
+<td>Fire-and-forget event with no associated DP. The <code>trampoline</code> is a <code>static</code> delegate that closes over no per-instance state; per-control state goes on the <code>TPayload</code> slot.</td>
+</tr>
+<tr>
+<td><code>binding.OnCustomEvent&lt;TArgs&gt;(subscribe, unsubscribe, handler)</code> inside a hand-coded handler</td>
+<td>When you have already chosen the hand-coded shape and want the simpler closure-based trampoline. Allocates a closure per Mount instead of reusing a static delegate.</td>
+</tr>
+</tbody>
+</table></div>
+<p>The <code>ButtonDescriptor</code> source (in
+<code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/ButtonDescriptor.cs</code>)
+is the canonical example of <code>.HandCodedEvent</code> — including the
+short-circuit for <code>IsDisabledFocusable</code> and the
+<code>Reconciler.GetElementTag</code> tag refresh.</p>
+<h2 id="step-5-declare-a-child-strategy"><a class="blume-heading-anchor" href="#step-5-declare-a-child-strategy">Step 5 — Declare a child strategy</a></h2>
+<p><code>StarMeterElement</code> is a leaf, so the descriptor declares
+<code>Children = new None&lt;…&gt;()</code>. The dispatch surface is the same as the
+<a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#children-strategies">ChildrenStrategy survey</a>; the
+right strategy is whichever matches your WinUI control’s structural
+contract:</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Your WinUI control’s child shape</th>
+<th>Strategy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No children</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td>One <code>Content</code> / <code>Child</code> slot</td>
+<td><code>SingleContent(GetChild, SetChild) { GetCurrentChild = … }</code></td>
+</tr>
+<tr>
+<td><code>Children</code> collection on a <code>Panel</code></td>
+<td><code>Panel(GetChildren, GetCollection)</code></td>
+</tr>
+<tr>
+<td>Named slots (<code>Header</code>, <code>Content</code>, <code>Footer</code>)</td>
+<td><code>NamedSlots([NamedSlot("Header", …), …])</code></td>
+</tr>
+<tr>
+<td>Flat items collection (<code>Items</code>) of values or pre-built elements</td>
+<td><code>ItemsHost(GetItems, GetCollection)</code></td>
+</tr>
+<tr>
+<td>Typed templated list with keyed reconcile</td>
+<td><code>TemplatedItems&lt;TItem, TElement, TControl&gt;(GetItems, KeySelector, BuildItemView)</code></td>
+</tr>
+<tr>
+<td>Hierarchical tree</td>
+<td><code>TreeChildren(GetNodes)</code></td>
+</tr>
+<tr>
+<td>Tabs / pivots with per-item containers</td>
+<td><code>TabItemsHost(GetItems, GetCollection, GetContent, CreateContainer)</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>For a writable managed <code>IList&lt;object&gt; Items</code> sink, also supply
+<code>ItemsHost.SetCollection = static (c, items) =&gt; c.Items = items</code> so a
+non-notifying list becomes an observable collection at mount. Generated
+wrappers provide this automatically. Element items reconcile incrementally
+and preserve keyed control identity; see
+<a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#dynamic-flat-items">Dynamic flat items</a>.
+Secondary Element slots can own their teardown through
+<code>.ImperativeBridged(mount, update, unmount)</code>; <code>[WrapElementSlot]</code> generates
+that binding automatically. Unmount the owned child while it is still
+parented, then detach it. Property teardown runs before the descriptor’s
+own <code>OnUnmount</code>; an undeclared generated slot leaves the control’s
+constructor default untouched.</p>
+<p>The standard strategies cover everything in the built-in catalog. The
+<code>Imperative&lt;TElement, TControl&gt;</code> escape hatch exists for the case
+where none of them fit — for example, a control whose children live
+on three different non-collection properties that must reconcile
+together. Reach for it last; you give up the engine’s keyed reconcile
+and lose descendant component state across re-renders that touch the
+imperative slot. The engine cannot see imperative slots, so set the
+strategy’s <code>Unmount</code> to tear down the children <code>Reconcile</code> mounted.
+A control without an element tag skips that callback and is torn down
+by the engine’s generic child walk instead, so keep owned children
+where that walk finds them (a <code>ContentControl</code>’s <code>Content</code>, a panel’s
+<code>Children</code>). That walk also tears down and pools anything else in those
+slots, so when a slot can hold UI the handler does not own, tag the
+control with <code>Reconciler.SetElementTag</code> to keep the callback in charge.</p>
+<h2 id="step-6-wrap-the-constructor-in-a-factory-holder-then-use-it"><a class="blume-heading-anchor" href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a></h2>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// Spec 048 §6 Pattern A — the factory holder *is* the registration trigger.</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// The static cctor runs the first time any member of `StarMeter` is touched</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// (CLR-guaranteed precise-init), which means the global ControlRegistry</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// entry is in place before the first Of() call returns its element.</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">//</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// The `static` keyword on the lambda is MANDATORY (not stylistic): it</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// guarantees the delegate is cached in a static field (one allocation,</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// ever) and captures nothing. A non-static lambda compiles but allocates</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// a closure per Register call AND defeats the trimmer's ability to follow</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// the holder→handler→control chain. The static lambda is what makes</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// Pattern A trim-clean.</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> static</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> class</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeter</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeter</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        ControlRegistry.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Register</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">StarMeterElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RatingControl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">            static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeterDescriptor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Handler</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // Sole construction path for StarMeterElement (spec §6 construction</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // discipline). Calling Of() guarantees the handler is registered before</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // the returned element is mounted — the cctor above runs before any</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">    // member of this type, including Of, can be invoked.</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeterElement</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Of</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        double</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> value</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        System</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Action</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;? </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">onValueChanged</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        int</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> maxRating</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        string</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">? </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">caption</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        bool</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> isClearEnabled</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        Of</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(Optional&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Of</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(value), onValueChanged, maxRating, caption, isClearEnabled);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> static</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> StarMeterElement</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Of</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        Optional</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt; </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">value</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        System</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Action</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">double</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;? </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">onValueChanged</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        int</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> maxRating</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        string</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">? </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">caption</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        bool</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> isClearEnabled</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        new</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(value, onValueChanged)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">            MaxRating </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> maxRating,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">            Caption </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> caption,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">            IsClearEnabled </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> isClearEnabled,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        };</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre>
+<p>The <code>StarMeter</code> holder is the bridge between your descriptor and the
+runtime. The CLR’s precise-initialization rules guarantee its static
+constructor runs exactly once, immediately before the first member
+access — which means the global
+<a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#registration"><code>ControlRegistry.Register</code></a>
+call lands before <code>StarMeter.Of(...)</code> can return. No app bootstrap
+code is involved; the registration is co-located with the only
+construction path for the element. Multiple components calling
+<code>StarMeter.Of(...)</code> from different threads are safe — the CLR
+serializes class init.</p>
+<p>The <code>static</code> keyword on the lambda passed to <code>ControlRegistry.Register</code>
+is <strong>mandatory, not stylistic</strong>:</p>
+<ul>
+<li>A <code>static</code> lambda is cached in a compiler-generated static field —
+one delegate allocation, ever, no matter how many times the cctor
+runs (which is one).</li>
+<li>A <code>static</code> lambda captures nothing (a capture is a compile error),
+so the trimmer can prove the handler factory does not hold a
+reference to anything outside <code>MyHandler</code> itself. That is what lets
+the trimmer drop the entire holder → handler → control chain when
+<code>StarMeter</code> is unreachable.</li>
+<li>A non-<code>static</code> lambda compiles, allocates a closure object per
+<code>Register</code> call, <em>and</em> roots whatever it captures (typically
+<code>this</code>) — which on a static cctor is nothing useful, but the
+trimmer treats the closure as a generic reference that may hold
+arbitrary types. See
+<a href="#common-mistakes">Common Mistakes — Passing a non-static lambda to ControlRegistry.Register</a>.</li>
+</ul>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">class</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> ExtendingApp</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> : </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Component</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    public</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> override</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Element</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Render</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        var</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">rating</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">setRating</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> UseState</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3.5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        return</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> VStack</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">16</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            TextBlock</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"StarMeter — custom element wrapping WinUI RatingControl"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">                .</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">FontSize</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">14</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">).</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">SemiBold</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(),</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">            // StarMeter.Of(...) is the sole construction path: it returns a</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">            // StarMeterElement AND ensures (via its cctor) that the global</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">            // ControlRegistry has the handler. No reconciler.RegisterHandler</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">            // call lives anywhere in this app.</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">            StarMeter.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Of</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(rating, setRating, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">caption</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Rate this page"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">),</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            TextBlock</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$"current rating: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">{</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">rating</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">:</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0.0</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">),</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">            HStack</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">                Button</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Reset"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, () </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> setRating</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)),</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">                Button</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"5 stars"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, () </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> setRating</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)))</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        ).</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Padding</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">20</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre>
+<p><img src="/microsoft-ui-reactor/main/images/extending-reactor-controls/star-meter.png" alt="Custom StarMeter element rendered alongside built-in Reactor controls"></p>
+<p>That is the entire path from <code>setRating(5)</code> to a frame. The component
+calls <code>StarMeter.Of(rating, setRating, ...)</code>; the holder’s class-init
+has already run, so the global <code>ControlRegistry</code> carries the entry
+for <code>StarMeterElement</code>; the reconciler walks the new element tree,
+the registered descriptor handler is invoked for <code>StarMeterElement</code>,
+the interpreter diffs against the previous element (only <code>Value</code>
+changed), writes through <code>WriteSuppressed</code>, the trampoline drains the
+suppress counter on the next echo, and the loop ends with the control
+at 5 stars. The rest of the app’s controls dispatch through the
+built-in handlers in lockstep.</p>
+<p><strong>Prove your control trims.</strong> The repo ships a tiny NativeAOT proof
+harness at <a href="https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/aot_trim_proof"><code>tests/aot_trim_proof/</code></a>
+that publishes a Reactor app whose <code>Render()</code> references only
+<code>TextBlock</code> and <code>Button</code>, then asserts that the handler class names
+and element record names of every other built-in control are <em>absent</em>
+from the published binary. Copy the same pattern for your control:
+publish your app with <code>dotnet publish -p:PublishAot=true</code>, then grep
+the resulting binary for your custom handler class name. If
+<code>StarMeter.Of(...)</code> is reachable, the name appears; if no component
+references it, the name is gone. That round-trip is the only
+authoritative test that Pattern A is wired correctly.</p>
+<h2 id="explicit-registration-the-narrow-escape-hatch"><a class="blume-heading-anchor" href="#explicit-registration-the-narrow-escape-hatch">Explicit registration — the narrow escape hatch</a></h2>
+<p>Everything above self-registers: the holder’s static constructor runs
+on the only path that can produce the element, so there is nothing to
+“wire up” at startup and no <code>UseMyLibrary()</code> step. A Reactor app builds
+its element tree <em>before</em> it reconciles, so construction always
+precedes dispatch.</p>
+<p><strong>Two cases genuinely need an explicit call</strong>, because no element
+construction triggers them:</p>
+<ol>
+<li><strong>A handler for an element you never construct</strong> — typically an
+<em>override</em> for a built-in. Constructing a <code>ButtonElement</code> runs the
+<em>owner’s</em> registration, never yours, and registration is
+<strong>first-wins</strong>: whoever gets there first keeps the entry and later
+calls are silently dropped. Register at startup, before the first
+render builds a tree containing that element — the built-in claims
+the entry on the factory call that <em>constructs</em> it, so waiting until
+just before the first mount is already too late.</li>
+<li><strong>Eager global initialization</strong> — for example merging a XAML
+<code>ResourceDictionary</code> into <code>Application.Current.Resources</code>. That is
+ordinary WinUI startup work rather than control registration, and
+it is usually too late if deferred to a render pass.</li>
+</ol>
+<p>Two paths already exist for this. Pick by scope, not by taste:</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th></th>
+<th>Global — <code>ControlRegistry.Register*</code></th>
+<th>Per-host — <code>reconciler.RegisterType</code> / <code>RegisterHandler</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scope</td>
+<td>Whole process</td>
+<td>One host’s reconciler</td>
+</tr>
+<tr>
+<td>Capture</td>
+<td>Must be <code>static</code> — captures nothing</td>
+<td>May capture host-local state</td>
+</tr>
+<tr>
+<td>Two implementations of one element</td>
+<td>No (first-wins)</td>
+<td>Yes — different hosts may differ</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>Part of the frozen protocol seam, so a <em>shipped</em> control library rolls forward</td>
+<td>Outside the frozen seam — apps recompile anyway</td>
+</tr>
+<tr>
+<td>Reach for it when</td>
+<td>A library-level override, or a reusable control library</td>
+<td>A bespoke, app-local control</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Global.</strong> Registers process-wide, and is the path a redistributable
+library should prefer:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">ControlRegistry.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Register</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ButtonElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Microsoft</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">UI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Xaml</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Controls</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Button</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> MyButtonHandler</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span></code></pre>
+<p><code>Register</code> takes a handler <strong>factory</strong>, not an instance. The registration
+itself is process-wide, but the factory runs lazily <em>per reconciler</em> —
+each host that mounts the element builds its own handler instance and
+caches it — so a handler must not assume it is a process-wide singleton.
+The <code>static</code> on the lambda is the same mandate as Step 6 — a capturing
+lambda allocates a closure and blunts the trimmer, and
+<code>REACTOR_DESC_001</code> flags it. The sibling entry points are
+<code>RegisterDecorator&lt;TElement&gt;</code> for decorator elements, and
+<code>RegisterForDerivedTypes&lt;TBase, TControl&gt;</code> /
+<code>RegisterDecoratorForDerivedTypes&lt;TBase&gt;</code> to cover a whole element
+family through its base type.</p>
+<p><strong>Per-host.</strong> Registers on one host’s reconciler, from the <code>configure</code>
+callback that runs before the first render:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">ReactorApp.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">EditorApp</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Monaco Editor"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">configure</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">host</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    host.Reconciler.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RegisterType</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">MonacoEditorElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">MonacoEditor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        mount</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">r</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">el</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">requestRerender</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> MonacoEditor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { Text </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> el.Text },</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        update</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">r</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">oldEl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">newEl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">editor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">requestRerender</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">            if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (newEl.Text </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> oldEl.Text) editor.Text </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> newEl.Text;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">            return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;   </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// null = the same control was patched in place</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        },</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        unmount</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">r</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">editor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> editor.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Dispose</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">});</span></span></code></pre>
+<p><code>RegisterType</code> takes <strong>inline</strong> mount/update/unmount delegates, so a
+one-off control needs no <code>IElementHandler</code> class at all; <code>unmount</code> is
+optional. Returning <code>null</code> from <code>update</code> means “I patched the existing
+control”, and so does returning the control you were handed — return a
+different <code>UIElement</code> only when you genuinely replaced it. If you <em>do</em>
+have a handler class, <code>RegisterHandler</code> takes an <strong>instance</strong> of it
+instead. This is the shape Reactor’s own docking natives and the Monaco
+sample use.</p>
+<p>Reactor records the element on the control that <code>mount</code> or <code>update</code>
+returns wherever Reactor itself reads it back — keyed reordering, the
+<code>unmount</code> lookup and <code>.Ref(...)</code> cleanup — so the delegates don’t call
+<code>Reconciler.SetElementTag</code> for those. If your own code reads the element
+back with <code>Reconciler.GetElementTag</code>, from an event handler for example,
+keep tagging the control yourself. Return a control your registration
+owns: a control Reactor already mounted for another kind of element
+keeps that element’s identity, so to wrap built-in elements write a
+component instead. <code>unmount</code> runs when Reactor unmounts the control,
+<em>instead of</em> Reactor’s own walk over the control’s children. If your
+delegates mount child elements through the reconciler, unmount them
+there too (<code>r.UnmountChild(child)</code>); without an <code>unmount</code> delegate,
+Reactor walks the children itself. A control your <code>update</code> replaced is
+unmounted, and gets <code>unmount</code>, wherever Reactor reconciles the slot that
+holds it: a panel, a <code>Border</code>, a named slot such as <code>SplitView.Pane</code>, a
+tab’s content. A few slots that a control fills by hand still swap it out
+without <code>unmount</code>, so don’t rely on <code>unmount</code> for a control your <code>update</code>
+replaces inside one of them: <code>CommandBar</code> content, <code>Expander</code> content and
+header template, <code>ContentDialog</code>, <code>Flyout</code> and <code>Popup</code> content, content
+attached with <code>.WithFlyout</code>, <code>.WithContextFlyout</code> or
+<code>.WithToolTip(element)</code>, and the realized item content of <code>ListView</code>,
+<code>GridView</code>, <code>TreeView&lt;T&gt;</code> and templated <code>FlipView</code>.</p>
+<p>To update a child your delegates mounted, pass it to <code>r.Reconcile</code> and
+put what it returns in the slot when it differs:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">reconciler.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">RegisterType</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">FramedElement</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Border</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    mount</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">r</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">el</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">requestRerender</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> WinUI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Border</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { Child </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> r.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Mount</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(el.Content, requestRerender) },</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    update</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">r</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">oldEl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">newEl</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">frame</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">requestRerender</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        // Patches the child in place, or unmounts it and mounts the new element.</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        var</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> next</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> r.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Reconcile</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(oldEl.Content, newEl.Content, frame.Child, requestRerender);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ReferenceEquals</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(next, frame.Child)) frame.Child </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> next;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    });</span></span></code></pre>
+<p>When the new element has the same type and key, <code>Reconcile</code> updates the
+child, usually in place. If that update builds a new control instead (a
+<code>ValidationVisualizer</code> remounts on every update, and a <code>RegisterType</code>
+<code>update</code> can return a new control), or the type or key changed,
+<code>Reconcile</code> unmounts the old control and returns the new one. It returns
+<code>null</code> when the new child is empty. A handler class gets the same from
+<code>ctx.ReconcileChild(oldChild, newChild, existing)</code>. Don’t use
+<code>r.UpdateChild</code> here. It skips the type check, so a child that changes
+type throws <code>InvalidCastException</code> for a built-in control, and it leaves
+a control it replaced mounted. <code>REACTOR_LIFECYCLE_003</code> flags the call
+and offers to switch it to <code>Reconcile</code>.</p>
+<p>A library that wants eager setup ships an ordinary
+<code>public static void UseAcme(Reconciler reconciler)</code> over one of these —
+Reactor deliberately adds no <code>IReactorLibrary</code> interface or
+marker-driven discovery scan. Assembly scanning is AOT-hostile, and a
+<code>[ModuleInitializer]</code> names every handler on first type-load, so the
+trimmer can never prove any of it dead — both would forfeit the
+pay-for-what-you-use trimming that Step 6 exists to preserve.</p>
+<h2 id="patterns"><a class="blume-heading-anchor" href="#patterns">Patterns</a></h2>
+<p>A few recurring shapes turn up across most custom-control ports:</p>
+<p><strong>Match a built-in’s perf bar without thinking about it.</strong> Use a
+descriptor; let <code>RentControl</code> pool the WinUI control; let <code>Controlled</code>
+suppress its own echoes. The interpreter’s per-entry diff is a single
+equality check against the previous element’s value — unchanged
+props pay one comparison and zero writes. Pool reuse, echo
+suppression, and static trampolines are defaults of the protocol, not
+opt-ins.</p>
+<p><strong>Bundle related fields into one prop entry.</strong> A control that
+exposes <code>(Color, IsOn) → Background</code> is one entry, not two — the
+<code>get</code> returns a tuple and the <code>set</code> reads both fields. The diff fires
+exactly when either input changes. This is how the LED indicator in
+<a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#descriptors-declarative-handlers">the Control Reconciler Protocol reference</a>
+collapses two element fields into one WinUI write.</p>
+<p><strong>Layer in a Reactor-friendly default for an awkward control.</strong> Many
+WinUI controls require an initial property write to “behave”
+(<code>TextBox.PlaceholderText</code>, <code>RatingControl.MaxRating</code>). Use
+<code>.InitialOnly(get, set)</code> to seed those once at Mount without paying the
+diff-and-write cost on Update. The interpreter ignores InitialOnly
+entries on the Update path.</p>
+<p><strong>Wrap a third-party control whose API is unstable.</strong> Put the
+descriptor in a sealed <code>static class</code>, mark every reference to the
+third-party type <code>internal</code>, and re-export an <code>Element</code>-typed
+factory. Your component authors depend on the element, not the
+control. When the third-party control breaks compatibility, you
+update one file; every component keeps compiling.</p>
+<p><strong>Pre-flight the perf bar with the bench harness.</strong> The Reactor repo
+includes a <code>perf_bench</code> project (<code>tests/perf_bench/</code>) that exercises
+descriptors against the M1 / M2 / M5 / M7 / M10 micro-benches the
+spec uses to validate the descriptor model. Drop your descriptor into
+the harness and run the relevant bench before locking your port in.</p>
+<h2 id="common-mistakes"><a class="blume-heading-anchor" href="#common-mistakes">Common Mistakes</a></h2>
+<p><strong>Subscribing in <code>Update</code> instead of <code>Mount</code>.</strong> A descriptor’s
+<code>Controlled</code> entry already gates subscription on the
+mount-then-subscribe ordering — the interpreter calls
+<code>EnsureSubscribed</code> once after the Mount loop and again on each Update
+to catch null→non-null callback transitions. If you are hand-coding a
+handler and forget to centralize subscription in <code>Mount</code>, every
+re-render double-subscribes the event.</p>
+<p><strong>Forgetting <code>WriteSuppressed</code> in a hand-coded <code>Update</code>.</strong> A
+controlled prop write from <code>Update</code> echoes through the trampoline
+back into the user’s state setter. The descriptor’s <code>Controlled</code>
+entry wraps the write for you; a hand-coded handler must mirror it
+with <code>binding.WriteSuppressed(() =&gt; ctrl.Value = newValue)</code>.
+Forgetting it is the single most common cause of “the value snaps
+back when I edit it” bugs.</p>
+<p><code>WriteSuppressed</code> (<code>ReactorBinding.WriteSuppressed</code>, and the
+per-binding <code>ctx.BindFor(ctrl, el).WriteSuppressed(...)</code>) is <strong>the
+supported, RCW-safe public extension point</strong> for custom value-bearing
+controls — you never touch the framework’s internal echo suppressor
+(issue #206). The controlled-control contract is: pair exactly one
+<code>WriteSuppressed</code> with exactly one programmatic write, and gate it on
+a live readback check (<code>if (ctrl.Value != newEl.Value)</code>) — comparing
+the control’s <em>current</em> value against the rendered value, exactly as
+the engine’s <code>ControlledPropEntry.Update</code> does. Gating on the live
+readback (rather than <code>oldEl.Value != newEl.Value</code>) means the write
+also fires when the control has drifted from the rendered value even
+though the element is unchanged — snapping drift back — while still
+ensuring the suppression token is consumed by the engine-provoked echo
+and never strands to swallow the user’s next real edit. A worked,
+external-assembly proof of exactly this lives in
+<a href="https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/external_proof"><code>tests/external_proof/</code></a>
+(<code>GaugeHandler</code> — a Slider-shaped <code>double Value</code> control authored
+against the public surface only).</p>
+<p><strong>Stashing per-control state on the descriptor / handler.</strong> The
+descriptor and the handler instance are registered once per host.
+Per-control state needs to live on the <strong>control</strong> — either on the
+attached state DP (use <code>Reconciler.SetElementTag</code> / <code>GetElementTag</code>)
+or on the typed event payload box (declare it through the
+<code>HandCodedEvent&lt;TPayload, …&gt;</code> / <code>HandCodedControlled&lt;TPayload, …&gt;</code>
+descriptor builders, whose <code>slotIsNull</code> / <code>setSlot</code> pair manages the box). The pool
+reset contract clears both on <code>ReturnControl</code>; descriptor-level state
+survives pool rent and corrupts the next mount.</p>
+<p><strong>Passing a non-<code>static</code> lambda to <code>ControlRegistry.Register</code>.</strong> The
+<code>static</code> keyword on the factory lambda is mandatory (see
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6</a>).
+Writing
+<code>ControlRegistry.Register&lt;MyElement, MyControl&gt;(() =&gt; new MyHandler())</code>
+without the <code>static</code> modifier compiles, but allocates a closure object
+per <code>Register</code> call <em>and</em> defeats the trimmer’s ability to drop the
+handler/control chain when the factory holder is unreachable. The
+compiler will accept either shape; the <code>REACTOR_DESC_001</code> analyzer
+(<code>StaticRegisterLambdaAnalyzer</code>) is your guard. Always write
+<code>static () =&gt; new MyHandler()</code>.</p>
+<p><strong>Bypassing the factory with <code>new MyElement(...)</code>.</strong> The whole reason
+the element’s primary constructor is <code>internal</code> is to make
+<code>new StarMeterElement(...)</code> from outside the assembly a compile
+error. If you also expose the element record from a library, do not
+re-export a <code>public</code> constructor or a parameter-forwarding <code>public StarMeterElement Create(...)</code> helper that calls the internal ctor —
+both bypass the holder’s class-init and the first time your library’s
+element reaches an unregistered reconciler the mount will throw.
+<code>StarMeter.Of(...)</code> (which triggers the cctor <em>and</em> returns the
+element) is the only externally-reachable construction path that’s
+safe.</p>
+<p><strong>Registering on a non-global reconciler when you meant the global
+one.</strong> <code>Reconciler.RegisterHandler&lt;...&gt;</code> is the per-host escape hatch
+documented in <a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol#registration">The Control Reconciler Protocol</a>;
+it is meant for tests substituting a fake handler, not for shipping
+custom controls. If your app has multiple <code>ReactorHost</code> instances and
+your control is registered through Pattern A on the global
+<code>ControlRegistry</code>, every host sees it automatically — the four-step
+dispatch precedence ends with the global registry, so no per-host
+call is needed.</p>
+<p><strong>Capturing the element in a static trampoline.</strong> The static
+trampoline pattern works because it reads the live element on every
+fire. Capturing the element in the static closure is a contradiction
+in terms — there is no closure on a static — but the equivalent
+mistake on a hand-coded trampoline that closes over the element
+instance does exactly that, and the trampoline observes the element
+that existed at Mount forever.</p>
+<h2 id="tips"><a class="blume-heading-anchor" href="#tips">Tips</a></h2>
+<p><strong>Start from the closest built-in descriptor.</strong> Copy the most
+similar descriptor in <code>src/Reactor/Core/V1Protocol/Descriptor/Descriptors/</code>,
+strip what does not apply, and adapt. The built-ins encode the
+production patterns for every shape you are likely to need —
+including the coercion edge cases (<code>Slider.Min</code>, <code>NumberBox.Max</code>) and
+the multi-event control patterns (<code>TextBox</code>’s <code>Text</code> +
+<code>SelectionChanged</code>).</p>
+<p><strong>Keep the element record minimal.</strong> Every field is a public
+contract — once consumers depend on it, you cannot drop or rename it
+without churn. Add fields as components need them, not preemptively.</p>
+<p><strong>Test the round trip with the existing fixture harness.</strong> Add a
+fixture in <code>tests/Reactor.AppTests.Host/SelfTest/Fixtures/</code> that
+drives your control via an automation peer
+(<code>IInvokeProvider</code>/<code>IValueProvider</code>) and asserts the callback fires
+the right number of times for the right values. The pattern is
+established and the fixture runner gives you a stable stable cross-
+process test rig for free.</p>
+<p><strong>Document the perf shape inline.</strong> If your control has non-obvious
+performance characteristics — pool opt-out, custom comparer for
+floating-point tolerance, deliberately imperative entry — capture
+the reason in a comment on the descriptor field, not on the calling
+component. The descriptor is where future maintainers will look.</p>
+<p><strong>Read the Control Reconciler Protocol reference once end-to-end.</strong> The
+six body sections above are the recipe; <a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol">the protocol page</a> is the
+specification it implements. The two pages together are the complete
+contract — bookmark both.</p>
+<p><strong>Keep devtools-adjacent hooks in the optional package.</strong> Control helpers
+that only serve the <code>--devtools</code> MCP/preview surface belong in
+<code>Microsoft.UI.Reactor.Devtools</code>, not core <code>Microsoft.UI.Reactor</code>. That
+keeps retail apps from resolving or shipping devtools implementation IL
+unless they add the optional package and enable <code>Reactor.DevtoolsSupport</code>.</p>
+<h2 id="next-steps"><a class="blume-heading-anchor" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><a href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol">The Control Reconciler Protocol</a> — the model the steps on this page plug into.</li>
+<li><a href="/microsoft-ui-reactor/main/how-it-works/reconciliation">Reconciliation</a> — what happens before the registered handler is invoked, and how Mount vs Update vs Unmount get chosen.</li>
+<li><a href="/microsoft-ui-reactor/main/how-it-works/element-pool">Element Pool</a> — what <code>RentControl</code> actually does, and how the per-type pool keeps <code>Mount</code> allocation-free.</li>
+<li><a href="/microsoft-ui-reactor/main/how-it-works/modifier-system">Modifier System</a> — how the <code>Setters</code> chain a descriptor applies after its own prop loop works.</li>
+<li><a href="/microsoft-ui-reactor/main/how-it-works/hooks-internals">Hooks Internals</a> — how state changes turn into Render calls, which is the upstream half of every loop the protocol on this page is the downstream half of.</li>
+</ul>
+</article><div data-blume-page-end><section aria-label="Was this page helpful?" class="mx-auto mt-12 max-w-content border-border border-t pt-6" data-blume-page-feedback><div class="flex items-center justify-between gap-4"><p class="text-muted-foreground text-sm">Was this page helpful?</p><div class="flex items-center gap-2" data-feedback-actions><button class="inline-flex items-center gap-2 rounded-blume border border-border px-4 py-2 text-foreground text-sm transition-colors hover:border-foreground" data-feedback-value="yes" type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-thumbs-up"></use></svg>Yes</button><button class="inline-flex items-center gap-2 rounded-blume border border-border px-4 py-2 text-foreground text-sm transition-colors hover:border-foreground" data-feedback-value="no" type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-thumbs-down"></use></svg>No</button></div><p class="hidden text-muted-foreground text-sm focus:outline-none" data-feedback-thanks role="status" tabindex="-1">Thanks for your feedback!</p></div></section><script type="module" src="/microsoft-ui-reactor/main/_astro/PageFeedback.astro_astro_type_script_index_0_lang.Ct6xENdt.js"></script><nav aria-label="Pagination" class="mx-auto mt-12 flex max-w-content justify-between gap-4 border-border border-t pt-6"><a class="flex max-w-[48%] flex-1 items-center gap-2 rounded-blume border border-border px-4 py-3 text-foreground transition-colors hover:border-foreground" href="/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol"><svg aria-hidden="true" class="rtl:-scale-x-100" height="16" width="16"><use href="#blume-i-arrow-left"></use></svg><span class="min-w-0"><span class="block text-muted-foreground text-xs">Previous</span><span class="block font-medium max-md:line-clamp-2 max-md:wrap-break-word md:truncate">Control reconciler protocol</span></span></a><a class="ms-auto flex max-w-[48%] flex-1 items-center justify-end gap-2 rounded-blume border border-border px-4 py-3 text-end text-foreground transition-colors hover:border-foreground" href="/microsoft-ui-reactor/main/how-it-works/modifier-system"><span class="min-w-0"><span class="block text-muted-foreground text-xs">Next</span><span class="block font-medium max-md:line-clamp-2 max-md:wrap-break-word md:truncate">Modifier system</span></span><svg aria-hidden="true" class="rtl:-scale-x-100" height="16" width="16"><use href="#blume-i-arrow-right"></use></svg></a></nav></div></main><aside aria-label="On this page" class="sticky top-16 hidden h-[calc(100dvh-4rem)] scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overflow-y-auto [--blume-rail-inset:1rem] px-(--blume-rail-inset) pt-6 pb-10 text-sm xl:block" data-blume-toc><p class="mb-3 font-semibold text-foreground text-sm">On this page</p><blume-toc class="block"><ul class="m-0 list-none p-0"><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#the-four-step-playbook">The four-step playbook</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-1-define-the-element-record">Step 1 — Define the Element record</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-2-choose-a-shape-descriptor-vs-hand-coded">Step 2 — Choose a shape (descriptor vs hand-coded)</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-3-wire-props">Step 3 — Wire props</a></li><li data-depth="3" style="padding-inline-start:0.75rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#values-the-native-control-mutates-on-its-own">Values the native control mutates on its own</a></li><li data-depth="3" style="padding-inline-start:0.75rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#reference-properties">Reference properties</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-4-wire-events-the-non-dp-case">Step 4 — Wire events (the non-DP case)</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-5-declare-a-child-strategy">Step 5 — Declare a child strategy</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#explicit-registration-the-narrow-escape-hatch">Explicit registration — the narrow escape hatch</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#patterns">Patterns</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#common-mistakes">Common Mistakes</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#tips">Tips</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#next-steps">Next Steps</a></li></ul></blume-toc><div class="space-y-0.5 mt-8 border-border border-t pt-4" data-blume-page-actions data-i18n-chat-prompt="Read {url} so I can ask you questions about this page." data-i18n-copied="Copied!" data-i18n-copy-failed="Copy failed" data-i18n-generating="Generating…" data-md="/how-it-works/extending-reactor-controls.md"><button class="flex w-full items-center gap-2.5 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:text-foreground" data-blume-scroll-top type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-arrow-up"></use></svg>Scroll to top</button><button class="flex w-full items-center gap-2.5 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:text-foreground" data-blume-copy-page type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-copy"></use></svg><span data-blume-copy-label>Copy as Markdown</span></button><details class="relative" data-blume-dropdown><summary class="flex w-full items-center gap-2.5 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:text-foreground cursor-pointer list-none [&amp;::-webkit-details-marker]:hidden"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-external-link"></use></svg>Open in chat<svg aria-hidden="true" class="ms-auto transition-transform [details[open]>summary_&amp;]:rotate-180" height="14" width="14"><use href="#blume-i-chevron-down"></use></svg></summary><div class="absolute top-full end-0 z-50 mt-1 w-max [--blume-menu-room:calc(100%+var(--blume-rail-inset,1rem)-2px)] min-w-[min(14rem,var(--blume-menu-room))] max-w-(--blume-menu-room) wrap-anywhere rounded-blume border border-border bg-background p-1 shadow-xl" data-blume-menu><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="v0" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 147 70" xmlns="http://www.w3.org/2000/svg"><path d="M56 50.2031V14H70V60.1562C70 65.5928 65.5928 70 60.1562 70C57.5605 70 54.9982 68.9992 53.1562 67.1573L0 14H19.7969L56 50.2031Z"/><path d="M147 56H133V23.9531L100.953 56H133V70H96.6875C85.8144 70 77 61.1856 77 50.3125V14H91V46.1562L123.156 14H91V0H127.312C138.186 0 147 8.81439 147 19.6875V56Z"/></svg></span><span class="flex-1">Open in v0</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><hr class="my-1 border-border border-t"><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="chatgpt" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg></span><span class="flex-1">Open in ChatGPT</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="claude" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" fill-rule="evenodd" d="M2.3545 7.9775L4.7145 6.654L4.7545 6.539L4.7145 6.475H4.6L4.205 6.451L2.856 6.4145L1.6865 6.366L0.5535 6.305L0.268 6.2445L0 5.892L0.0275 5.716L0.2675 5.5555L0.6105 5.5855L1.3705 5.637L2.5095 5.716L3.3355 5.7645L4.56 5.892H4.7545L4.782 5.8135L4.715 5.7645L4.6635 5.716L3.4845 4.918L2.2085 4.074L1.5405 3.588L1.1785 3.3425L0.9965 3.1115L0.9175 2.6075L1.2455 2.2465L1.686 2.2765L1.7985 2.307L2.245 2.65L3.199 3.388L4.4445 4.3045L4.627 4.4565L4.6995 4.405L4.709 4.3685L4.627 4.2315L3.9495 3.0085L3.2265 1.7635L2.9045 1.2475L2.8195 0.938C2.78711 0.819128 2.76965 0.696687 2.7675 0.5735L3.1415 0.067L3.348 0L3.846 0.067L4.056 0.249L4.366 0.956L4.867 2.0705L5.6445 3.5855L5.8725 4.0345L5.994 4.4505L6.0395 4.578H6.1185V4.505L6.1825 3.652L6.301 2.6045L6.416 1.257L6.456 0.877L6.644 0.422L7.0175 0.176L7.3095 0.316L7.5495 0.6585L7.516 0.8805L7.373 1.806L7.0935 3.2575L6.9115 4.2285H7.0175L7.139 4.1075L7.6315 3.4545L8.4575 2.4225L8.8225 2.0125L9.2475 1.5605L9.521 1.345H10.0375L10.4175 1.9095L10.2475 2.4925L9.7155 3.166L9.275 3.737L8.643 4.587L8.248 5.267L8.2845 5.322L8.3785 5.312L9.8065 5.009L10.578 4.869L11.4985 4.7115L11.915 4.9055L11.9605 5.103L11.7965 5.5065L10.812 5.7495L9.6575 5.9805L7.938 6.387L7.917 6.402L7.9415 6.4325L8.716 6.5055L9.047 6.5235H9.858L11.368 6.636L11.763 6.897L12 7.216L11.9605 7.4585L11.353 7.7685L10.533 7.574L8.6185 7.119L7.9625 6.9545H7.8715V7.0095L8.418 7.5435L9.421 8.4485L10.6755 9.6135L10.739 9.9025L10.578 10.13L10.408 10.1055L9.3055 9.277L8.88 8.9035L7.917 8.0935H7.853V8.1785L8.075 8.503L9.2475 10.2635L9.3085 10.8035L9.2235 10.98L8.9195 11.0865L8.5855 11.0255L7.8985 10.063L7.191 8.9795L6.6195 8.008L6.5495 8.048L6.2125 11.675L6.0545 11.86L5.69 12L5.3865 11.7695L5.2255 11.396L5.3865 10.658L5.581 9.696L5.7385 8.931L5.8815 7.981L5.9665 7.665L5.9605 7.644L5.8905 7.653L5.1735 8.6365L4.0835 10.109L3.2205 11.0315L3.0135 11.1135L2.655 10.9285L2.6885 10.5975L2.889 10.303L4.083 8.785L4.803 7.844L5.268 7.301L5.265 7.222H5.2375L2.066 9.28L1.501 9.353L1.2575 9.125L1.288 8.752L1.4035 8.6305L2.3575 7.9745L2.3545 7.9775Z"/></svg></span><span class="flex-1">Open in Claude</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="t3" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><span class="flex-1">Open in T3 Chat</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="scira" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="none" viewBox="0 0 910 934" xmlns="http://www.w3.org/2000/svg"><path d="M647.664 197.775C569.13 189.049 525.5 145.419 516.774 66.8849C508.048 145.419 464.418 189.049 385.884 197.775C464.418 206.501 508.048 250.131 516.774 328.665C525.5 250.131 569.13 206.501 647.664 197.775Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="8"/><path d="M857.5 508.116C763.259 497.644 710.903 445.288 700.432 351.047C689.961 445.288 637.605 497.644 543.364 508.116C637.605 518.587 689.961 570.943 700.432 665.184C710.903 570.943 763.259 518.587 857.5 508.116Z" stroke="currentColor" stroke-linejoin="round" stroke-width="20"/><path d="M889.949 121.237C831.049 114.692 798.326 81.9698 791.782 23.0692C785.237 81.9698 752.515 114.692 693.614 121.237C752.515 127.781 785.237 160.504 791.782 219.404C798.326 160.504 831.049 127.781 889.949 121.237Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="8"/><path d="M760.632 764.337C720.719 814.616 669.835 855.1 611.872 882.692C553.91 910.285 490.404 924.255 426.213 923.533C362.022 922.812 298.846 907.419 241.518 878.531C184.19 849.643 134.228 808.026 95.4548 756.863C56.6815 705.7 30.1238 646.346 17.8129 583.343C5.50207 520.339 7.76433 455.354 24.4266 393.359C41.089 331.364 71.7099 274.001 113.947 225.658C156.184 177.315 208.919 139.273 268.117 114.442" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="30"/></svg></span><span class="flex-1">Open in Scira</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="cursor" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" viewBox="0 0 466.73 532.09" xmlns="http://www.w3.org/2000/svg"><path d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z" fill="currentColor"/></svg></span><span class="flex-1">Open in Cursor</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a></div></details></div><script type="module" src="/microsoft-ui-reactor/main/_astro/PageActions.astro_astro_type_script_index_0_lang.CVcd-PcZ.js"></script></aside></div><footer class="border-border border-t px-4 md:px-6" data-blume-footer><div class="flex min-h-16 flex-wrap items-center gap-x-6 gap-y-3 py-3 md:grid md:grid-cols-[1fr_auto_1fr]"><ul class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm"><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="/microsoft-ui-reactor/main/showcase">Showcase</a></li><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank">Blog</a></li><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank">Samples</a></li><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/CHANGELOG.md" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank">Changelog</a></li></ul><p class="text-muted-foreground text-sm md:col-start-2">© Microsoft Corporation. Released under the MIT License.</p><ul class="-me-[9px] -my-[9px] ms-auto flex flex-wrap items-center gap-1 md:col-start-3"><li><a aria-label="GitHub repository" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:text-foreground" href="https://github.com/microsoft/microsoft-ui-reactor" title="GitHub repository" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path></svg></a></li></ul></div></footer><button aria-label="Close navigation" class="fixed inset-0 z-[30] hidden cursor-pointer border-0 bg-black/40 [:where([data-blume-nav-open])_&amp;]:block lg:hidden" data-blume-nav-toggle type="button"></button><script type="module" src="/microsoft-ui-reactor/main/_astro/RootLayout.astro_astro_type_script_index_0_lang.KSQNchi6.js"></script><blume-webmcp data-llms="true" data-search="true" data-skills="true" hidden="true"></blume-webmcp><script type="module" src="/microsoft-ui-reactor/main/_astro/WebMcp.astro_astro_type_script_index_0_lang.FRCBO4-1.js"></script><svg aria-hidden="true" hidden xmlns="http://www.w3.org/2000/svg"><symbol id="blume-i-arrow-right" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7l7 7l-7 7"/></symbol><symbol id="blume-i-menu" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5h16M4 12h16M4 19h16"/></symbol><symbol id="blume-i-chevron-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9l6 6l6-6"/></symbol><symbol id="blume-i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 6L9 17l-5-5"/></symbol><symbol id="blume-i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g></symbol><symbol id="blume-i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol><symbol id="blume-i-thumbs-up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88M7 10v12"/></symbol><symbol id="blume-i-thumbs-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 18.12L10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88M17 14V2"/></symbol><symbol id="blume-i-arrow-left" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 19l-7-7l7-7m7 7H5"/></symbol><symbol id="blume-i-arrow-up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 12l7-7l7 7m-7 7V5"/></symbol><symbol id="blume-i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></g></symbol><symbol id="blume-i-external-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6m-11 5L21 3m-3 10v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol><symbol id="blume-i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m21 21l-4.34-4.34"/><circle cx="11" cy="11" r="8"/></g></symbol></svg></body></html>

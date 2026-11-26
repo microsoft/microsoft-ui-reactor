@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseClosingGuard.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseClosingGuard.md",
+  "route": "/reference/hooks/UseClosingGuard",
+  "title": "UseClosingGuard",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseClosingGuard",
+  "description": "Registers a synchronous \"can the window close right now?\" predicate. Multiple guards stack — any returning false cancels the close. Runs on the UI thread; for async confirmation, return false and re-trigger ReactorWindow.Close from the dialog callback. No-op outside a window. (spec 036 §7 / §13.4)",
+  "markdown": "---\ntitle: \"UseClosingGuard\"\ndescription: \"Registers a synchronous \\\"can the window close right now?\\\" predicate. Multiple guards stack — any returning false cancels the close. Runs on the UI thread; for async confirmation, return false and re-trigger ReactorWindow.Close from the dialog callback. No-op outside a window. (spec 036 §7 / §13.4)\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

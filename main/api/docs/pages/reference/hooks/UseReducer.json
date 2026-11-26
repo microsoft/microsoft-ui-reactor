@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseReducer.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducer.md",
+  "route": "/reference/hooks/UseReducer",
+  "title": "UseReducer",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducer",
+  "markdown": "---\ntitle: \"UseReducer\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseReducer<T1>(T1, bool)`](#usereducert1t1-bool)\n- [`UseReducer<T1, T2>(Func<T1, T2, T1>, T1, bool)`](#usereducert1-t2funct1-t2-t1-t1-bool)\n\n## `UseReducer<T1>(T1, bool)` [#usereducert1t1-bool]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseReducer``1(``0,System.Boolean)`\n\n### Summary [#summary]\n\nDeclares a piece of state with a functional updater variant.\nThe updater receives the previous value and returns the next.\nCross-thread updater calls are auto-marshaled onto the captured UI dispatcher\n(same semantics as [UseState](/microsoft-ui-reactor/main/reference/hooks/UseState) ([guide](/microsoft-ui-reactor/main/guides/hooks))); pass\n`threadSafe`: `true` for locked in-place updates that\nserialize many concurrent writers without an intervening UI tick.\n\n## `UseReducer<T1, T2>(Func<T1, T2, T1>, T1, bool)` [#usereducert1-t2funct1-t2-t1-t1-bool]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseReducer``2(System.Func{``0,``1,``0},``0,System.Boolean)`\n\n### Summary [#summary_1]\n\nDeclares a piece of state managed by a reducer function (like Redux).\nThe reducer takes (currentState, action) and returns the next state.\nReturns (currentState, dispatch) where dispatch sends an action through the reducer.\nCross-thread dispatch calls are auto-marshaled onto the captured UI dispatcher\n(same semantics as [UseState](/microsoft-ui-reactor/main/reference/hooks/UseState) ([guide](/microsoft-ui-reactor/main/guides/hooks))); pass\n`threadSafe`: `true` for locked in-place dispatch that\nserializes concurrent writers without an intervening UI tick.\n\n## Featured in [#featured-in]\n\n- [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n"
+}

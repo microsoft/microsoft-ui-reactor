@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDisplays.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDisplays.md",
+  "route": "/reference/hooks/UseDisplays",
+  "title": "UseDisplays",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDisplays",
+  "description": "Returns the current display snapshot and re-renders when the display layout changes.",
+  "markdown": "---\ntitle: \"UseDisplays\"\ndescription: \"Returns the current display snapshot and re-renders when the display layout changes.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

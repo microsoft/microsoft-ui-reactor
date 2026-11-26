@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseBreakpoint.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseBreakpoint.md",
+  "route": "/reference/hooks/UseBreakpoint",
+  "title": "UseBreakpoint",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseBreakpoint",
+  "markdown": "---\ntitle: \"UseBreakpoint\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseBreakpoint(double)`](#usebreakpointdouble)\n- [`UseBreakpoint(Window, double)`](#usebreakpointwindow-double)\n\n## `UseBreakpoint(double)` [#usebreakpointdouble]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(System.Double)`\n\n### Summary [#summary]\n\nWindow-inferring overload — takes only `minWidth` and\nresolves the window whose host renders this component (see the parameterless\n[UseWindowSize](/microsoft-ui-reactor/main/reference/hooks/UseWindowSize) ([guide](/microsoft-ui-reactor/main/guides/hooks))). Returns false when the component has no owning\nwindow. (spec 036 §5.2)\n\n## `UseBreakpoint(Window, double)` [#usebreakpointwindow-double]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(Microsoft.UI.Xaml.Window,System.Double)`\n\n### Summary [#summary_1]\n\nReturns true when the given window's width is >= minWidth.\nRe-renders when the window resizes across the breakpoint.\n"
+}

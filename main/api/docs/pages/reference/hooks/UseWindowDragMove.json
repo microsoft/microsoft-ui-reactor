@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseWindowDragMove.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowDragMove.md",
+  "route": "/reference/hooks/UseWindowDragMove",
+  "title": "UseWindowDragMove",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowDragMove",
+  "description": "Returns a stable callback that starts a framework-managed window drag/move loop (cursor polling + AppWindow.Move at ~60Hz until the left mouse button is released).",
+  "markdown": "---\ntitle: \"UseWindowDragMove\"\ndescription: \"Returns a stable callback that starts a framework-managed window drag/move loop (cursor polling + AppWindow.Move at ~60Hz until the left mouse button is released).\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\nThe loop is framework-managed (not OS-managed) because WinUI 3\nroutes pointer input through a child input-site HWND, so\nsynthesizing `WM_NCLBUTTONDOWN` against the top-level HWND\nsilently falls back to keyboard/cursor-track Move mode rather\nthan mouse-driven click-drag. The polling approach is reliable\nbut trades away OS Aero Snap during the drag. See spec 054 §5.3.\n"
+}

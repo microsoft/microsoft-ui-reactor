@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseTrayIcon.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseTrayIcon.md",
+  "route": "/reference/hooks/UseTrayIcon",
+  "title": "UseTrayIcon",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseTrayIcon",
+  "description": "Open (or reuse-by-TrayIconSpec.Key) a system-tray icon scoped to the calling component. The icon closes automatically on unmount — that's the only difference from ReactorApp.OpenTrayIcon, which is app-scoped and keeps the icon alive until explicit ReactorTrayIcon.Close.",
+  "markdown": "---\ntitle: \"UseTrayIcon\"\ndescription: \"Open (or reuse-by-TrayIconSpec.Key) a system-tray icon scoped to the calling component. The icon closes automatically on unmount — that's the only difference from ReactorApp.OpenTrayIcon, which is app-scoped and keeps the icon alive until explicit ReactorTrayIcon.Close.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\nReturns `null` when no UI dispatcher has been captured (test\ncontexts) or when the spec change cannot be reconciled — callers\nshould null-check before subscribing to events. Identity-stable across\nre-renders so the same handle wires through subsequent\n`UseEffect` dependencies.\n(spec 036 §11.4)\n"
+}

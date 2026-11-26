@@ -1,0 +1,538 @@
+---
+title: "Source Mapping"
+description: "\"Source mapping\" in Microsoft.UI.Reactor (Reactor) is the chain that ties a runtime artifact — an ETW event, a --preview overlay highlight, a thrown exception — back to the C# source that produced it."
+sidebar:
+  label: "Source mapping"
+---
+
+Two granularities ship today: *component* attribution, where every render
+emits an ETW event carrying the component's type name, and *per-element*
+attribution, where each DSL call site carries the file, line and column that
+produced it. This page covers both.
+
+> **Status.** Per-element source tagging ships as `Element.CallSite` plus
+> `Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap`. There are two
+> independent gates. The **build** gate decides whether interceptors are
+> generated at all: on by default in Debug, off in Release (an explicit
+> `<ReactorSourceMap>true</ReactorSourceMap>` does enable it there, and
+> embeds source paths — see below), mirroring how WPF gates XAML source
+> info behind `XamlDebuggingInformation`. The **runtime** gate,
+> `ReactorSourceMap.Enabled`, decides whether those interceptors actually
+> stamp anything, and it defaults to **false even in Debug** — the
+> devtools verb turns it on, and a host can set it directly or start the
+> process with `REACTOR_SOURCEMAP=1`. So a plain Debug build generates
+> interceptors but stamps no elements until something enables it. The
+> design reference is
+> [spec 010](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/010-source-mapping-design.md);
+> note that the shipped implementation uses C# interceptors rather than
+> the `[CallerFilePath]` approach the spec originally proposed, because
+> CallerInfo cannot reach the `params Element?[] children` factories.
+
+## Component-name attribution via ETW [#component-name-attribution-via-etw]
+
+Every `ComponentRender` boundary emits an ETW event keyed by the
+component's CLR type name. The keyword `Render` gates the events so
+consumers can subscribe to just the render channel:
+
+```csharp
+public static class Keywords
+{
+    public const EventKeywords Reconcile = (EventKeywords)0x1;
+    public const EventKeywords Render = (EventKeywords)0x2;
+    public const EventKeywords State = (EventKeywords)0x4;
+    public const EventKeywords Mcp = (EventKeywords)0x8;
+    public const EventKeywords Lifecycle = (EventKeywords)0x10;
+    public const EventKeywords Errors = (EventKeywords)0x20;
+    public const EventKeywords EventDispatch = (EventKeywords)0x40;
+    // Spec 044 — subsystem coverage gaps. Each gets its own bit so a
+    // consumer (dotnet-trace, EventListener, ReactorTrace.Subscribe) can
+    // pick exactly the area it cares about without paying for the rest.
+    public const EventKeywords Hosting = (EventKeywords)0x80;       // Window/HWND/DPI/Backdrop
+    public const EventKeywords Persistence = (EventKeywords)0x100;  // settings store, placement
+    public const EventKeywords Navigation = (EventKeywords)0x200;   // route push, cache, transitions
+    public const EventKeywords Intl = (EventKeywords)0x400;         // missing keys, fallback, format
+    public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
+    public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
+    public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
+    public const EventKeywords RenderDetail = (EventKeywords)0x4000; // per-component ComponentRendered (reason + instance id) for inspectors
+}
+```
+
+`ComponentRenderStart` / `ComponentRenderStop` fire with the component's
+type name — `Counter` for a `Counter : Component<CounterProps>`, whichever
+factory created it. That string is the
+attribution token that flows into PerfView / `dotnet-trace` /
+`xperf`, and it is the same string [`devtools-internals`](/microsoft-ui-reactor/main/how-it-works/devtools-internals)
+uses to label overlay frames. Per-component, not per-element — but
+sufficient for the common question "which component is re-rendering
+on every tick". `RenderError`, `EffectsFlushStart` / `Stop` and
+`ComponentUnmount` use the same name. A generic component reports its type
+arguments in C# form (`ItemList<Int32>`, not ``ItemList`1``); function and memo
+components, which have no type of their own, report `FuncElement` and
+`MemoElement`.
+
+![Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file, line and column via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](/microsoft-ui-reactor/main/images/source-mapping/attribution.svg)
+
+## Reconcile-pass attribution [#reconcile-pass-attribution]
+
+| Signal | Granularity | Where it surfaces |
+|---|---|---|
+| `ComponentRenderStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
+| `ComponentRendered` | Component type name + instance id + render reason | ETW `RenderDetail` keyword (Verbose); id resolves to a control via `ReactorTrace.GetComponentControl` |
+| `ReconcileStart` / `Stop` | Root element type + diff counters | ETW `Reconcile` keyword |
+| `EffectsFlushStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
+| `StateChange` | Hook kind + value type | ETW `State` keyword |
+| `RenderError` | Component name + exception type only (message redacted); emitted when a component's `Render()` or effect flush throws — on mount, update and at the host root — including errors an `ErrorBoundary` catches (named at the throw site, once) | ETW `Errors` keyword |
+| Per-element file:line:column | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
+| Per-component file name:line:column | Component call site (file name only, never its directories) | `Microsoft-UI-Reactor-Perf` `ComponentRender` Start `callSiteFile` / `callSiteLine` / `callSiteColumn` (when source mapping is on; see the [perf trace events reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/perf-trace-events.md)) |
+
+The reconcile pass also emits a counter summary on stop:
+
+```csharp
+[Event(2, Level = EventLevel.Informational, Keywords = Keywords.Reconcile,
+    Task = Tasks.Reconcile, Opcode = EventOpcode.Stop,
+    Message = "Reconcile stop (diffed={elementsDiffed}, skipped={elementsSkipped}, created={uiElementsCreated}, modified={uiElementsModified})")]
+public void ReconcileStop(int elementsDiffed, int elementsSkipped, int uiElementsCreated, int uiElementsModified)
+{
+    if (IsEnabled(EventLevel.Informational, Keywords.Reconcile))
+        WriteEvent(2, elementsDiffed, elementsSkipped, uiElementsCreated, uiElementsModified);
+}
+```
+
+`elementsDiffed` / `elementsSkipped` / `uiElementsCreated` /
+`uiElementsModified` give a frame-level view of how much actual work
+the reconciler did. None of these carry a source location — they're
+aggregate counters — but pairing them with the component start/stop
+events tells you "this component rendered, the reconciler touched N
+elements, and Y of them resulted in real WinUI writes."
+
+## Why ETW attribution stops at the component [#why-etw-attribution-stops-at-the-component]
+
+The reconciler resolves mounts through registered descriptors/handlers
+before falling back to composition-primitive handlers. The handler that
+constructs the WinUI control doesn't know which user line called
+`TextBlock("hello")`:
+
+```csharp
+public abstract class Component
+{
+    // Settable so the reconciler can transfer a live RenderContext (hooks +
+    // cleanups) onto a freshly-constructed instance when a Hot Reload edit
+    // mints a new component Type token (spec 049 §7 subtree migration). Outside
+    // that path the value is the per-instance context created here.
+    internal RenderContext Context { get; set; } = new();
+
+    /// <summary>
+    /// Override to describe the UI. Use UseState, UseEffect, etc. from the context.
+    /// Must call hooks in the same order every render.
+    /// </summary>
+    public abstract Element Render();
+
+    /// <summary>
+    /// Controls whether this propless component should re-render when its parent re-renders.
+    /// Default: false — propless components only re-render from their own state changes or context changes.
+    /// Override and return true to always re-render when the parent re-renders.
+    /// </summary>
+    protected internal virtual bool ShouldUpdate() => false;
+```
+
+`Component.Render()` returns an `Element` tree the reconciler walks.
+The component type name is the coarsest attribution and is always
+available because the reconciler has the `Component` instance in hand;
+anything finer requires the element itself to carry a location, which is
+what `Element.CallSite` provides — see the next section.
+
+## Per-element source mapping [#per-element-source-mapping]
+
+Per-element attribution is produced by a Roslyn **interceptor generator**
+that ships in the `Microsoft.UI.Reactor` package under `buildTransitive/sourcemap`,
+and is added to your compilation only when `ReactorSourceMap` is true.
+(It deliberately does *not* live in `analyzers/dotnet/cs`, where everything
+is loaded into every build: this generator inspects every invocation in your
+project, so a Release build should not load it at all.) For each DSL factory
+call site in *your* project it
+emits an interceptor that calls the real factory and stamps the file,
+line and column onto the returned element. No factory signature changes and no call
+site is edited, which is what lets it cover the `params Element?[]
+children` family (`VStack`, `HStack`, `Grid`, …) that `[CallerFilePath]`
+structurally cannot reach.
+
+**You do not turn it on.** It follows the build configuration by *default*, the
+same way WPF gates XAML source info behind `XamlDebuggingInformation`:
+
+| Configuration | Interceptors generated (default) | Locations populated |
+|---|---|---|
+| `Debug` | yes | when the runtime flag is on (see below) |
+| `Release` | no (unless explicitly opted in) | only if opted in — and then source paths ship in the binary |
+
+These are defaults, not a hard configuration lock: the generator is gated on the
+`ReactorSourceMap` property alone, so an explicit
+`<ReactorSourceMap>true</ReactorSourceMap>` generates interceptors in Release too.
+**That embeds mapped source paths in the shipped binary**, so only opt in for a
+Release build you do not distribute — a profiling or diagnostic drop. The reverse
+override, `<ReactorSourceMap>false</ReactorSourceMap>`, turns it off in Debug.
+Generation costs roughly 0.5–0.6 ms per intercepted call site; on the Reactor
+gallery (1,660 call sites) that is about one second on an incremental rebuild.
+
+A Debug build that never turns the runtime flag on allocates nothing extra
+per render: the interceptor checks `ReactorSourceMap.Enabled` and returns the
+original element untouched, measured as byte-identical to a build with no
+generator at all on the M12 control-model benchmark. The devtools verb sets that flag for you; a host embedding
+its own inspector can set `ReactorSourceMap.Enabled` directly, and a process that
+never goes through the CLI (a benchmark host, a repro) can start with
+`REACTOR_SOURCEMAP=1` in the environment.
+
+One cost is *not* zero, and the benchmark above cannot see it. `CallSite` lives in
+the shared `ElementExtras` bucket, and as a nullable struct it is stored inline, so
+it makes that bucket 24 bytes wider — 152 B/instance, measured. Any element carrying
+a behavioral extra (attached properties, theme bindings, animations, resource
+overrides, context values) allocates that bucket anyway and pays the 24 bytes whether
+or not source mapping is on. Elements with no extras, which is the common leaf and
+what M12 measures, allocate no bucket and pay nothing. The alternative — declaring
+`CallSite` inline on the record — measured +24 B on *every* element in every build,
+so this is the cheaper of the two.
+
+Read a location back from any realized control:
+
+```csharp
+SourceLocation? src = ReactorSourceMap.GetSource(target);
+string label = src is null
+    ? "(no source location)"
+    : $"{src.Value.ToShortString()}";   // e.g. "MainPage.cs:34"
+```
+
+`GetSource` walks `UIElement` -> the element back-pointer the reconciler
+already stores -> `Element.CallSite`. It returns `null` when the control
+was not produced by Reactor, when the assembly was built without source
+mapping, or when nothing stamped that element.
+
+A Native AOT app in diagnostics mode (`REACTOR_DIAGNOSTICS=1`) does not give an
+element a back-pointer just for its call site: no managed inspector can load into
+the process to read it, and it costs about 1 KB per control. `GetSource` then reads
+the location from the control's published `ReactorSource` value and returns the same
+`SourceLocation`. `Reconciler.GetElementTag` returns `null` for those controls, as it
+does for any untagged display leaf.
+
+`SourceLocation.ColumnNumber` is the 1-based column of the factory's name
+(the `B` of `Button` in `Row(Button("a"), Button("b"))`), which is what tells
+several calls on one line apart; `0` means the provider did not record one.
+`ToString()` keeps the `file:line` shape,
+so read the column from the property.
+
+### Declared names and hook names [#declared-names-and-hook-names]
+
+The generator also records two static facts that an inspector cannot recover at runtime:
+
+- **Declared name.** `SourceLocation.DeclaredName` gives the identifier an element was assigned to, much like XAML's `x:Name`. It is the local, field or property for an initializer (`var title = TextBlock("x").Bold()` → `title`), the target of a simple assignment, or the member / local-function name of an expression body. Fluent modifier chains, parentheses, casts and both arms of a `?:` are looked through. Inline elements (arguments, collection items, a `return`) and a component's `Render() =>` body have no name.
+- **Hook names.** For each class component's `Render()` and each render function (`Memo(ctx => …)`, `RenderEachTime(ctx => …)`, a root `Mount(ctx => …)`), the generator records the hooks in call order. Each entry has the variable the hook's result went into (`var (count, setCount) = UseState(0)` → `count`) and its line. An unstored hook such as `UseEffect(...)` is listed under its method name. Inspectors read this as the `hooks=` field of `ReactorDiagnostics.SourceProperty`.
+
+Hook indices are `RenderContext` slots, which is what an inspector matches against at runtime. They are exact as long as every hook so far has a statically known slot count:
+
+- `UseState`, `UseReducer`, `UseRef`, `UseEffect`, `UseMemo`, `UseCallback` and `UseContext` take one slot each.
+- A custom hook written in the same project takes the slots of the hooks its straight-line body calls.
+- After a composite built-in (`UseCommand`, `UseResource`, the window hooks, component-extension hooks such as `this.UseElementFocus()`), a custom hook from another assembly, an abstract or overridable (`virtual`) custom hook, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as `?`.
+- A component that inherits `Render()` reports the hooks of the base class that declares it.
+
+Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload update every name and hook list is reported as unknown rather than wrong, because an edit can move a call onto a location the table gives another element. Each assembly also records a fingerprint of every source file's facts, absent names and hooks included (a root mount site with no hooks, such as `host.Mount(...)` building its output with constructors, counts too). If two source-mapped assemblies stamp the same path (both mapping their roots to `/_/`) with different fingerprints, that file's names and render-function hooks are unknown. The same file compiled into both keeps them. When either happens after values were published (a hot-reload update, or a source-mapped assembly loaded later), each host drops the stale `name=` / `hooks=` fields from its controls on its next render.
+
+### Helper methods and `[ReactorSourceTransparent]` [#helper-methods-and-reactorsourcetransparent]
+
+By default a helper is attributed to *itself*. In
+
+```csharp
+static Element MyHeader() => TextBlock("header");
+```
+
+the call site of `TextBlock` is inside `MyHeader`, so every caller of `MyHeader`
+collapses onto that one line. That default is deliberate: for most
+element-returning methods — a `Component.Render()` body above all — the body line
+is exactly where the author wrote the UI, and deferring it to the caller would be
+a regression.
+
+For a *thin forwarder*, whose own line carries no information anyone wants, mark
+it `[ReactorSourceTransparent]`. This is the helper the source-map explorer
+sample uses for its two order rows — click them in the running app and they
+report their own distinct call sites, not this helper's body:
+
+```csharp
+/// <summary>
+/// A thin forwarder: its own line carries nothing a reader wants, so it is marked
+/// source-transparent and each element it returns is attributed to the CALLER's
+/// line instead of to the <c>VStack(</c> below.
+/// </summary>
+/// <remarks>
+/// Click the two order rows in the running sample: without the attribute both report
+/// this method's body line, because that is genuinely where <c>VStack</c> was called.
+/// With it they report the two distinct <c>OrderLine(</c> call sites above.
+/// <para>
+/// It must be <c>internal</c> rather than <c>private</c> — the generated interceptor
+/// lives in another file and has to be able to name it. A <c>private</c> helper here
+/// would report <c>REACTOR_SOURCEMAP_001</c> instead of taking effect.
+/// </para>
+/// </remarks>
+[ReactorSourceTransparent]
+internal static Element OrderLine(string label, string amount) =>
+    VStack(
+        TextBlock(label),
+        TextBlock(amount).Bold()
+    ).Spacing(2);
+```
+
+Two rules do the work, and they compose. The generator emits no interceptor for
+DSL calls *inside* an annotated method, and instead intercepts calls *to* it,
+stamping the caller's line. An annotated helper calling another annotated helper
+therefore keeps deferring outward until it reaches a caller that is not
+annotated. First-stamp-wins still applies, so a helper that merely passes an
+element through does not relabel it.
+
+Because rule 1 suppresses stamping for *everything* inside an annotated method,
+that includes argument-position stamps (below): a bare-string child written
+inside a transparent helper is not stamped either, since the element belongs to
+whoever called the helper.
+
+The annotated method has to be one the generator can emit a forwarding call to:
+
+| Requirement | Why |
+|---|---|
+| `static` | Intercepting an instance method needs an extension-method interceptor, a different shape that is not supported |
+| Returns an `Element` (including `Element?`) | There is nothing else to stamp |
+| `public` or `internal`, never `private` or `protected` | The interceptor lives in a generated file and must be able to name the method |
+| An ordinary method — not an operator, accessor, constructor or local function | C# interceptors can only intercept calls to ordinary methods |
+| No `ref` / `out` / `in` parameters | The interceptor has to restate the signature and call the original with exactly the arguments it received |
+| Not declared in a `file`-local or generic type | Generated code cannot name the first; interceptors cannot be declared for the second |
+
+An annotation that fails any of these is reported as **`REACTOR_SOURCEMAP_001`**
+(a warning) rather than silently doing nothing, and attribution falls back to the
+helper's own line — so a bad annotation is never worse than no annotation. The
+usual `#pragma warning disable REACTOR_SOURCEMAP_001` suppresses it if you
+annotated a method deliberately knowing it cannot be honoured.
+
+The attribute also works across assemblies: it is read from metadata, so a
+library can annotate its own forwarders and consumers get the benefit.
+`Pending(fallback, child)` is annotated this way inside Reactor itself.
+
+### Bare strings and other implicit conversions [#bare-strings-and-other-implicit-conversions]
+
+`Element` declares `implicit operator Element(string)`, so `VStack("hi")` builds
+its child by calling `TextBlock` *inside Reactor's own assembly*. That call site
+cannot be intercepted — interceptors work on ordinary method calls, never on
+operators, and the operator body is already compiled into `Microsoft.UI.Reactor.dll`.
+
+Instead, the enclosing factory call stamps the converted argument as it passes
+it through, using **the argument expression's own line**:
+
+```csharp
+VStack(
+    "a",   // reports this line
+    "b");  // and this one
+```
+
+This applies to any implicit user-defined conversion to `Element`, including ones
+your own types declare — not just `string`. Two limits are worth knowing:
+
+- It only fills in locations nothing else supplies. An argument that already
+  carries a `CallSite` (an explicitly written `TextBlock("x")`, or a conversion
+  whose operator body lives in *your* compilation and was therefore intercepted)
+  keeps the location it already had.
+- It applies only to arguments written at the call site. `VStack(myArray)` passes
+  an array you own, whose elements were converted where the array was built, so
+  nothing is stamped and your array is never written to.
+
+### Roots, hosts and component boundaries [#roots-hosts-and-component-boundaries]
+
+An inspector needs more than per-control locations: it has to know which Reactor
+trees exist and where each one starts. Three pieces cover that.
+
+**Every live host is enumerable.** `ReactorDiagnostics.GetHosts()`
+(`Microsoft.UI.Reactor.Core.Diagnostics`) returns a snapshot of each live host —
+windows opened through `ReactorApp.Run` / `ReactorApp.OpenWindow`, a
+`new ReactorHost(window)` on any window, and every `ReactorHostControl` island:
+
+```csharp
+foreach (var host in ReactorDiagnostics.GetHosts())
+{
+    var root = host.RootComponentName ?? host.RootRenderFunctionName ?? "(not mounted)";
+    lines.Add($"{host.Kind} {host.ReactorWindow?.Key} <{root}> at {host.MountSite}");
+}
+```
+
+Each `ReactorHostInfo` carries the owning `Window` (window hosts), the host element
+(the `ReactorHostControl`, or a window host's `ContentTarget`), the control the root
+currently renders as (`RootControl`), the root's name — `RootComponentName` for a
+component root, `RootRenderFunctionName` (for example `MyApp.Program.Main (lambda)`)
+for a render function — and `MountSite`. It deliberately exposes no reconciler
+internals or live component instances: an inspector reaches the tree on screen through
+`RootControl`. The registry holds hosts weakly and drops them on dispose, so it never
+keeps a window alive; it costs one small allocation per host and nothing per render.
+
+**Root mount sites.** A root is not an element, so it has no `CallSite`. When
+source mapping is on, the generator also intercepts `ReactorApp.Run`,
+`ReactorApp.OpenWindow`, `ReactorWindow.Mount`, `ReactorHost.Mount` and
+`ReactorHostControl.Mount` and records the line and column that called them (the
+column of the method name, as for element call sites). Each of those
+methods claims its own line first thing and hands it to the host it mounts, which
+reports it as `ReactorHostInfo.MountSite`. Anything else that mounts while that
+call is running — a host created in a `configure` callback, a window the framework
+opens itself — reports `null` rather than the outer call's line.
+`Run(Action<ReactorAppContext>)` is left alone: it mounts no root itself, and each
+`OpenWindow` in its startup callback reports its own line. A root created from
+`ReactorHostControl.ComponentFactory` or `ComponentType` (set in XAML) has no call
+site and reports `null`.
+
+**Component boundaries are always tagged while mapping is on.** Every
+`Component<T>()`, `Func(...)` and `Memo(...)` mounts behind a `Border` wrapper. With
+`ReactorSourceMap.Enabled` true, that wrapper always carries the element
+back-pointer — even when the element has no location — so
+`Reconciler.GetElementTag(wrapper)` names the component (`ComponentElement.ComponentType`,
+or the render function) and an inspector can find every boundary. This adds one
+small allocation per *component*, never per leaf, and nothing while the flag is off.
+
+### Known limitations [#known-limitations]
+
+- **Unannotated helper methods attribute to themselves.** A helper `MyHeader()`
+  that calls `TextBlock(...)` reports the line inside `MyHeader`, not the line
+  that called it — interceptors replace the call site, and that *is* the call
+  site. Mark a thin forwarder `[ReactorSourceTransparent]` (above) to defer to
+  the caller, or wrap reusable UI in a named component.
+- **Wrapped third-party controls are stamped by the wrapper generator.** A factory
+  generated by `[GenerateReactorWrapper]` lives on the element type
+  (`MyControlElement.MyControl(...)`) and is invisible to the source-map generator:
+  Roslyn runs every source generator against the same input compilation, so one
+  generator cannot see another's output. The wrapper generator, which wrote the
+  factory, intercepts calls to it instead (same line and column rules, the same own-position
+  stamp for an argument implicitly converted to an `Element` such as a string label, same
+  `ReactorSourceMap.Enabled` switch), and the source-map generator re-binds a DSL call
+  that takes one as an argument — `VStack(8, MyControl(...))`, or any value of the
+  wrapper's element type such as a local, a field or a helper's result — as if the
+  wrapper element were already an `Element`, so the container keeps its location too.
+  Where a call's overload could change once the wrapper records are complete (for
+  example `Show(card)` with both `Show(Element)` and `Show(MyControlElement)` overloads,
+  or an overload taking an interface the record implements), the call is left unstamped
+  rather than guessed, because an interceptor for the wrong overload
+  would fail the build. Code that never touches a wrapper record is unaffected. The
+  wrapper generator only emits interceptors when `ReactorSourceMap` is true and the
+  build lists `Microsoft.UI.Reactor.Generated` in `InterceptorsNamespaces`, which
+  `Microsoft.UI.Reactor.targets` does for you.
+- **Unannotated entry points outside `Factories` are not stamped.** A few
+  element-producing APIs live elsewhere — `PropertyGridDefaults`'s templates and
+  `intl.RichMessage(...)` (`IntlAccessor`) are built-in examples. They build their
+  element by calling `Factories` from inside Reactor's own assembly, where there is
+  no call site in your compilation to intercept, so the element they return reports
+  `null`. The elements you pass *into* them are ordinary call sites and are stamped
+  normally. A static forwarder in this position can opt in with
+  `[ReactorSourceTransparent]`, which is what `Pending(fallback, child)` does;
+  `intl.RichMessage` cannot, because it is an instance method.
+
+## Inspecting components [#inspecting-components]
+
+`ReactorDiagnostics` (namespace `Microsoft.UI.Reactor.Core.Diagnostics`) lets an
+inspector go from a realized control to the component behind it and make
+development-time edits. It is a provisional surface for devtools. These inspection
+members must be called on the UI thread that owns the element (`GetHosts()` is the
+exception: it is safe from any thread). A `ComponentSnapshot` and the property lists are
+plain text: they hold no reference into the component, so they can be kept or
+sent across a process boundary. The one live object is a resolved reference
+edge's `Target`, the mounted control it points at.
+
+```csharp
+// The Border wrapper every Component<T>() / RenderEachTime / Memo mounts into,
+// or a host's root content (window.Content, a ReactorHostControl).
+if (ReactorDiagnostics.DescribeComponent(wrapper) is { } component)
+{
+    // component.Name: "Counter", "Memo in MainPage.Render", "render in App.Main"
+    foreach (var hook in component.State)
+        Console.WriteLine($"{hook.Index} {hook.Kind} {hook.Type} = {hook.Value}");
+
+    // Parsed to the hook's type; same semantics as calling the UseState setter.
+    if (!ReactorDiagnostics.TrySetState(wrapper, 0, "42", out var error))
+        Console.WriteLine(error);   // "'abc' is not a valid int", "... has kind 'ref'; ..."
+
+    ReactorDiagnostics.Rerender(wrapper);   // bypasses memoization, like a state change
+}
+
+// Which WinUI properties this control's common modifiers set (.Width, .Margin, ...).
+var owned = ReactorDiagnostics.GetAppliedProperties(control);
+```
+
+Values are formatted for display: strings are quoted, collections are summarised
+as `List<T> (n items)` from the count they advertise (a lazy sequence is never
+enumerated and shows `(count unknown)`), and long values are cut at 200 characters.
+Values are not redacted: like other in-process inspectors, Reactor reports what
+the app holds, and an inspector that shows or forwards values where a secret must
+not appear (a log, a recording, an AI agent) decides what to hide.
+`TrySetState` accepts numbers, single characters, `true`/`false`, enum member
+names (a `[Flags]` combination only of declared bits), dates, time spans, GUIDs,
+plain text and their nullables (`null` clears a
+string or nullable); it refuses any other type with a reason rather than guessing.
+Hook names are not recorded, so `State` rows have an empty `Name` and are
+identified by call-order index and kind. Props are read by reflection: under
+NativeAOT or trimming a props type's members can be trimmed away, and `Props` then
+holds a single `<Type> (members unavailable)` row instead.
+
+Component lookup does not depend on source mapping. When a root renders a component
+directly (`Render() => Component<Shell>()`), its rendered control is also `Shell`'s
+wrapper; that element describes `Shell`, and the root is reached through its
+`ContentTarget`, its `ReactorHostControl` or the dev-overlay wrapper instead. A host
+that installs straight into `Window.Content` has no such anchor, so in that shape its
+root is not reachable. `GetAppliedProperties` reads
+the element back-pointer, so it needs the control to be tagged — turn source
+mapping on for full coverage. It covers common modifiers only; a property set by
+the control's own element record (`TextBlock("hi")` → `Text`) is not listed. The
+one exception is the `AutomationProperties.Name` Reactor derives from a captioned
+control (`Button("Save")`) when you set none: it is reported as
+`"DefaultAutomationName"` while the live name still equals it.
+
+An open `ContentDialog` is hosted in its own popup, out of reach of an ancestor
+walk from the dialog's buttons, so with source mapping on the realized dialog is
+tagged with its `ContentDialog(...)` element too: `ReactorSourceMap.GetSource(dialog)`
+names the call site. That tag is for attribution only — the element's modifiers
+apply to the collapsed placeholder — so `GetAppliedProperties` and
+`GetReferenceEdges` report nothing for the dialog itself, and the tag is cleared
+when the dialog closes.
+
+A re-render diffs element against element, not against the live control, so it
+does not undo a property you edited directly on the control unless the element's
+value for that property changed.
+
+`ReactorDiagnostics.GetReferenceEdges(control)` lists the references a control
+declares (`.LabeledBy(ref)`, `.XYFocusRight(ref)`, `.DescribedBy(...)`, a
+descriptor's `.Reference(...)`, …): the property, the AutomationId or expected
+target type you passed, and whether it has resolved. A pending edge is the case
+WinUI cannot show you: until the target mounts, the property itself
+(`XYFocusRight`, `AutomationProperties.LabeledBy`) reads null.
+
+## Tips [#tips]
+
+**For now, lean on the component name.** Wrap chunks of UI in
+purpose-named components — `<UserCard>`, `<RegisterForm>`,
+`<NotificationBadge>` — and the ETW events will identify them.
+Inline anonymous `Func`-component lambdas show up as
+`FuncElement` in the `Microsoft-UI-Reactor` EventSource's events, which
+is almost never what you want. (The `Microsoft-UI-Reactor-Perf` spans
+name them by their render function instead, `RenderEachTime in
+MainPage.Render`, but every lambda in one method still shares a name.)
+
+**`RenderError` redacts the message on purpose.** TASK-064 strips
+`ex.Message` from the ETW payload because exception messages can
+carry absolute paths, env values, and form values. Apps that want
+richer diagnostics should log through their own pipeline (ETL/disk
+under their own ACL) rather than the `Microsoft-UI-Reactor` provider.
+
+**PerfView gives you the full sequence.** `Microsoft-UI-Reactor` is a
+managed `EventSource`, so it surfaces on both EventPipe
+(`dotnet-trace`) and classic ETW (PerfView / xperf / WPA). When you
+need to correlate Reactor renders with native WinUI events
+(`Microsoft-Windows-XAML`), only ETW carries both — EventPipe doesn't
+flow native providers.
+
+**Watch the design before designing around it.** Spec 010 owns the
+per-element story and several Phase 4 surfaces (preview inspector,
+reconcile-highlight) wait on it. Don't fork a
+parallel attribution scheme; track the spec.
+
+## Next Steps [#next-steps]
+
+- **[Devtools internals](/microsoft-ui-reactor/main/how-it-works/devtools-internals)** — Where the preview inspector will consume `SourceLocation` once it lands.
+- **[Perf instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation)** — Same ETW pipeline, focused on the timing axis.
+- **[Architecture overview](/microsoft-ui-reactor/main/how-it-works/architecture-overview)** — How the render-loop produces the events documented here.
+- **[Spec 010 — Source mapping design](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/010-source-mapping-design.md)** — The full design reference.

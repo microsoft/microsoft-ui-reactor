@@ -1,0 +1,508 @@
+---
+title: "Modifier System"
+description: "This page is the runtime view of the same fluent chain that Styling introduces from the surface."
+sidebar:
+  label: "Modifier system"
+---
+
+A modifier in Microsoft.UI.Reactor (Reactor) is not an operation — it is a value-bearing
+function `T -> T` that returns a new [`Element`](/microsoft-ui-reactor/main/guides/components) record
+with its `Modifiers` slot replaced. `.Bold().Margin(8).Background(Theme.Accent)`
+copies the element on each call, updating its modifier or theme-binding
+records without adding wrappers. Layout modifiers copy the existing layout
+bucket directly, avoiding a temporary delta and merge. The reconciler reads
+the final record at commit time and writes WinUI properties in a single
+sweep. The trade-off is that you do not get the SwiftUI / Compose
+"each modifier wraps the previous one" semantics — most Reactor
+modifiers are commutative because they live in a flat record, not on a
+stack — and the cases where order *does* matter (paint stacking,
+event-handler null-clears, `.Set` callbacks that read other modifiers)
+are exactly the cases where the modifier writes to a property that
+already carries semantics on its own. The most common mistake is
+expecting `.Padding().Background()` to paint differently than
+`.Background().Padding()`; in Reactor it doesn't, because both end up
+in the same merged `Padding` / `Background` slots.
+
+[Styling](/microsoft-ui-reactor/main/guides/styling) covers the API. Both ride on top of
+`ElementExtensions` in `src/Reactor/Elements/`; the difference is which half
+of the call you care about — the API or the fold.
+
+## Modifiers are flat records, not nested wrappers [#modifiers-are-flat-records-not-nested-wrappers]
+
+A modifier extension method does exactly one thing: it produces a new
+`Element` whose modifier values combine the old ones with the new value.
+General modifiers use `Modify` to merge a delta; layout modifiers copy only
+the changed fields into a new layout bucket and use `WithLayout` to replace
+that bucket. Both preserve untouched fields and previous snapshots.
+`ModifyTheme` handles theme bindings separately:
+
+```csharp
+private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
+    el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
+
+// Callers copy only the fields they set, preserving the existing layout without
+// allocating a temporary delta. The parent and concrete element stay immutable.
+private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
+{
+    var mods = el.Modifiers;
+    return el with
+    {
+        Modifiers = mods is not null
+            ? mods with { Layout = layout }
+            : new ElementModifiers { Layout = layout },
+    };
+}
+
+// Merge visual deltas directly into the bucket, without a temporary parent.
+private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
+{
+    var mods = el.Modifiers;
+    if (mods is null)
+        return el with { Modifiers = new ElementModifiers { Visual = delta } };
+    var merged = mods.Visual is not null ? mods.Visual.Merge(delta) : delta;
+    return el with { Modifiers = mods with { Visual = merged } };
+}
+
+private static T ModifyA11y<T>(T el, AccessibilityModifiers a11y) where T : Element
+{
+    var existing = el.Modifiers?.Accessibility;
+    var merged = existing is not null ? existing.Merge(a11y) : a11y;
+    return Modify(el, new ElementModifiers { Accessibility = merged });
+}
+
+private static T ModifyTheme<T>(T el, string property, ThemeRef theme) where T : Element
+{
+    var bindings = el.ThemeBindings is not null
+        ? new Dictionary<string, ThemeRef>(el.ThemeBindings) { [property] = theme }
+        : new Dictionary<string, ThemeRef> { [property] = theme };
+    return el with { ThemeBindings = bindings };
+}
+```
+
+`Modify<T>(el, mods)` is a `record with` expression on the concrete
+element type — `T : Element`. That generic constraint is what lets
+the call chain stay typed as `TextBlockElement` all the way through
+`.Bold().Margin(8).FontSize(24)`. SwiftUI returns
+`some View` and Compose returns `Modifier`; Reactor keeps the concrete
+type so `.Set(tb => tb.IsTextScaleFactorEnabled = false)` two modifiers
+later still binds to a `TextBlockElement` action — the WinUI control
+you get inside the callback is a typed `TextBlock`, not a base
+`UIElement`.
+
+| Where the value lands | Slot on `Element` | Set via |
+|---|---|---|
+| Layout (margin, padding, size, alignment) | `Modifiers.Layout` | `.Margin`, `.Padding`, `.Width`, `.HAlign`, etc. |
+| Visual (font, foreground, opacity) | `Modifiers.Visual` | `.FontSize`, `.Foreground`, `.Opacity`, etc. |
+| Theme-bound brushes | `ThemeBindings[propertyName]` | `.Background(Theme.Accent)`, `.Foreground(Theme.Ref(...))` |
+| Container-attached values | `Attached[typeof(TAttached)]` | `.Grid(row: 1)`, `.Flex(grow: 1)`, `.Canvas(left: 8)` |
+| Event callbacks | typed `OnXxx` property on the leaf record | `.Click(handler)`, `.TextChanged(handler)` |
+| Reference cells | `Modifiers.Ref` / reference slots | `.Ref(cell)`, `.Target(cell)`, `.LabeledBy(cell)`, `.XYFocusRight(cell)` |
+| Imperative escape hatch | element callback list | `.Set(control => …)` |
+
+![Modifier fold: a Text element gets .Bold, .Margin, .Background, .Grid, .Set in sequence; each call merges into one element with Modifiers / ThemeBindings / Attached slots populated, then the reconciler reads them on commit.](/microsoft-ui-reactor/main/images/modifier-system/modifier-fold.svg)
+
+The slots are independent — adding a `.Margin` after a `.Background`
+doesn't displace the `.Background`, it just merges into the same
+record. That is why "modifier order doesn't matter" is true for almost
+every Reactor modifier: the merge target is a field on a flat record,
+not a position in a wrapper chain.
+
+Dropping a modifier on a later render is a genuine reset, not a no-op:
+the reconciler calls `ClearValue` on the dependency property instead of
+writing that property's default value. The distinction is invisible on a
+bare control and load-bearing on a styled one. A local value outranks
+every `Style` setter in WinUI's precedence order, so writing the default
+would pin it permanently rather than hand the property back to the
+style. Render a themed `Button` with `.Padding(24)` and then without
+`.Padding()` and you get the *themed* padding back, not `0`.
+
+> **Caveat:** The transform modifiers `.Scale()`, `.Rotation()`, `.Translation()`, `.CenterPoint()` and
+> `.TransformOrigin()` write the element's composition visual
+> (`ElementCompositionPreview.GetElementVisual`), not the XAML facade properties. A
+> non-identity value takes the visual the first time it's written. An identity value
+> (`.Scale(1)`, `.Rotation(0)`) on a control whose visual hasn't been taken writes nothing, so
+> `.Rotation(isOpen ? 90 : 0)` costs nothing until it first turns. Once the visual is taken, it
+> stays taken for the control's lifetime, which has two consequences for code that touches the
+> facades directly:
+> 
+> - `fe.Scale`, `fe.Rotation` and `fe.CenterPoint` read identity. Read the values back from the
+>   visual instead (`ElementCompositionPreview.GetElementVisual(fe).Scale`). Under `.TransformOrigin()`
+>   an expression drives the visual's `CenterPoint`, so its getter doesn't return the pivot.
+> - WinUI throws `UnauthorizedAccessException` on a later write to `fe.Scale`, `fe.Rotation`,
+>   `fe.CenterPoint`, `fe.RotationAxis` or `fe.TransformMatrix`, so a `.Set(...)` or `.OnMount(...)`
+>   that writes one on the same element fails. Use the modifier instead. `REACTOR_ANIM_004` flags
+>   the `.Set` form at build time, and a `DiagnosticLog` warning names the modifier at run time.
+> 
+> `fe.Translation` stays writable, and Reactor enables translation on the visual only when the
+> element declares `.Translation()`, a `translation:` keyframe or an `.InteractionStates` translation.
+> Don't write `fe.Translation` on an element that does, because WinUI ignores the write once
+> translation is enabled.
+> 
+> Dropping the last declaration restores its identity value on the visual: `Vector3.One` for scale,
+> and zero for rotation, translation and center point. Dropping `.TransformOrigin()` stops its pivot
+> expression and puts back the `.CenterPoint()` pixel pivot, or the leading top corner. If the modifier previously
+> started a composition animation, Reactor also stops that animation. Dropping `.Opacity()` releases
+> its dependency property and any composition animation started by the modifier.
+> When decorators share a native target, a declaration that remains on another
+> layer keeps its value and animation configuration; removing one layer does not
+> reset the whole control. Restoring that value respects the configuration's
+> selected property flags; an explicit ambient `WithAnimation` scope still takes
+> precedence.
+
+Reference modifiers are the exception to "just write this value" in the
+implementation, but not in the authoring model. `.Ref(cell)` binds the
+current element into an `ElementRef` cell; reference-property modifiers
+such as `.Target(cell)`, `.LabeledBy(cell)`, `.DescribedBy(cells...)`,
+`.FlowsTo(cells...)`, `.FlowsFrom(cells...)`, and
+`.XYFocusUp/Down/Left/Right(cell)` subscribe to those cells and write the
+native property when the target resolves. Removing the modifier on a
+later render clears the slot and unsubscribes. Unmounting the target
+sets the cell to `null`, so every referrer clears without a handler
+sampling `cell.Current`.
+
+> **Caveat:** `Modify` calls `el.Modifiers.Merge(mods)` with the *new* modifier as
+> the right-hand side. `Merge`'s rule for scalar properties is
+> "`other ?? self`" — the later call wins when both set the same slot.
+> `.FontSize(12).FontSize(16)` keeps 16, not 12, because the second call
+> went on top. This matters for [theming](/microsoft-ui-reactor/main/guides/theming-tokens): a
+> `.Background("#FF0000")` literal placed *after* a
+> `.Background(Theme.Accent)` overrides the theme binding entirely and
+> silently breaks dark-mode color swaps. The
+> [`REACTOR_THEME_001`](/microsoft-ui-reactor/main/get-started/rules-of-reactor) analyzer flags the literal
+> form so the override never ships.
+
+## Attached values live in a separate slot [#attached-values-live-in-a-separate-slot]
+
+Container-attached values (`Grid.Row`, `Canvas.Left`, `FlexPanel.Grow`)
+don't go into `Modifiers` because they're metadata for a *parent*, not
+the element itself. They ride in `Element.Attached` — a
+`Dictionary<Type, object>` keyed by the attached-data record:
+
+```csharp
+/// <summary>
+/// Sets Grid attached properties (row, column, spans) on this element.
+/// Only meaningful when the element is a child of a Grid.
+/// </summary>
+public static T Grid<T>(this T el, int row = 0, int column = 0, int rowSpan = 1, int columnSpan = 1) where T : Element =>
+    (T)el.SetAttached(new GridAttached(row, column, rowSpan, columnSpan));
+```
+
+`.Grid(row: 1, column: 2)` creates a `GridAttached(1, 2, 1, 1)` record
+and calls `el.SetAttached(...)`. The dictionary is keyed by
+`typeof(GridAttached)`, so a later `.Grid(row: 3)` replaces the prior
+entry (not merges — attached records are atomic). A Reactor `Grid`
+asks each child element for its `GetAttached<GridAttached>()` during
+mount, then writes `Grid.SetRow` / `Grid.SetColumn` on the WinUI
+child. The same pattern wraps `Flex`:
+
+```csharp
+public static T Flex<T>(this T el,
+    double grow = 0,
+    double shrink = 1,
+    double? basis = null,
+    double? minWidth = null,
+    double? minHeight = null,
+    FlexAlign? alignSelf = null,
+    FlexPositionType position = FlexPositionType.Relative,
+    double? left = null,
+    double? top = null,
+    double? right = null,
+    double? bottom = null
+) where T : Element
+{
+    if (grow < 0 || double.IsNaN(grow) || double.IsInfinity(grow))
+        throw new ArgumentOutOfRangeException(nameof(grow), "Grow must be a non-negative, finite value.");
+
+    if (shrink < 0 || double.IsNaN(shrink) || double.IsInfinity(shrink))
+        throw new ArgumentOutOfRangeException(nameof(shrink), "Shrink must be a non-negative, finite value.");
+
+    if (minWidth is { } mw && (mw < 0 || double.IsNaN(mw) || double.IsInfinity(mw)))
+        throw new ArgumentOutOfRangeException(nameof(minWidth), "MinWidth must be a non-negative, finite value (or null for CSS `min-width: auto`).");
+
+    if (minHeight is { } mh && (mh < 0 || double.IsNaN(mh) || double.IsInfinity(mh)))
+        throw new ArgumentOutOfRangeException(nameof(minHeight), "MinHeight must be a non-negative, finite value (or null for CSS `min-height: auto`).");
+
+    return (T)el.SetAttached(new FlexAttached(grow, shrink, basis, minWidth, minHeight, alignSelf, position, left, top, right, bottom));
+}
+```
+
+Flex distinguishes itself with input validation — `grow` and `shrink`
+have to be non-negative and finite — but otherwise lives in the same
+`Attached` dictionary, keyed by `typeof(FlexAttached)`. Reading two
+attached entries from the same child is the parent's call; a `Grid`
+ignores `FlexAttached`, a [`FlexPanel`](/microsoft-ui-reactor/main/guides/flex-layout) ignores
+`GridAttached`. Mixing them on one element is harmless but pointless —
+only the parent's matching kind gets read.
+
+## Event-callback modifiers are typed `with` updates [#event-callback-modifiers-are-typed-with-updates]
+
+Event handlers don't ride in `ElementModifiers` either. They are
+typed properties on the concrete leaf record (`ButtonElement.OnClick`,
+`TextBoxElement.OnChanged`), and the `.Click(...)` /
+`.Changed(...)` extensions are thin `record with { }` updates:
+
+```csharp
+/// <summary>Wires a click handler (sets <see cref="ButtonElement.OnClick"/>). Passing <c>null</c> clears any existing handler.</summary>
+public static ButtonElement Click(this ButtonElement el, Action? handler) =>
+    el with { OnClick = handler };
+
+/// <summary>Wires a click handler (sets <see cref="HyperlinkButtonElement.OnClick"/>). Passing <c>null</c> clears.</summary>
+public static HyperlinkButtonElement Click(this HyperlinkButtonElement el, Action? handler) =>
+    el with { OnClick = handler };
+```
+
+Two reasons the design split this off from generic modifiers. First,
+[`C# binds `el.OnClick(arg)` to delegate invocation before considering
+extension methods`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-fluent-api-uplift.md), so a `.OnClick`
+extension method would be permanently unreachable — the WinUI XAML
+convention (`Click="…"`, drop the `On` prefix) avoids the clash.
+Second, callback identity participates in
+[reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation) — `Element.HasCallbacks` is the
+signal the reconciler uses to decide whether to refresh the event
+trampoline's `Tag` after a skip fast-path. Storing callbacks in typed
+fields keeps that check cheap (one `is not null` per relevant slot)
+instead of forcing the reconciler to walk a delegate dictionary.
+
+## Patterns [#patterns]
+
+### Authoring a custom modifier [#authoring-a-custom-modifier]
+
+If you find yourself writing `.Padding(8).WithBorder(Theme.CardStroke).Background(Theme.CardBackground)`
+on every card, hoist it into a single extension that calls the existing
+modifiers in order:
+
+```csharp
+public static T Card<T>(this T el) where T : Element =>
+    el.Padding(8).WithBorder(Theme.CardStroke).Background(Theme.CardBackground);
+```
+
+The generic constraint `T : Element` is the only ceremony — every
+piece of the chain preserves the concrete type, so the result still
+binds to whatever record the caller passed in. There is no
+`CardModifier` record to define, no `ModifierBuilder`, no registration
+step. The chain *is* the modifier.
+
+When you need a modifier that writes to a new slot (e.g., a custom
+attached property a custom container reads), the pattern is the same
+two helpers `Grid` and `Flex` use: define an attached-data record, have
+a modifier store it on the element, and have the parent panel read it
+back in its mount / update code.
+
+`SetAttached(...)` and `GetAttached<TAttached>()` are the internal
+shorthands the built-in modifiers use for those two steps, so that exact
+spelling is first-party only. From outside the framework assembly, go
+through the public `Attached` slot directly — it is a `Type`-keyed
+`IReadOnlyDictionary<Type, object>` with an `init` setter, so a modifier
+writes it with a `with` expression and the parent reads its own record
+back out by type:
+
+```csharp
+public record BadgeAttached(string Label);
+
+public static class BadgeExtensions
+{
+    public static T Badge<T>(this T el, string label) where T : Element
+    {
+        // Copy any existing entries first — replacing the dictionary wholesale
+        // would drop another provider's attached record on the same element.
+        var attached = new Dictionary<Type, object>();
+        if (el.Attached is { } existing)
+        {
+            foreach (var kv in existing) attached[kv.Key] = kv.Value;
+        }
+        attached[typeof(BadgeAttached)] = new BadgeAttached(label);
+        return el with { Attached = attached };
+    }
+}
+```
+
+The parent panel reads it back keyed by its own record type:
+
+```csharp
+if (child.Attached?.TryGetValue(typeof(BadgeAttached), out var data) == true
+    && data is BadgeAttached badge)
+{
+    ApplyBadge(realizedChild, badge);
+}
+```
+
+### Reading the merged modifier in a custom panel [#reading-the-merged-modifier-in-a-custom-panel]
+
+A custom layout panel that needs to know the user's
+`Modifiers.Layout.Margin` reads it off the element directly — the
+reconciler has already folded the chain by the time the panel's
+mount handler runs:
+
+```csharp
+public abstract record Element
+{
+    /// <summary>
+    /// Optional key for stable identity across re-renders (like React's key prop).
+    /// When set, the reconciler uses it to match elements across list reorderings.
+    /// </summary>
+    public string? Key { get; init; }
+
+    /// <summary>
+    /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
+    /// Modifiers are stored inline so the concrete element type is preserved through chaining.
+    /// </summary>
+    public ElementModifiers? Modifiers { get; init; }
+```
+
+The record exposes `Modifiers` as a single nullable slot; if null, no
+modifier touched the element; if non-null, every modifier the chain
+applied has been merged into it. There is no traversal cost — one
+field read tells you everything the user said about the element's
+appearance.
+
+## Common Mistakes [#common-mistakes]
+
+### Expecting `Padding` and `Background` to stack like SwiftUI [#expecting-padding-and-background-to-stack-like-swiftui]
+
+```csharp
+// Don't expect a red stripe inside the padding:
+TextBlock("hi").Padding(10).Background("#FF0000");
+```
+
+```csharp
+private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
+    el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
+
+// Callers copy only the fields they set, preserving the existing layout without
+// allocating a temporary delta. The parent and concrete element stay immutable.
+private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
+{
+    var mods = el.Modifiers;
+    return el with
+    {
+        Modifiers = mods is not null
+            ? mods with { Layout = layout }
+            : new ElementModifiers { Layout = layout },
+    };
+}
+
+// Merge visual deltas directly into the bucket, without a temporary parent.
+private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
+{
+    var mods = el.Modifiers;
+    if (mods is null)
+        return el with { Modifiers = new ElementModifiers { Visual = delta } };
+    var merged = mods.Visual is not null ? mods.Visual.Merge(delta) : delta;
+    return el with { Modifiers = mods with { Visual = merged } };
+}
+
+private static T ModifyA11y<T>(T el, AccessibilityModifiers a11y) where T : Element
+{
+    var existing = el.Modifiers?.Accessibility;
+    var merged = existing is not null ? existing.Merge(a11y) : a11y;
+    return Modify(el, new ElementModifiers { Accessibility = merged });
+}
+
+private static T ModifyTheme<T>(T el, string property, ThemeRef theme) where T : Element
+{
+    var bindings = el.ThemeBindings is not null
+        ? new Dictionary<string, ThemeRef>(el.ThemeBindings) { [property] = theme }
+        : new Dictionary<string, ThemeRef> { [property] = theme };
+    return el with { ThemeBindings = bindings };
+}
+```
+
+In SwiftUI, calling `.padding().background(Color.red)` paints the
+background *outside* the padding; reversing the order paints it
+inside. In Reactor, both calls land in the same `Modifiers.Layout.Padding`
+and `Modifiers.Visual.Background` slots, and the WinUI control gets
+one padding and one background — the order doesn't change the
+geometry. If you want the SwiftUI semantics, wrap the inner element in
+a [`Border`](/microsoft-ui-reactor/main/guides/styling) explicitly: `Border(TextBlock("hi").Padding(10)).Background("#FF0000")`
+gives you the outer stripe; `Border(TextBlock("hi")).Padding(10).Background("#FF0000")`
+gives you the inner.
+
+### Re-setting the same property and expecting an additive effect [#re-setting-the-same-property-and-expecting-an-additive-effect]
+
+```csharp
+// Don't:
+TextBlock("hi").Margin(8).Margin(left: 16);   // last wins — margin is (16,8,8,8)? NO. it's (16,0,0,0)
+```
+
+```csharp
+private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
+    el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
+
+// Callers copy only the fields they set, preserving the existing layout without
+// allocating a temporary delta. The parent and concrete element stay immutable.
+private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
+{
+    var mods = el.Modifiers;
+    return el with
+    {
+        Modifiers = mods is not null
+            ? mods with { Layout = layout }
+            : new ElementModifiers { Layout = layout },
+    };
+}
+
+// Merge visual deltas directly into the bucket, without a temporary parent.
+private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
+{
+    var mods = el.Modifiers;
+    if (mods is null)
+        return el with { Modifiers = new ElementModifiers { Visual = delta } };
+    var merged = mods.Visual is not null ? mods.Visual.Merge(delta) : delta;
+    return el with { Modifiers = mods with { Visual = merged } };
+}
+
+private static T ModifyA11y<T>(T el, AccessibilityModifiers a11y) where T : Element
+{
+    var existing = el.Modifiers?.Accessibility;
+    var merged = existing is not null ? existing.Merge(a11y) : a11y;
+    return Modify(el, new ElementModifiers { Accessibility = merged });
+}
+
+private static T ModifyTheme<T>(T el, string property, ThemeRef theme) where T : Element
+{
+    var bindings = el.ThemeBindings is not null
+        ? new Dictionary<string, ThemeRef>(el.ThemeBindings) { [property] = theme }
+        : new Dictionary<string, ThemeRef> { [property] = theme };
+    return el with { ThemeBindings = bindings };
+}
+```
+
+The second `.Margin(left: 16)` copies the existing layout bucket with
+`Margin = new Thickness(16, 0, 0, 0)`, then replaces that bucket in a
+copied modifiers parent and element. The whole `Thickness` value is
+replaced, not merged side by side. The result is `(16, 0, 0, 0)`,
+not `(16, 8, 8, 8)`. Either call the per-side overload once
+(`.Margin(left: 16, top: 8, right: 8, bottom: 8)`) or stick to the
+uniform shape if all sides are equal.
+
+## Tips [#tips]
+
+**Generic constraint preserves type — chain freely.** `.Bold()` returns
+`TextBlockElement`, `.Margin()` returns `TextBlockElement`, every
+modifier preserves the type. `.Set(tb => ...)` at any point in the
+chain still gets the strongly-typed `TextBlock` callback.
+
+**Merge is "later wins" per slot.** Repeating the same modifier
+overrides; it doesn't accumulate. The exception is event-callback
+parity, which the [Fluent API spec §15 Q2](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-fluent-api-uplift.md)
+documents — passing `null` to a `.Click(null)` clears the handler
+rather than queuing a no-op.
+
+**Attached values are atomic.** `.Grid(row: 1).Grid(column: 2)`
+replaces the first `GridAttached` with a fresh one — the column wins
+and the row resets to zero. Set all attached fields in one call:
+`.Grid(row: 1, column: 2)`.
+
+**Reach for `.Set` only when nothing else fits.** If a modifier exists
+(`.Bold`, `.FontSize`, `.Foreground`), use it — the reconciler can
+batch property writes for known modifiers and skip them under
+[`CanSkipUpdate`](/microsoft-ui-reactor/main/how-it-works/reconciliation). `.Set` always runs.
+
+## Next Steps [#next-steps]
+
+- **[Styling](/microsoft-ui-reactor/main/guides/styling)** — Previous: the surface API for the chain documented here.
+- **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — Next: where the merged modifier actually reaches WinUI.
+- **[Theming tokens](/microsoft-ui-reactor/main/guides/theming-tokens)** — `ThemeBindings` companion slot for brush properties.
+- **[Flex layout](/microsoft-ui-reactor/main/guides/flex-layout)** — Worked example of an attached-data record.
+- **[Element pool](/microsoft-ui-reactor/main/how-it-works/element-pool)** — Why modifier cleanup matters when a control is recycled.

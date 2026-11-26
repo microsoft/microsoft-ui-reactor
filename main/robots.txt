@@ -1,0 +1,5 @@
+User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+Allow: /
+
+Sitemap: https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml

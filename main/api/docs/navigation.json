@@ -1,0 +1,1556 @@
+{
+  "actions": [],
+  "cta": null,
+  "featured": [],
+  "root": "/",
+  "selectors": [
+    {
+      "items": [
+        {
+          "label": "Latest release",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/latest/"
+        },
+        {
+          "label": "Development (main)",
+          "path": "/"
+        },
+        {
+          "label": "0.1.0-preview.18",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/"
+        },
+        {
+          "label": "0.1.0-preview.17",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/"
+        },
+        {
+          "label": "0.1.0-preview.16",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/"
+        },
+        {
+          "label": "0.1.0-preview.15",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.15/"
+        },
+        {
+          "label": "0.1.0-preview.14",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.14/"
+        },
+        {
+          "label": "0.1.0-preview.13",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/"
+        },
+        {
+          "label": "0.1.0-preview.12",
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.12/"
+        }
+      ],
+      "kind": "version",
+      "label": "Version"
+    }
+  ],
+  "sidebar": [
+    {
+      "children": [
+        {
+          "description": "Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the return value of a factory like TextBlock(...) or Button(...) — a plain element you compose, chain modifiers onto, and return from Render().",
+          "kind": "page",
+          "label": "Controls catalog",
+          "pageId": "filesystem:controls/index.md",
+          "route": "/controls"
+        },
+        {
+          "description": "Every form control in Reactor follows the controlled-input pattern: you own the value, you provide the change handler, and the control reflects your state. There is no two-way binding. The data always flows one direction.",
+          "kind": "page",
+          "label": "Forms and input",
+          "pageId": "filesystem:controls/forms.md",
+          "route": "/controls/forms"
+        },
+        {
+          "description": "When you need to render a list of data, Reactor provides three typed collection elements and a simple ForEach helper.",
+          "kind": "page",
+          "label": "Collections",
+          "pageId": "filesystem:controls/collections.md",
+          "route": "/controls/collections"
+        },
+        {
+          "description": "This page covers display text, inline rich text, rich-text editing, and media controls in Reactor.",
+          "kind": "page",
+          "label": "Text and media",
+          "pageId": "filesystem:controls/text-and-media.md",
+          "route": "/controls/text-and-media"
+        },
+        {
+          "description": "Microsoft.UI.Reactor (Reactor)'s status and info controls report what the app is doing without stealing focus. Reach for them when the user needs to know something — a save succeeded, a long operation is running, a feature exists — and doesn't need to decide anything.",
+          "kind": "page",
+          "label": "Status and info",
+          "pageId": "filesystem:controls/status-and-info.md",
+          "route": "/controls/status-and-info"
+        },
+        {
+          "description": "ContentDialog, MenuFlyout, CommandBarFlyout and Popup: when to reach for each one, and how to drive them from component state.",
+          "kind": "page",
+          "label": "Dialogs and flyouts",
+          "pageId": "filesystem:controls/dialogs-and-flyouts.md",
+          "route": "/controls/dialogs-and-flyouts"
+        },
+        {
+          "description": "Reactor's data system provides a virtualized DataGrid<T> backed by a pluggable data source abstraction. You define columns (or auto-generate them), connect a data source, and the grid handles sorting, filtering, searching, selection, and inline editing.",
+          "kind": "page",
+          "label": "Data system",
+          "pageId": "filesystem:controls/data-system.md",
+          "route": "/controls/data-system"
+        },
+        {
+          "description": "ReactorD3 brings data visualization to Microsoft.UI.Reactor (Reactor). The chart DSL provides high-level LineChart, BarChart, AreaChart, and PieChart factories that produce standard Reactor elements. You bind data, configure appearance with a fluent API, and the chart renders as native WinUI shapes on a Canvas.",
+          "kind": "page",
+          "label": "Charting",
+          "pageId": "filesystem:controls/charting.md",
+          "route": "/controls/charting"
+        },
+        {
+          "description": "Reactor.Advanced exposes the three Win2D canvas controls as Reactor elements. Add the package when you need immediate-mode drawing.",
+          "kind": "page",
+          "label": "Win2D canvas",
+          "pageId": "filesystem:controls/win2d-canvas.md",
+          "route": "/controls/win2d-canvas"
+        }
+      ],
+      "display": "flat",
+      "kind": "group",
+      "label": "Controls",
+      "path": "/controls",
+      "route": "/controls"
+    },
+    {
+      "children": [
+        {
+          "description": "Microsoft.UI.Reactor (Reactor) is a declarative UI framework for building native Windows desktop apps in pure C#. No XAML. No data binding. No view models. You describe your UI as a function of state, and Reactor keeps the screen in sync.",
+          "kind": "page",
+          "label": "Overview",
+          "pageId": "filesystem:get-started/index.md",
+          "route": "/get-started"
+        },
+        {
+          "description": "Install Reactor, scaffold a project, and grow it from hello world to a todo list and a calculator.",
+          "kind": "page",
+          "label": "Quickstart",
+          "pageId": "filesystem:get-started/quickstart.md",
+          "route": "/get-started/quickstart"
+        },
+        {
+          "description": "Coming soon — this page is the mental-model essay that frames Microsoft.UI.Reactor (Reactor) for new readers: UI as a function of state, why there is no XAML, when to reach for hooks, and how components compose.",
+          "kind": "page",
+          "label": "Thinking in Reactor",
+          "pageId": "filesystem:get-started/thinking-in-reactor.md",
+          "route": "/get-started/thinking-in-reactor"
+        },
+        {
+          "description": "If you already know XAML, Reactor is not a different Windows UI stack. It still renders real WinUI controls. The shift is in how you describe the UI: instead of splitting a page across XAML, bindings, converters, and code-behind, you return the UI directly from C# and let Reactor keep the native control tree in sync.",
+          "kind": "page",
+          "label": "Coming from XAML",
+          "pageId": "filesystem:get-started/xaml-developers.md",
+          "route": "/get-started/xaml-developers"
+        },
+        {
+          "description": "This page is for the XAML developer who wants the why behind Reactor's design.",
+          "kind": "page",
+          "label": "Reactor vs XAML",
+          "pageId": "filesystem:get-started/reactor-vs-xaml.md",
+          "route": "/get-started/reactor-vs-xaml"
+        },
+        {
+          "description": "Microsoft.UI.Reactor (Reactor) at a glance. Every row links to the page that covers it in depth.",
+          "kind": "page",
+          "label": "Cheat sheet",
+          "pageId": "filesystem:get-started/cheat-sheet.md",
+          "route": "/get-started/cheat-sheet"
+        },
+        {
+          "description": "Microsoft.UI.Reactor (Reactor)'s render loop has a small set of invariants. Most are enforced by analyzers, so a violation surfaces at build time with a specific code; the rest are conventions that the framework expects. This page lists them, names the analyzer where one exists, and shows the before/after pair so the catch is visible.",
+          "kind": "page",
+          "label": "Rules of Reactor",
+          "pageId": "filesystem:get-started/rules-of-reactor.md",
+          "route": "/get-started/rules-of-reactor"
+        }
+      ],
+      "display": "flat",
+      "kind": "group",
+      "label": "Get started",
+      "path": "/get-started",
+      "route": "/get-started"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "description": "Components are the building blocks of a Reactor app. Each component is a class with a Render() method that returns an element tree describing its UI.",
+              "kind": "page",
+              "label": "Components",
+              "pageId": "filesystem:guides/01-(core-concepts)/components.md",
+              "route": "/guides/components"
+            },
+            {
+              "description": "Hooks are functions you call inside Render() to manage state, side effects, and memoization. They replace the need for view models, event handlers, and lifecycle methods.",
+              "kind": "page",
+              "label": "Hooks",
+              "pageId": "filesystem:guides/01-(core-concepts)/hooks.md",
+              "route": "/guides/hooks"
+            },
+            {
+              "description": "UseEffect runs side effects — code that reaches outside the component's render function. Timers, data fetching, subscriptions, and DOM manipulation all belong in effects, not in Render().",
+              "kind": "page",
+              "label": "Effects and lifecycle",
+              "pageId": "filesystem:guides/01-(core-concepts)/effects.md",
+              "route": "/guides/effects"
+            },
+            {
+              "description": "Context lets you pass data through the component tree without threading it through every level of props. Define a Context<T>, provide a value at any level, and any descendant can read it with UseContext.",
+              "kind": "page",
+              "label": "Context",
+              "pageId": "filesystem:guides/01-(core-concepts)/context.md",
+              "route": "/guides/context"
+            },
+            {
+              "description": "A Command bundles an action with its metadata. Define it once and use it across buttons, menus, toolbars, and dialogs — the metadata stays consistent everywhere.",
+              "kind": "page",
+              "label": "Commanding",
+              "pageId": "filesystem:guides/01-(core-concepts)/commanding.md",
+              "route": "/guides/commanding"
+            },
+            {
+              "description": "Escape hatches for the few jobs the declarative model doesn't fit: error boundaries, memoized subtrees, element refs, direct property writes, view-model bridges, and custom hooks.",
+              "kind": "page",
+              "label": "Advanced patterns",
+              "pageId": "filesystem:guides/01-(core-concepts)/advanced.md",
+              "route": "/guides/advanced"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Core concepts",
+          "path": "/guides"
+        },
+        {
+          "children": [
+            {
+              "description": "Reactor provides a small set of layout primitives that compose to build any screen structure. Every layout element accepts children and optional spacing.",
+              "kind": "page",
+              "label": "Layout",
+              "pageId": "filesystem:guides/02-(layout-and-styling)/layout.md",
+              "route": "/guides/layout"
+            },
+            {
+              "description": "FlexPanel is a Yoga-backed CSS Flexbox implementation, exposed through the FlexRow and FlexColumn factories. Reach for it when the layout needs alignment control, wrapping, or proportional sizing that VStack and HStack cannot express.",
+              "kind": "page",
+              "label": "Flex layout",
+              "pageId": "filesystem:guides/02-(layout-and-styling)/flex-layout.md",
+              "route": "/guides/flex-layout"
+            },
+            {
+              "description": "Color and style your UI with theme tokens, named-style modifiers, and resource overrides that follow the Light, Dark, and high-contrast themes automatically.",
+              "kind": "page",
+              "label": "Styling and theming",
+              "pageId": "filesystem:guides/02-(layout-and-styling)/styling.md",
+              "route": "/guides/styling"
+            },
+            {
+              "description": "Reactor exposes 36 named theme tokens on the static Theme class plus a Theme.Ref(string) escape hatch for any XAML resource key.",
+              "kind": "page",
+              "label": "Theming tokens",
+              "pageId": "filesystem:guides/02-(layout-and-styling)/theming-tokens.md",
+              "route": "/guides/theming-tokens"
+            },
+            {
+              "description": "Reactor animations are declarative. You set the target value (opacity, scale, translation) and attach a transition modifier.",
+              "kind": "page",
+              "label": "Animation",
+              "pageId": "filesystem:guides/02-(layout-and-styling)/animation.md",
+              "route": "/guides/animation"
+            },
+            {
+              "description": "Reactor's input surface is declarative: attach handlers via .On* modifiers and the reconciler wires WinUI events, auto-enables the matching flags (for example IsDoubleTapEnabled), and survives re-renders without re-subscribing the underlying WinUI event.",
+              "kind": "page",
+              "label": "Input and gestures",
+              "pageId": "filesystem:guides/02-(layout-and-styling)/input-and-gestures.md",
+              "route": "/guides/input-and-gestures"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Layout and styling",
+          "path": "/guides"
+        },
+        {
+          "children": [
+            {
+              "description": "Reactor uses a stack-based navigation model with type-safe routes. You define your routes as an enum, create a navigation handle with UseNavigation, and render the current page with NavigationHost.",
+              "kind": "page",
+              "label": "Navigation",
+              "pageId": "filesystem:guides/03-(building-apps)/navigation.md",
+              "route": "/guides/navigation"
+            },
+            {
+              "description": "Most Microsoft.UI.Reactor (Reactor) apps start with the single window created by ReactorApp.Run. Larger desktop apps can open multiple native WinUI top-level windows with WindowSpec and ReactorApp.OpenWindow, while keeping the same declarative component model used inside a page.",
+              "kind": "page",
+              "label": "Windows",
+              "pageId": "filesystem:guides/03-(building-apps)/windows.md",
+              "route": "/guides/windows"
+            },
+            {
+              "description": "Some shell-window ideas are possible on Windows only by leaving the safe Reactor contract. We document the recipe so expert apps can make an informed choice, but Reactor does not ship these primitives as first-class WindowSpec fields.",
+              "kind": "page",
+              "label": "Advanced windowing",
+              "pageId": "filesystem:guides/03-(building-apps)/windowing-advanced.md",
+              "route": "/guides/windowing-advanced"
+            },
+            {
+              "description": "Microsoft.UI.Reactor's docking system lets a single shell host multiple user-rearrangeable surfaces — the Visual Studio / VS Code / Photoshop / Figma layout idiom. Users drag tabs between groups, split panes, pin tool windows to a side, and tear panes out into floating sub-windows; layouts persist across sessions.",
+              "kind": "page",
+              "label": "Docking windows",
+              "pageId": "filesystem:guides/03-(building-apps)/docking.md",
+              "route": "/guides/docking"
+            },
+            {
+              "description": "Microsoft.UI.Reactor (Reactor)'s async hooks — UseResource, UseInfiniteResource, and UseMutation — replace the \"one UseState for data, one for loading, one for error, one UseEffect to tie them together\" pattern. They own the fetch lifecycle: cancellation on deps-change, drop late results after unmount, shared caching across siblings, and stale-while-revalidate by default.",
+              "kind": "page",
+              "label": "Async resources",
+              "pageId": "filesystem:guides/03-(building-apps)/async-resources.md",
+              "route": "/guides/async-resources"
+            },
+            {
+              "description": "UsePersisted holds a value past a component re-mount — the user navigates away, the component unmounts, the user navigates back, and the captured state is still there.",
+              "kind": "page",
+              "label": "Persistence",
+              "pageId": "filesystem:guides/03-(building-apps)/persistence.md",
+              "route": "/guides/persistence"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Building apps",
+          "path": "/guides"
+        },
+        {
+          "children": [
+            {
+              "description": "Reactor provides accessibility modifiers on every component. They map directly to WinUI's automation properties, so screen readers, keyboard navigation, and test tools work out of the box.",
+              "kind": "page",
+              "label": "Accessibility",
+              "pageId": "filesystem:guides/04-(ship-your-app)/accessibility.md",
+              "route": "/guides/accessibility"
+            },
+            {
+              "description": "Microsoft.UI.Reactor (Reactor)'s localization system wraps your component tree in a LocaleProvider that supplies an IntlAccessor to every descendant via context. You look up messages, format numbers and dates, and detect RTL layouts — all locale-aware, all reactive.",
+              "kind": "page",
+              "label": "Localization",
+              "pageId": "filesystem:guides/04-(ship-your-app)/localization.md",
+              "route": "/guides/localization"
+            },
+            {
+              "description": "Microsoft.UI.Reactor (Reactor)'s render loop is deterministic and synchronous. A Component mounted in a unit test renders, runs effects, accepts state updates, re-renders, and disposes through the same code path the WinUI host uses — minus the WinUI tree at the bottom.",
+              "kind": "page",
+              "label": "Testing",
+              "pageId": "filesystem:guides/04-(ship-your-app)/testing.md",
+              "route": "/guides/testing"
+            },
+            {
+              "description": "A top-down performance workflow: take a trace with dotnet-trace or PerfView, learn what each span means, find the outlier, and reproduce a benchmark so a regression has a number behind it.",
+              "kind": "page",
+              "label": "Performance",
+              "pageId": "filesystem:guides/04-(ship-your-app)/performance.md",
+              "route": "/guides/performance"
+            },
+            {
+              "description": "A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable — dotnet publish produces the deployable artifact and the framework itself adds nothing exotic to the project file.",
+              "kind": "page",
+              "label": "Packaging",
+              "pageId": "filesystem:guides/04-(ship-your-app)/packaging.md",
+              "route": "/guides/packaging"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Ship your app",
+          "path": "/guides"
+        },
+        {
+          "children": [
+            {
+              "description": "Reactor's inner loop centers on dotnet watch and preview mode: you edit code, save, and see changes in a running window — no manual restart, no state-resetting class reload most of the time.",
+              "kind": "page",
+              "label": "Dev tooling",
+              "pageId": "filesystem:guides/05-(developer-tools)/dev-tooling.md",
+              "route": "/guides/dev-tooling"
+            },
+            {
+              "description": "The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2026 (18.x), with the Visual Studio extension development workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.",
+              "kind": "page",
+              "label": "VS extension",
+              "pageId": "filesystem:guides/05-(developer-tools)/vs-extension.md",
+              "route": "/guides/vs-extension"
+            },
+            {
+              "description": "This page is about reading Reactor's diagnostics from a real app — not about adding new events.",
+              "kind": "page",
+              "label": "Diagnostics",
+              "pageId": "filesystem:guides/05-(developer-tools)/diagnostics.md",
+              "route": "/guides/diagnostics"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Developer tools",
+          "path": "/guides"
+        },
+        {
+          "children": [
+            {
+              "description": "Reactor components can run inside WinForms applications using XAML Islands. The Reactor.Interop.WinForms package provides XamlIslandControl — a standard WinForms control that hosts a Reactor component tree with full keyboard, accessibility, and theming support.",
+              "kind": "page",
+              "label": "WinForms interop",
+              "pageId": "filesystem:guides/06-(interop-and-migration)/winforms-interop.md",
+              "route": "/guides/winforms-interop"
+            },
+            {
+              "description": "Host Reactor components inside a WPF app with a XAML island, until a first-class WPF host control ships.",
+              "kind": "page",
+              "label": "WPF interop",
+              "pageId": "filesystem:guides/06-(interop-and-migration)/wpf-interop.md",
+              "route": "/guides/wpf-interop"
+            },
+            {
+              "description": "Spec 050 changes controlled element-record properties from plain T to Optional<T>. Factory calls such as TextBox(text, setText), Slider(value, 0, 100, setValue), and ComboBox(items, index, setIndex) keep their existing plain-value signatures; they wrap the value in Optional<T>.Of(value) internally. Most app code therefore keeps compiling unchanged.",
+              "kind": "page",
+              "label": "Optional<T> controlled props",
+              "pageId": "filesystem:guides/06-(interop-and-migration)/optional-t.md",
+              "route": "/guides/optional-t"
+            },
+            {
+              "description": "Spec 054 intentionally removes a few legacy windowing fields in favor of more explicit shapes. The new APIs are additive except for the breaking changes below.",
+              "kind": "page",
+              "label": "Windowing evolution",
+              "pageId": "filesystem:guides/06-(interop-and-migration)/windowing-evolution.md",
+              "route": "/guides/windowing-evolution"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Interop and migration",
+          "path": "/guides"
+        }
+      ],
+      "display": "flat",
+      "kind": "group",
+      "label": "Guides",
+      "path": "/guides"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "description": "This page maps Reactor's runtime end-to-end so the rest of the Under-the-hood track has a shared diagram to point at.",
+              "kind": "page",
+              "label": "Architecture overview",
+              "pageId": "filesystem:how-it-works/01-(runtime)/architecture-overview.md",
+              "route": "/how-it-works/architecture-overview"
+            },
+            {
+              "description": "This page is the why behind the hooks surface. If you've come from XAML and INotifyPropertyChanged, the change of model is larger than the syntax.",
+              "kind": "page",
+              "label": "Reactivity model",
+              "pageId": "filesystem:how-it-works/01-(runtime)/reactivity-model.md",
+              "route": "/how-it-works/reactivity-model"
+            },
+            {
+              "description": "One description of the storage shape behind every hook — enough to debug a HookOrderException, predict whether UseState returns a stable setter, and know when reaching for UseRef is correct.",
+              "kind": "page",
+              "label": "Hooks internals",
+              "pageId": "filesystem:how-it-works/01-(runtime)/hooks-internals.md",
+              "route": "/how-it-works/hooks-internals"
+            },
+            {
+              "description": "This page absorbs the legacy docs/reference/reconciliation.md. The goal is one place to learn how Reactor diffs trees — the same information, in the structure the rest of the guide uses, plus the source pointers that let you verify it.",
+              "kind": "page",
+              "label": "Reconciliation",
+              "pageId": "filesystem:how-it-works/01-(runtime)/reconciliation.md",
+              "route": "/how-it-works/reconciliation"
+            },
+            {
+              "description": "This page is about when UseEffect fires and why.",
+              "kind": "page",
+              "label": "Effects scheduling",
+              "pageId": "filesystem:how-it-works/01-(runtime)/effects-scheduling.md",
+              "route": "/how-it-works/effects-scheduling"
+            },
+            {
+              "description": "Microsoft.UI.Reactor (Reactor) has one UI thread invariant: the reconciler, every hook setter, and every WinUI property write must happen on the thread that captured the dispatcher at app bootstrap.",
+              "kind": "page",
+              "label": "Threading and dispatch",
+              "pageId": "filesystem:how-it-works/01-(runtime)/threading-and-dispatch.md",
+              "route": "/how-it-works/threading-and-dispatch"
+            },
+            {
+              "description": "The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI controls so a scroll-heavy list or fast-mounting subtree doesn't allocate a fresh TextBlock / Button / Border on every render.",
+              "kind": "page",
+              "label": "Element pool",
+              "pageId": "filesystem:how-it-works/01-(runtime)/element-pool.md",
+              "route": "/how-it-works/element-pool"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Runtime",
+          "path": "/how-it-works"
+        },
+        {
+          "children": [
+            {
+              "description": "This page documents the data path between the reconciler and the WinUI control it edits. It is for anyone extending Reactor with a new native control, or debugging why an existing element does not update the way it should.",
+              "kind": "page",
+              "label": "Control reconciler protocol",
+              "pageId": "filesystem:how-it-works/02-(controls)/control-reconciler-protocol.md",
+              "route": "/how-it-works/control-reconciler-protocol"
+            },
+            {
+              "description": "How to wrap a native Windows control as a Reactor element — a third-party WinUI control, a custom Control subclass, or an existing WinUI control that the built-in catalog has not yet covered.",
+              "kind": "page",
+              "label": "Extending Reactor controls",
+              "pageId": "filesystem:how-it-works/02-(controls)/extending-reactor-controls.md",
+              "route": "/how-it-works/extending-reactor-controls"
+            },
+            {
+              "description": "This page is the runtime view of the same fluent chain that Styling introduces from the surface.",
+              "kind": "page",
+              "label": "Modifier system",
+              "pageId": "filesystem:how-it-works/02-(controls)/modifier-system.md",
+              "route": "/how-it-works/modifier-system"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Controls",
+          "path": "/how-it-works"
+        },
+        {
+          "children": [
+            {
+              "description": "This page maps the four authoring surfaces onto the underlying compositor and explains the trade-offs that pick one surface over another.",
+              "kind": "page",
+              "label": "Animation pipeline",
+              "pageId": "filesystem:how-it-works/03-(input-and-motion)/animation-pipeline.md",
+              "route": "/how-it-works/animation-pipeline"
+            },
+            {
+              "description": "This page covers the input subsystem from the routed-event boundary through the Reactor hooks that observe it.",
+              "kind": "page",
+              "label": "Focus and input internals",
+              "pageId": "filesystem:how-it-works/03-(input-and-motion)/focus-and-input-internals.md",
+              "route": "/how-it-works/focus-and-input-internals"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Input and motion",
+          "path": "/how-it-works"
+        },
+        {
+          "children": [
+            {
+              "description": "\"Source mapping\" in Microsoft.UI.Reactor (Reactor) is the chain that ties a runtime artifact — an ETW event, a --preview overlay highlight, a thrown exception — back to the C# source that produced it.",
+              "kind": "page",
+              "label": "Source mapping",
+              "pageId": "filesystem:how-it-works/04-(tooling)/source-mapping.md",
+              "route": "/how-it-works/source-mapping"
+            },
+            {
+              "description": "This page walks through the Reactor analyzer pipeline end-to-end: how a diagnostic descriptor wires into the C# compilation, what happens on each InvocationExpression, and how to add your own rule.",
+              "kind": "page",
+              "label": "Analyzer architecture",
+              "pageId": "filesystem:how-it-works/04-(tooling)/analyzer-architecture.md",
+              "route": "/how-it-works/analyzer-architecture"
+            },
+            {
+              "description": "This page covers the internals of Reactor's devtools — the MCP server that external agents talk to, the in-app dev menu, the runtime overlays, and the gate that keeps the whole subsystem out of retail.",
+              "kind": "page",
+              "label": "DevTools internals",
+              "pageId": "filesystem:how-it-works/04-(tooling)/devtools-internals.md",
+              "route": "/how-it-works/devtools-internals"
+            },
+            {
+              "description": "This page covers what Reactor publishes, where to read it, and how to get a clean trace.",
+              "kind": "page",
+              "label": "Perf instrumentation",
+              "pageId": "filesystem:how-it-works/04-(tooling)/perf-instrumentation.md",
+              "route": "/how-it-works/perf-instrumentation"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Tooling",
+          "path": "/how-it-works"
+        }
+      ],
+      "display": "flat",
+      "kind": "group",
+      "label": "How it works",
+      "path": "/how-it-works"
+    },
+    {
+      "children": [
+        {
+          "description": "A recipe is a small composition of Microsoft.UI.Reactor (Reactor) primitives that solves a real UI problem — login, master-detail, settings, paginated list, modal confirmation, multi-step form, search-with-suggestions, command palette, drag-to-reorder. The recipes here are not exhaustive apps; each is a single screen showing the pattern, and each ships a tiny doc app you can clone and adapt.",
+          "kind": "page",
+          "label": "Recipes",
+          "pageId": "filesystem:recipes/index.md",
+          "route": "/recipes"
+        },
+        {
+          "description": "A command palette is a filter-as-you-type list with a keyboard accelerator to open and Enter to execute. In Microsoft.UI.Reactor (Reactor) it's three UseState hooks, a static catalog of Command records, and an OnPreviewKeyDown handler — no menubar, no modal manager, no view model.",
+          "kind": "page",
+          "label": "Command palette",
+          "pageId": "filesystem:recipes/command-palette.md",
+          "route": "/recipes/command-palette"
+        },
+        {
+          "description": "Drag-reorder is a UseState<List<T>> plus a function that splices one item from one index to another. Microsoft.UI.Reactor (Reactor)'s keyed reconciler does the rest — moves preserve identity, so the same row element keeps its focus, its hover state, and its place in the visual tree. Pointer drag is one entry point; an Alt+Up / Alt+Down keyboard shortcut is the second, and it carries the accessibility story.",
+          "kind": "page",
+          "label": "Drag reorder",
+          "pageId": "filesystem:recipes/drag-reorder.md",
+          "route": "/recipes/drag-reorder"
+        },
+        {
+          "description": "A Microsoft.UI.Reactor (Reactor) login form is four pieces working together: validated input, submit-gated state, an async call, and an error-display surface. The recipe below wires them with two UseState hooks and one UseMutation — no view model, no event handler classes, and no hand-rolled submitting / error flags.",
+          "kind": "page",
+          "label": "Login",
+          "pageId": "filesystem:recipes/login.md",
+          "route": "/recipes/login"
+        },
+        {
+          "description": "Master-detail in Microsoft.UI.Reactor (Reactor) is the canonical multi-pane shape: a list of records on one side, the selected record's details on the other. The whole thing is one UseState for the selected id and two slots in an HStack.",
+          "kind": "page",
+          "label": "Master detail",
+          "pageId": "filesystem:recipes/master-detail.md",
+          "route": "/recipes/master-detail"
+        },
+        {
+          "description": "The modal is an element you return conditionally. There is no special \"open dialog\" API — when open is true the tree includes the modal panel layered over the page; when it's false the modal element is absent and the page renders alone.",
+          "kind": "page",
+          "label": "Modal dialog",
+          "pageId": "filesystem:recipes/modal-dialog.md",
+          "route": "/recipes/modal-dialog"
+        },
+        {
+          "description": "A wizard form is a step-index UseState plus a switch on which step renders. The field state lives in the same component as the step index, so moving forward and back never loses what the user typed — Microsoft.UI.Reactor (Reactor) doesn't unmount the surrounding component when the visible slot changes.",
+          "kind": "page",
+          "label": "Multi-step form",
+          "pageId": "filesystem:recipes/multi-step-form.md",
+          "route": "/recipes/multi-step-form"
+        },
+        {
+          "description": "A paginated list is four states sharing one source of truth: an initial load, a populated list, a \"load the next page\" affordance, and a terminal \"no more results.\" UseInfiniteResource owns all four in Microsoft.UI.Reactor (Reactor) — the component below pattern-matches on LoadState and reads Items directly; there is no local UseState for loading or errors.",
+          "kind": "page",
+          "label": "Paginated list",
+          "pageId": "filesystem:recipes/paginated-list.md",
+          "route": "/recipes/paginated-list"
+        },
+        {
+          "description": "The pattern is two slots: an input that owns the query string, and a dropdown that shows zero or more suggestions filtered against a catalog. UseMemo keys the filter on the query, so a re-render that didn't touch the query is free — important for the keyboard-up- arrow-down-arrow loop where the suggestion index changes but the query doesn't.",
+          "kind": "page",
+          "label": "Search with suggestions",
+          "pageId": "filesystem:recipes/search-with-suggestions.md",
+          "route": "/recipes/search-with-suggestions"
+        },
+        {
+          "description": "A settings page is many small persisted prefs side-by-side. Each preference is its own UsePersisted call with its own key — there's no central settings object that needs migration when one preference moves. The row layout is a single helper.",
+          "kind": "page",
+          "label": "Settings page",
+          "pageId": "filesystem:recipes/settings-page.md",
+          "route": "/recipes/settings-page"
+        }
+      ],
+      "display": "flat",
+      "kind": "group",
+      "label": "Recipes",
+      "path": "/recipes",
+      "route": "/recipes"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "description": "Hooks are how Reactor components subscribe to state, schedule effects, and reach into the framework's lifecycle from a function-shaped Render body. Each entry on this index is generated from the <summary> XML doc comments authored alongside the source in src/Reactor/Hooks/ — the canonical surface — and is grouped by the hooks category in docs/_pipeline/reference-map.yaml.",
+              "kind": "page",
+              "label": "Overview",
+              "pageId": "filesystem:reference/hooks/index.md",
+              "route": "/reference/hooks"
+            },
+            {
+              "children": [
+                {
+                  "kind": "page",
+                  "label": "UseAnnounce",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseAnnounce.md",
+                  "route": "/reference/hooks/UseAnnounce"
+                },
+                {
+                  "description": "Extension methods for the UseAnnounce hook.",
+                  "kind": "page",
+                  "label": "UseAnnounceExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseAnnounceExtensions.md",
+                  "route": "/reference/hooks/UseAnnounceExtensions"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseBreakpoint",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseBreakpoint.md",
+                  "route": "/reference/hooks/UseBreakpoint"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseCallback",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseCallback.md",
+                  "route": "/reference/hooks/UseCallback"
+                },
+                {
+                  "description": "Registers a synchronous \"can the window close right now?\" predicate. Multiple guards stack — any returning false cancels the close. Runs on the UI thread; for async confirmation, return false and re-trigger ReactorWindow.Close from the dialog callback. No-op outside a window. (spec 036 §7 / §13.4)",
+                  "kind": "page",
+                  "label": "UseClosingGuard",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseClosingGuard.md",
+                  "route": "/reference/hooks/UseClosingGuard"
+                },
+                {
+                  "description": "Subscribes to an ObservableCollection and re-renders on Add/Remove/Reset. Returns the collection as IReadOnlyList.",
+                  "kind": "page",
+                  "label": "UseCollection",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseCollection.md",
+                  "route": "/reference/hooks/UseCollection"
+                },
+                {
+                  "description": "Returns the app-global ColorScheme — ColorScheme.Light or ColorScheme.Dark, read from Application.Current.RequestedTheme.",
+                  "kind": "page",
+                  "label": "UseColorScheme",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseColorScheme.md",
+                  "route": "/reference/hooks/UseColorScheme"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseCommand",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseCommand.md",
+                  "route": "/reference/hooks/UseCommand"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseCommandState",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseCommandState.md",
+                  "route": "/reference/hooks/UseCommandState"
+                },
+                {
+                  "description": "Reads the nearest ancestor's provided value for the given context. Returns the context's DefaultValue if no provider exists in the ancestor chain. Follows hook rules — must be called in the same order every render.",
+                  "kind": "page",
+                  "label": "UseContext",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseContext.md",
+                  "route": "/reference/hooks/UseContext"
+                },
+                {
+                  "description": "Returns true when the current process is running with the in-app devtools UI enabled. This is the AND of two independent signals:",
+                  "kind": "page",
+                  "label": "UseDevtools",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseDevtools.md",
+                  "route": "/reference/hooks/UseDevtools"
+                },
+                {
+                  "description": "Returns the current display snapshot and re-renders when the display layout changes.",
+                  "kind": "page",
+                  "label": "UseDisplays",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseDisplays.md",
+                  "route": "/reference/hooks/UseDisplays"
+                },
+                {
+                  "description": "Returns the current per-window DPI (ReactorWindow.Dpi) and re-renders on DPI change. Returns the system primary-monitor DPI when called outside a window. (spec 036 §5.2)",
+                  "kind": "page",
+                  "label": "UseDpi",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseDpi.md",
+                  "route": "/reference/hooks/UseDpi"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseEffect",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseEffect.md",
+                  "route": "/reference/hooks/UseEffect"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseElementFocus",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseElementFocus.md",
+                  "route": "/reference/hooks/UseElementFocus"
+                },
+                {
+                  "description": "Hook for imperative element focus (spec 027 Tier 5). Returns a stable ElementRef (survives re-renders) plus a RequestFocus action that schedules Input.FocusManager.Focus on the UI dispatcher. Scheduling defers focus past the current reconcile pass so callers can safely request focus from effects or event handlers without racing against layout.",
+                  "kind": "page",
+                  "label": "UseElementFocusExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseElementFocusExtensions.md",
+                  "route": "/reference/hooks/UseElementFocusExtensions"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseElementRef",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseElementRef.md",
+                  "route": "/reference/hooks/UseElementRef"
+                },
+                {
+                  "description": "Hook that returns a strongly-typed ElementRef for binding to a concrete WinUI control via the .Ref(...) modifier. The typed ref removes the (Button)ref.Current cast at consumers (Composition, Ink, focus, …).",
+                  "kind": "page",
+                  "label": "UseElementRefExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseElementRefExtensions.md",
+                  "route": "/reference/hooks/UseElementRefExtensions"
+                },
+                {
+                  "description": "Subscribes to an external store that exposes a current snapshot getter. Re-renders only when a change notification yields a different snapshot.",
+                  "kind": "page",
+                  "label": "UseExternalStore",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseExternalStore.md",
+                  "route": "/reference/hooks/UseExternalStore"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseFocus",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseFocus.md",
+                  "route": "/reference/hooks/UseFocus"
+                },
+                {
+                  "description": "Extension methods for the UseFocus hook.",
+                  "kind": "page",
+                  "label": "UseFocusExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseFocusExtensions.md",
+                  "route": "/reference/hooks/UseFocusExtensions"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseFocusTrap",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseFocusTrap.md",
+                  "route": "/reference/hooks/UseFocusTrap"
+                },
+                {
+                  "description": "Extension methods for the UseFocusTrap hook.",
+                  "kind": "page",
+                  "label": "UseFocusTrapExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseFocusTrapExtensions.md",
+                  "route": "/reference/hooks/UseFocusTrapExtensions"
+                },
+                {
+                  "description": "Returns true when the system is in a High Contrast (forced colors) theme. Automatically re-renders the component when high contrast is toggled.",
+                  "kind": "page",
+                  "label": "UseHighContrast",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseHighContrast.md",
+                  "route": "/reference/hooks/UseHighContrast"
+                },
+                {
+                  "description": "Returns the high contrast scheme name (e.g., \"High Contrast Black\", \"High Contrast White\") or null if not in high contrast mode. Automatically re-renders the component when the scheme changes.",
+                  "kind": "page",
+                  "label": "UseHighContrastScheme",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseHighContrastScheme.md",
+                  "route": "/reference/hooks/UseHighContrastScheme"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseInfiniteResource",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseInfiniteResource.md",
+                  "route": "/reference/hooks/UseInfiniteResource"
+                },
+                {
+                  "description": "Extension methods providing UseInfiniteResource on RenderContext.",
+                  "kind": "page",
+                  "label": "UseInfiniteResourceExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseInfiniteResourceExtensions.md",
+                  "route": "/reference/hooks/UseInfiniteResourceExtensions"
+                },
+                {
+                  "description": "Returns an IntlAccessor for the current locale. Re-renders this component when the locale changes via a parent LocaleProvider. If no LocaleProvider is present, returns a default accessor using the OS locale. Uses Context internally — the context system handles re-renders automatically.",
+                  "kind": "page",
+                  "label": "UseIntl",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseIntl.md",
+                  "route": "/reference/hooks/UseIntl"
+                },
+                {
+                  "description": "Subscribes to the host window's activation events and re-renders on change. Returns true outside a window (the surface is \"active\" while shown). (spec 036 §7)",
+                  "kind": "page",
+                  "label": "UseIsActive",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseIsActive.md",
+                  "route": "/reference/hooks/UseIsActive"
+                },
+                {
+                  "description": "Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.",
+                  "kind": "page",
+                  "label": "UseIsCovered",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseIsCovered.md",
+                  "route": "/reference/hooks/UseIsCovered"
+                },
+                {
+                  "description": "Convenience wrapper — returns true when the app-global color scheme is ColorScheme.Dark. Exactly UseColorScheme() == ColorScheme.Dark, so it inherits that hook's semantics: it does not observe per-element RequestedTheme.",
+                  "kind": "page",
+                  "label": "UseIsDarkTheme",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseIsDarkTheme.md",
+                  "route": "/reference/hooks/UseIsDarkTheme"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseMemo",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseMemo.md",
+                  "route": "/reference/hooks/UseMemo"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseMemoCells",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseMemoCells.md",
+                  "route": "/reference/hooks/UseMemoCells"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseMemoCellsByIndex",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseMemoCellsByIndex.md",
+                  "route": "/reference/hooks/UseMemoCellsByIndex"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseMemoCellsByKey",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseMemoCellsByKey.md",
+                  "route": "/reference/hooks/UseMemoCellsByKey"
+                },
+                {
+                  "description": "Cell-level memoization hook for high-frequency list / grid bodies. Reuses element references for cells whose item value (and declared dependencies) haven't changed since the previous render. The reconciler short-circuits on Object.ReferenceEquals, so reused cells skip diffing entirely.",
+                  "kind": "page",
+                  "label": "UseMemoCellsExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseMemoCellsExtensions.md",
+                  "route": "/reference/hooks/UseMemoCellsExtensions"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseMutation",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseMutation.md",
+                  "route": "/reference/hooks/UseMutation"
+                },
+                {
+                  "description": "Extension methods providing UseMutation on RenderContext.",
+                  "kind": "page",
+                  "label": "UseMutationExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseMutationExtensions.md",
+                  "route": "/reference/hooks/UseMutationExtensions"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseNavigation",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseNavigation.md",
+                  "route": "/reference/hooks/UseNavigation"
+                },
+                {
+                  "description": "Registers lifecycle callbacks that fire during navigation events.",
+                  "kind": "page",
+                  "label": "UseNavigationLifecycle",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseNavigationLifecycle.md",
+                  "route": "/reference/hooks/UseNavigationLifecycle"
+                },
+                {
+                  "description": "Subscribes to an INotifyPropertyChanged source and re-renders when any property changes. Returns the same source object.",
+                  "kind": "page",
+                  "label": "UseObservable",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseObservable.md",
+                  "route": "/reference/hooks/UseObservable"
+                },
+                {
+                  "description": "Subscribes to a specific property on an INotifyPropertyChanged source. Re-renders only when that property changes.",
+                  "kind": "page",
+                  "label": "UseObservableProperty",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseObservableProperty.md",
+                  "route": "/reference/hooks/UseObservableProperty"
+                },
+                {
+                  "description": "Observes an object and all nested INotifyPropertyChanged values reachable through its properties. Re-renders when any property at any depth changes. Automatically subscribes/unsubscribes as property values change.",
+                  "kind": "page",
+                  "label": "UseObservableTree",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseObservableTree.md",
+                  "route": "/reference/hooks/UseObservableTree"
+                },
+                {
+                  "description": "Open or reuse a secondary window keyed by key. Renders that pass the same key share the same ReactorWindow; if the spec changes across renders the live window is updated via ReactorWindow.Update. The returned handle is identity-stable across renders so long as the key is stable.",
+                  "kind": "page",
+                  "label": "UseOpenWindow",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseOpenWindow.md",
+                  "route": "/reference/hooks/UseOpenWindow"
+                },
+                {
+                  "kind": "page",
+                  "label": "UsePersisted",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UsePersisted.md",
+                  "route": "/reference/hooks/UsePersisted"
+                },
+                {
+                  "description": "Returns true when the user or system prefers reduced motion (e.g., Windows \"Show animations\" is off, or SPI_GETCLIENTAREAANIMATION returns false). Automatically re-renders the component when the preference changes.",
+                  "kind": "page",
+                  "label": "UseReducedMotion",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseReducedMotion.md",
+                  "route": "/reference/hooks/UseReducedMotion"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseReducer",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseReducer.md",
+                  "route": "/reference/hooks/UseReducer"
+                },
+                {
+                  "description": "Returns a mutable ref object that persists across renders.",
+                  "kind": "page",
+                  "label": "UseRef",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseRef.md",
+                  "route": "/reference/hooks/UseRef"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseResource",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseResource.md",
+                  "route": "/reference/hooks/UseResource"
+                },
+                {
+                  "description": "Extension methods providing UseResource on RenderContext.",
+                  "kind": "page",
+                  "label": "UseResourceExtensions",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseResourceExtensions.md",
+                  "route": "/reference/hooks/UseResourceExtensions"
+                },
+                {
+                  "description": "Declares a piece of state. Returns (currentValue, setter). Must be called in the same order every render (just like React hooks).",
+                  "kind": "page",
+                  "label": "UseState",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseState.md",
+                  "route": "/reference/hooks/UseState"
+                },
+                {
+                  "description": "DEBUG ONLY: Directly set a UseState hook value by index and trigger re-render. Used for testing state changes without event handlers.",
+                  "kind": "page",
+                  "label": "UseStateSetterByIndex",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseStateSetterByIndex.md",
+                  "route": "/reference/hooks/UseStateSetterByIndex"
+                },
+                {
+                  "description": "Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content to call NavigationHandle.GoBack. Unsubscribes on unmount.",
+                  "kind": "page",
+                  "label": "UseSystemBackButton",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseSystemBackButton.md",
+                  "route": "/reference/hooks/UseSystemBackButton"
+                },
+                {
+                  "description": "Open (or reuse-by-TrayIconSpec.Key) a system-tray icon scoped to the calling component. The icon closes automatically on unmount — that's the only difference from ReactorApp.OpenTrayIcon, which is app-scoped and keeps the icon alive until explicit ReactorTrayIcon.Close.",
+                  "kind": "page",
+                  "label": "UseTrayIcon",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseTrayIcon.md",
+                  "route": "/reference/hooks/UseTrayIcon"
+                },
+                {
+                  "description": "Resolves the ReactorWindow whose host renders this component — including nested components and virtualized rows realized outside the host's render pass — or null when it has no owning window (tray-flyout content, ReactorHostControl embeds). O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)",
+                  "kind": "page",
+                  "label": "UseWindow",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseWindow.md",
+                  "route": "/reference/hooks/UseWindow"
+                },
+                {
+                  "description": "Applies a lifetime-bound width/height aspect lock to the owning window. Last mounted hook wins; unmounting restores the previous writer.",
+                  "kind": "page",
+                  "label": "UseWindowAspectRatio",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseWindowAspectRatio.md",
+                  "route": "/reference/hooks/UseWindowAspectRatio"
+                },
+                {
+                  "description": "Returns a stable callback that starts a framework-managed window drag/move loop (cursor polling + AppWindow.Move at ~60Hz until the left mouse button is released).",
+                  "kind": "page",
+                  "label": "UseWindowDragMove",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseWindowDragMove.md",
+                  "route": "/reference/hooks/UseWindowDragMove"
+                },
+                {
+                  "description": "Subscribes to the host window's PositionChanged event and re-renders on change. Returns (0, 0) outside a window. (spec 054 §5.5)",
+                  "kind": "page",
+                  "label": "UseWindowPosition",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseWindowPosition.md",
+                  "route": "/reference/hooks/UseWindowPosition"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseWindowSize",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseWindowSize.md",
+                  "route": "/reference/hooks/UseWindowSize"
+                },
+                {
+                  "description": "Subscribes to the host window's StateChanged event and re-renders on change. Returns WindowState.Normal outside a window. (spec 036 §7)",
+                  "kind": "page",
+                  "label": "UseWindowState",
+                  "pageId": "filesystem:reference/hooks/01-(hooks)/UseWindowState.md",
+                  "route": "/reference/hooks/UseWindowState"
+                }
+              ],
+              "display": "flat",
+              "kind": "group",
+              "label": "Hooks",
+              "path": "/reference/hooks"
+            },
+            {
+              "children": [
+                {
+                  "kind": "page",
+                  "label": "Announce",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Announce.md",
+                  "route": "/reference/hooks/Announce"
+                },
+                {
+                  "kind": "page",
+                  "label": "AnnounceHandle",
+                  "pageId": "filesystem:reference/hooks/02-(types)/AnnounceHandle.md",
+                  "route": "/reference/hooks/AnnounceHandle"
+                },
+                {
+                  "description": "Internal Reactor element that mounts a hidden TextBlock with LiveSetting for announcements.",
+                  "kind": "page",
+                  "label": "AnnounceRegionElement",
+                  "pageId": "filesystem:reference/hooks/02-(types)/AnnounceRegionElement.md",
+                  "route": "/reference/hooks/AnnounceRegionElement"
+                },
+                {
+                  "description": "True iff any tracked token is currently Loading.",
+                  "kind": "page",
+                  "label": "AnyLoading",
+                  "pageId": "filesystem:reference/hooks/02-(types)/AnyLoading.md",
+                  "route": "/reference/hooks/AnyLoading"
+                },
+                {
+                  "description": "Overrides the generated cache key; null uses a key derived from deps. When set, the key identifies the query; deps changes alone do not cancel an in-flight request or start a new fetch. Include values that select different data in the key, for example $\"user:{userId}\".",
+                  "kind": "page",
+                  "label": "CacheKey",
+                  "pageId": "filesystem:reference/hooks/02-(types)/CacheKey.md",
+                  "route": "/reference/hooks/CacheKey"
+                },
+                {
+                  "description": "Retention after the last subscriber leaves; null uses five minutes.",
+                  "kind": "page",
+                  "label": "CacheTime",
+                  "pageId": "filesystem:reference/hooks/02-(types)/CacheTime.md",
+                  "route": "/reference/hooks/CacheTime"
+                },
+                {
+                  "description": "Fires when a resource joins, leaves, or changes its loading state.",
+                  "kind": "page",
+                  "label": "Changed",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Changed.md",
+                  "route": "/reference/hooks/Changed"
+                },
+                {
+                  "description": "Clears all registrations.",
+                  "kind": "page",
+                  "label": "Clear",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Clear.md",
+                  "route": "/reference/hooks/Clear"
+                },
+                {
+                  "kind": "page",
+                  "label": "ComponentUseMemoCellsExtensions",
+                  "pageId": "filesystem:reference/hooks/02-(types)/ComponentUseMemoCellsExtensions.md",
+                  "route": "/reference/hooks/ComponentUseMemoCellsExtensions"
+                },
+                {
+                  "description": "Snapshot the number of registered tokens (loading or not). Diagnostic only.",
+                  "kind": "page",
+                  "label": "Count",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Count.md",
+                  "route": "/reference/hooks/Count"
+                },
+                {
+                  "description": "Optional: computes the cursor for an arbitrary page index directly, bypassing the \"wait for page N-1\" constraint. Used by UseDataSource to expose the offset semantics of IDataSource's ContinuationToken, so deep scrolls fetch pages in parallel instead of walking the chain one round-trip at a time.",
+                  "kind": "page",
+                  "label": "CursorFromPageIndex",
+                  "pageId": "filesystem:reference/hooks/02-(types)/CursorFromPageIndex.md",
+                  "route": "/reference/hooks/CursorFromPageIndex"
+                },
+                {
+                  "description": "Author hook — add the bespoke descriptor entries for the [WrapManual] props.",
+                  "kind": "page",
+                  "label": "Customize",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Customize.md",
+                  "route": "/reference/hooks/Customize"
+                },
+                {
+                  "kind": "page",
+                  "label": "Descriptor",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Descriptor.md",
+                  "route": "/reference/hooks/Descriptor"
+                },
+                {
+                  "kind": "page",
+                  "label": "Error",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Error.md",
+                  "route": "/reference/hooks/Error"
+                },
+                {
+                  "description": "Registered field names in order.",
+                  "kind": "page",
+                  "label": "Fields",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Fields.md",
+                  "route": "/reference/hooks/Fields"
+                },
+                {
+                  "kind": "page",
+                  "label": "Focus",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Focus.md",
+                  "route": "/reference/hooks/Focus"
+                },
+                {
+                  "description": "Attached metadata for focus registration on elements.",
+                  "kind": "page",
+                  "label": "FocusAttached",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusAttached.md",
+                  "route": "/reference/hooks/FocusAttached"
+                },
+                {
+                  "description": "Fluent extensions for attaching focus management to elements. Uses .Set() to capture the WinUI control reference during mount/update.",
+                  "kind": "page",
+                  "label": "FocusExtensions",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusExtensions.md",
+                  "route": "/reference/hooks/FocusExtensions"
+                },
+                {
+                  "description": "Focuses a specific field by name.",
+                  "kind": "page",
+                  "label": "FocusField",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusField.md",
+                  "route": "/reference/hooks/FocusField"
+                },
+                {
+                  "description": "Focuses the first field from the given list that exists in this manager. Useful with ValidationContext.InvalidFields.",
+                  "kind": "page",
+                  "label": "FocusFirst",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusFirst.md",
+                  "route": "/reference/hooks/FocusFirst"
+                },
+                {
+                  "description": "Manages focus for a set of registered form fields. Supports programmatic focus control, enter-to-advance, and field ordering.",
+                  "kind": "page",
+                  "label": "FocusManager",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusManager.md",
+                  "route": "/reference/hooks/FocusManager"
+                },
+                {
+                  "description": "Registers any element with a FocusManager via attached metadata (for custom types).",
+                  "kind": "page",
+                  "label": "FocusMeta",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusMeta.md",
+                  "route": "/reference/hooks/FocusMeta"
+                },
+                {
+                  "description": "Focuses the field after the given field in registration order. If the current field is the last one, triggers submit.",
+                  "kind": "page",
+                  "label": "FocusNext",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusNext.md",
+                  "route": "/reference/hooks/FocusNext"
+                },
+                {
+                  "description": "Focuses the field before the given field in registration order.",
+                  "kind": "page",
+                  "label": "FocusPrevious",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusPrevious.md",
+                  "route": "/reference/hooks/FocusPrevious"
+                },
+                {
+                  "description": "Attaches a focus trap to this element. When the trap is active, Tab/Shift+Tab cycles within this element's visual subtree.",
+                  "kind": "page",
+                  "label": "FocusTrap",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusTrap.md",
+                  "route": "/reference/hooks/FocusTrap"
+                },
+                {
+                  "description": "Fluent extension to attach a FocusTrapHandle to an element. The handle captures the mounted WinUI element for focus trapping.",
+                  "kind": "page",
+                  "label": "FocusTrapElementExtensions",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusTrapElementExtensions.md",
+                  "route": "/reference/hooks/FocusTrapElementExtensions"
+                },
+                {
+                  "description": "Handle returned by UseFocusTrap. When active, traps keyboard focus within the container element so Tab/Shift+Tab cycles within the trapped scope. Essential for modal dialogs and flyouts.",
+                  "kind": "page",
+                  "label": "FocusTrapHandle",
+                  "pageId": "filesystem:reference/hooks/02-(types)/FocusTrapHandle.md",
+                  "route": "/reference/hooks/FocusTrapHandle"
+                },
+                {
+                  "description": "Gets the FocusAttached metadata from an element.",
+                  "kind": "page",
+                  "label": "GetFocus",
+                  "pageId": "filesystem:reference/hooks/02-(types)/GetFocus.md",
+                  "route": "/reference/hooks/GetFocus"
+                },
+                {
+                  "description": "Abstraction for marshalling continuations back to the render thread. Null-safe — if the callback is absent the continuation runs inline on the thread-pool completion thread (tests and headless hosts).",
+                  "kind": "page",
+                  "label": "IHookDispatcher",
+                  "pageId": "filesystem:reference/hooks/02-(types)/IHookDispatcher.md",
+                  "route": "/reference/hooks/IHookDispatcher"
+                },
+                {
+                  "description": "Per-hook state for UseInfiniteResource. Coordinates in-flight page fetches, cache subscriptions, deps-change restart, and unmount teardown.",
+                  "kind": "page",
+                  "label": "InfiniteHookState",
+                  "pageId": "filesystem:reference/hooks/02-(types)/InfiniteHookState.md",
+                  "route": "/reference/hooks/InfiniteHookState"
+                },
+                {
+                  "description": "Whether the focus trap is currently active.",
+                  "kind": "page",
+                  "label": "IsActive",
+                  "pageId": "filesystem:reference/hooks/02-(types)/IsActive.md",
+                  "route": "/reference/hooks/IsActive"
+                },
+                {
+                  "description": "Returns true if the given field is the first registered field.",
+                  "kind": "page",
+                  "label": "IsFirstField",
+                  "pageId": "filesystem:reference/hooks/02-(types)/IsFirstField.md",
+                  "route": "/reference/hooks/IsFirstField"
+                },
+                {
+                  "description": "Returns true if the given field is the last registered field.",
+                  "kind": "page",
+                  "label": "IsLastField",
+                  "pageId": "filesystem:reference/hooks/02-(types)/IsLastField.md",
+                  "route": "/reference/hooks/IsLastField"
+                },
+                {
+                  "kind": "page",
+                  "label": "IsPending",
+                  "pageId": "filesystem:reference/hooks/02-(types)/IsPending.md",
+                  "route": "/reference/hooks/IsPending"
+                },
+                {
+                  "description": "Most recent successful result, or default if none yet.",
+                  "kind": "page",
+                  "label": "LastResult",
+                  "pageId": "filesystem:reference/hooks/02-(types)/LastResult.md",
+                  "route": "/reference/hooks/LastResult"
+                },
+                {
+                  "kind": "page",
+                  "label": "Mutation",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Mutation.md",
+                  "route": "/reference/hooks/Mutation"
+                },
+                {
+                  "description": "Mutable state backing a single UseMutation hook instance. Owned per-component, per-hook-slot; disposed on unmount.",
+                  "kind": "page",
+                  "label": "MutationHookState",
+                  "pageId": "filesystem:reference/hooks/02-(types)/MutationHookState.md",
+                  "route": "/reference/hooks/MutationHookState"
+                },
+                {
+                  "kind": "page",
+                  "label": "MutationOptions",
+                  "pageId": "filesystem:reference/hooks/02-(types)/MutationOptions.md",
+                  "route": "/reference/hooks/MutationOptions"
+                },
+                {
+                  "description": "Called from RequestPage / page-completion paths to keep the Pending scope in sync.",
+                  "kind": "page",
+                  "label": "NotifyPending",
+                  "pageId": "filesystem:reference/hooks/02-(types)/NotifyPending.md",
+                  "route": "/reference/hooks/NotifyPending"
+                },
+                {
+                  "kind": "page",
+                  "label": "Pending",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Pending.md",
+                  "route": "/reference/hooks/Pending"
+                },
+                {
+                  "kind": "page",
+                  "label": "PendingComponent",
+                  "pageId": "filesystem:reference/hooks/02-(types)/PendingComponent.md",
+                  "route": "/reference/hooks/PendingComponent"
+                },
+                {
+                  "description": "Entry-point factory for the Pending bubble-up element. See docs/specs/020-async-resources-design.md §10 for the full mechanism.",
+                  "kind": "page",
+                  "label": "PendingFactory",
+                  "pageId": "filesystem:reference/hooks/02-(types)/PendingFactory.md",
+                  "route": "/reference/hooks/PendingFactory"
+                },
+                {
+                  "kind": "page",
+                  "label": "PendingProps",
+                  "pageId": "filesystem:reference/hooks/02-(types)/PendingProps.md",
+                  "route": "/reference/hooks/PendingProps"
+                },
+                {
+                  "description": "Shared loading-state ref-count consumed by the Pending element and populated by UseResource / UseInfiniteResource hooks inside the scope. When the scope observes any registered resource in the Loading state (not Reloading), the owning Pending element renders its fallback instead of the child subtree.",
+                  "kind": "page",
+                  "label": "PendingScope",
+                  "pageId": "filesystem:reference/hooks/02-(types)/PendingScope.md",
+                  "route": "/reference/hooks/PendingScope"
+                },
+                {
+                  "description": "Enqueue action to run on the dispatcher thread.",
+                  "kind": "page",
+                  "label": "Post",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Post.md",
+                  "route": "/reference/hooks/Post"
+                },
+                {
+                  "description": "Whether to fetch on a cache miss.",
+                  "kind": "page",
+                  "label": "RefetchOnMount",
+                  "pageId": "filesystem:reference/hooks/02-(types)/RefetchOnMount.md",
+                  "route": "/reference/hooks/RefetchOnMount"
+                },
+                {
+                  "description": "Whether to opt into window-focus revalidation.",
+                  "kind": "page",
+                  "label": "RefetchOnWindowFocus",
+                  "pageId": "filesystem:reference/hooks/02-(types)/RefetchOnWindowFocus.md",
+                  "route": "/reference/hooks/RefetchOnWindowFocus"
+                },
+                {
+                  "description": "A zero-size, invisible Reactor element that acts as the live-region anchor. Include this anywhere in your component tree (it renders nothing visible).",
+                  "kind": "page",
+                  "label": "Region",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Region.md",
+                  "route": "/reference/hooks/Region"
+                },
+                {
+                  "kind": "page",
+                  "label": "Register",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Register.md",
+                  "route": "/reference/hooks/Register"
+                },
+                {
+                  "kind": "page",
+                  "label": "Reset",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Reset.md",
+                  "route": "/reference/hooks/Reset"
+                },
+                {
+                  "description": "Mutable state backing a single UseResource hook instance. Instances are owned per-component, per-hook-slot, and are disposed on unmount.",
+                  "kind": "page",
+                  "label": "ResourceHookState",
+                  "pageId": "filesystem:reference/hooks/02-(types)/ResourceHookState.md",
+                  "route": "/reference/hooks/ResourceHookState"
+                },
+                {
+                  "kind": "page",
+                  "label": "ResourceOptions",
+                  "pageId": "filesystem:reference/hooks/02-(types)/ResourceOptions.md",
+                  "route": "/reference/hooks/ResourceOptions"
+                },
+                {
+                  "description": "Number of retries after a failed fetch.",
+                  "kind": "page",
+                  "label": "RetryCount",
+                  "pageId": "filesystem:reference/hooks/02-(types)/RetryCount.md",
+                  "route": "/reference/hooks/RetryCount"
+                },
+                {
+                  "description": "Kick off the mutator with input. Returns a task that completes with the mutator's result or fault.",
+                  "kind": "page",
+                  "label": "RunAsync",
+                  "pageId": "filesystem:reference/hooks/02-(types)/RunAsync.md",
+                  "route": "/reference/hooks/RunAsync"
+                },
+                {
+                  "description": "Associates a WinUI control with a field name. Called from .Set() during mount/update.",
+                  "kind": "page",
+                  "label": "SetControl",
+                  "pageId": "filesystem:reference/hooks/02-(types)/SetControl.md",
+                  "route": "/reference/hooks/SetControl"
+                },
+                {
+                  "description": "Update token's loading state. Silently ignored if the token was never registered (defensive — avoids forcing the caller to track whether they registered).",
+                  "kind": "page",
+                  "label": "SetLoading",
+                  "pageId": "filesystem:reference/hooks/02-(types)/SetLoading.md",
+                  "route": "/reference/hooks/SetLoading"
+                },
+                {
+                  "description": "Sets the callback for submit (Enter on last field).",
+                  "kind": "page",
+                  "label": "SetSubmitHandler",
+                  "pageId": "filesystem:reference/hooks/02-(types)/SetSubmitHandler.md",
+                  "route": "/reference/hooks/SetSubmitHandler"
+                },
+                {
+                  "description": "Freshness interval; null uses zero.",
+                  "kind": "page",
+                  "label": "StaleTime",
+                  "pageId": "filesystem:reference/hooks/02-(types)/StaleTime.md",
+                  "route": "/reference/hooks/StaleTime"
+                },
+                {
+                  "description": "Stop tracking token. Idempotent.",
+                  "kind": "page",
+                  "label": "Unregister",
+                  "pageId": "filesystem:reference/hooks/02-(types)/Unregister.md",
+                  "route": "/reference/hooks/Unregister"
+                },
+                {
+                  "kind": "page",
+                  "label": "WindowsDispatcherHookDispatcher",
+                  "pageId": "filesystem:reference/hooks/02-(types)/WindowsDispatcherHookDispatcher.md",
+                  "route": "/reference/hooks/WindowsDispatcherHookDispatcher"
+                }
+              ],
+              "display": "flat",
+              "kind": "group",
+              "label": "Types and options",
+              "path": "/reference/hooks"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Hooks API",
+          "path": "/reference/hooks",
+          "route": "/reference/hooks"
+        }
+      ],
+      "display": "flat",
+      "kind": "group",
+      "label": "Reference",
+      "path": "/reference"
+    }
+  ],
+  "tabs": [
+    {
+      "label": "Home",
+      "path": "/"
+    },
+    {
+      "label": "Get started",
+      "path": "/get-started"
+    },
+    {
+      "label": "Guides",
+      "path": "/guides",
+      "href": "/guides/components"
+    },
+    {
+      "label": "Controls",
+      "path": "/controls"
+    },
+    {
+      "label": "Recipes",
+      "path": "/recipes"
+    },
+    {
+      "label": "API reference",
+      "path": "/reference",
+      "href": "/reference/hooks"
+    },
+    {
+      "label": "How it works",
+      "path": "/how-it-works",
+      "href": "/how-it-works/architecture-overview"
+    }
+  ],
+  "bannerHref": "https://microsoft.github.io/microsoft-ui-reactor/"
+}

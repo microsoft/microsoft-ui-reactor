@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/FocusExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusExtensions.md",
+  "route": "/reference/hooks/FocusExtensions",
+  "title": "FocusExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusExtensions",
+  "description": "Fluent extensions for attaching focus management to elements. Uses .Set() to capture the WinUI control reference during mount/update.",
+  "markdown": "---\ntitle: \"FocusExtensions\"\ndescription: \"Fluent extensions for attaching focus management to elements. Uses .Set() to capture the WinUI control reference during mount/update.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

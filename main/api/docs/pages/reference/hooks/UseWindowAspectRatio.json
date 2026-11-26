@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseWindowAspectRatio.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowAspectRatio.md",
+  "route": "/reference/hooks/UseWindowAspectRatio",
+  "title": "UseWindowAspectRatio",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowAspectRatio",
+  "description": "Applies a lifetime-bound width/height aspect lock to the owning window. Last mounted hook wins; unmounting restores the previous writer.",
+  "markdown": "---\ntitle: \"UseWindowAspectRatio\"\ndescription: \"Applies a lifetime-bound width/height aspect lock to the owning window. Last mounted hook wins; unmounting restores the previous writer.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

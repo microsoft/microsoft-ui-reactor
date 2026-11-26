@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseFocusTrapExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrapExtensions.md",
+  "route": "/reference/hooks/UseFocusTrapExtensions",
+  "title": "UseFocusTrapExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrapExtensions",
+  "description": "Extension methods for the UseFocusTrap hook.",
+  "markdown": "---\ntitle: \"UseFocusTrapExtensions\"\ndescription: \"Extension methods for the UseFocusTrap hook.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

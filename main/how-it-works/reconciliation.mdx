@@ -1,0 +1,620 @@
+---
+title: "Reconciliation"
+description: "This page absorbs the legacy docs/reference/reconciliation.md. The goal is one place to learn how Reactor diffs trees — the same information, in the structure the rest of the guide uses, plus the source pointers that let you verify it."
+---
+
+The reconciler is the only thing in Microsoft.UI.Reactor (Reactor) that writes to WinUI.
+Every visual change you see on screen — a property update on a Button,
+a new row in a list, a TabView item that just animated in — passes
+through one method, `Reconciler.Reconcile`, that takes the previous
+element record, the new element record, and the existing WinUI control
+(if any), and decides among three outcomes: Mount a new control,
+Update the existing one in place, or Unmount and return the control to
+the pool. The whole rest of Reactor exists to make those three
+decisions cheap: immutable element records that can be compared
+field-for-field, a hook system that re-renders only the components
+whose state actually changed, an element pool that recycles the heavy
+WinUI classes, and a child-diff algorithm that handles list reorders
+in close to the theoretical minimum number of moves. Read this page
+before any of the others in the Under-the-hood track that mention
+"the reconciler" — and read it once, end-to-end, before reaching
+for a debugger when something rerenders incorrectly.
+
+## Tri-state dispatch [#tri-state-dispatch]
+
+![Reconciler tri-state dispatch: Mount, Update, Unmount; pool rent on mount; pool return on unmount](/microsoft-ui-reactor/main/images/reconciliation/mount-update-unmount.svg)
+
+| Inputs | Path | Outcome |
+|---|---|---|
+| `newEl` is null or `EmptyElement` | Unmount | `Unmount` runs effect cleanups, returns control to pool |
+| `oldEl` is null/`EmptyElement`, **or** `existingControl` is null | Mount | `Mount` rents from pool or allocates, populates, returns new control |
+| both elements present, `CanUpdate(old, new)` returns true | Update | the matching handler patches changed properties only; child lists diff |
+| both present, `CanUpdate` false (type changed) | Replace | Unmount then Mount; the new control replaces the old in the parent |
+
+Every section below explains how one of those rows is implemented.
+
+Reference props add one post-commit step to the table. `.Ref(cell)` sets
+the cell to the mounted control and clears it on unmount; referrers such
+as `TeachingTip.Target`, automation relationships, and `XYFocus*`
+subscribe to those cells. During reconciliation, changed cells enqueue
+their reference edges in a dirty set. After the tree commit finishes,
+the reconciler flushes that set so every reference write observes the
+final mounted/unmounted state. Referrer unmount and pool return tear
+down their edge bag, so subscriptions do not leak.
+
+## Reconcile — the entry point [#reconcile-the-entry-point]
+
+```csharp
+public UIElement? Reconcile(
+    Element? oldElement,
+    Element? newElement,
+    UIElement? existingControl,
+    Action requestRerender)
+{
+    // A top-level pass is an outermost Reactor frame for render-error propagation
+    // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+    using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Reconcile, newElement);
+    // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
+    // update, or unmount are announced only once the whole pass has finished.
+    using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
+    ReferenceDirtySet.BeginCommit();
+    try
+    {
+    // Trace only top-level reconcile passes (depth == 0) to avoid flooding
+    // the provider with per-subtree entries; nested Reconcile() calls during
+    // the same pass don't emit their own start/stop. Gate the depth counter
+    // and Start emit on IsEnabled so the disabled path pays nothing extra.
+    // `traceEnabled` and `emitTrace` are tracked separately: every enabled
+    // call must decrement the depth it incremented, but only the outermost
+    // one emits. Decrementing on `emitTrace` alone would leak the counter
+    // once a pass contained a nested reconcile, permanently suppressing
+    // every later top-level trace.
+    bool traceEnabled = Diagnostics.ReactorEventSource.Log.IsEnabled(
+        global::System.Diagnostics.Tracing.EventLevel.Informational,
+        Diagnostics.ReactorEventSource.Keywords.Reconcile);
+    bool emitTrace = traceEnabled && _reconcileTraceDepth++ == 0;
+    if (emitTrace)
+    {
+        Diagnostics.ReactorEventSource.Log.ReconcileStart(
+            newElement?.GetType().Name ?? "null");
+    }
+    if (_debugReconcileDepth++ == 0)
+    {
+        DebugElementsDiffed = 0;
+        DebugElementsSkipped = 0;
+        DebugUIElementsCreated = 0;
+        DebugUIElementsModified = 0;
+        // Drop destination references a previous pass queued but never flushed. Every
+        // shipped host flushes at the end of each render, but a pass that threw
+        // mid-reconcile — or a Reconcile() caller that never flushes (tests,
+        // embedders) — must not accumulate strong UIElement refs. A list clear, so
+        // nothing here can throw and strand the depth counter incremented just above.
+        _pendingConnectedAnimationStarts.Clear();
+        _preparedConnectedAnimationKeys.Clear();
+        if (ReactorFeatureFlags.HighlightReconcileChanges)
+        {
+            (_highlightMounted ??= new()).Clear();
+            (_highlightModified ??= new()).Clear();
+        }
+        // Consume the hot-reload and resource-refresh signals exactly once per
+        // top-level pass so every component re-runs Render() even when props/deps
+        // are unchanged (and, for a resource refresh, no element is skipped).
+        bool hostPass = _realizationThemeDepth == 0;
+        var theme = hostPass ? InheritedRequestedTheme(ThemeAnchor) : _realizationTheme;
+        _resourceRefreshActive = hostPass
+            ? _resourceRefreshArmed || theme != _renderedHostTheme
+            : _realizationResourceRefresh;
+        if (hostPass)
+            _resourceRefreshArmed = false;
+        _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
+        ForceFullRenderPending = false;
+        _hotReloadRetryActive = HotReloadRetryPending;
+        HotReloadRetryPending = false;
+        _ambientRequestedTheme = theme;
+
+        // Build the dirty-ancestor path. For every component node
+        // whose SelfTriggered is true, walk up the realized visual
+        // tree and add each ancestor control. Consumed by Update's
+        // shallow-equality short-circuit so the walk can reach the
+        // self-triggered descendant even when its ancestor element
+        // records are structurally unchanged.
+        PopulateDirtyAncestorPath();
+    }
+    try {
+    try
+    {
+        UIElement? result;
+        if (newElement is null or EmptyElement)
+        {
+            if (existingControl is not null)
+                Unmount(existingControl);
+            result = null;
+        }
+        else if (oldElement is null or EmptyElement || existingControl is null)
+            result = Mount(newElement, requestRerender);
+        else
+            result = ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        if (_debugReconcileDepth == 1 && _realizationThemeDepth == 0)
+            _renderedHostTheme = _ambientRequestedTheme;
+        return result;
+```
+
+`Reconcile` is short on purpose. The interesting work is in `Mount`,
+`ReconcileImperative`, and the child reconciler — this method just
+routes. Note that `EmptyElement` is treated exactly like `null` on both
+sides: an element that renders to nothing unmounts the old control, and
+an old `EmptyElement` mounts a fresh one rather than trying to patch.
+A missing `existingControl` also forces the mount arm even when both
+element records are present.
+
+The prologue the snippet elides is bookkeeping. `ReferenceDirtySet.BeginCommit()`
+opens the deferred reference-write batch described above (the matching
+`EndCommitAndFlush()` runs in the outermost `finally`). The ETW emit gate
+is `IsEnabled`-guarded so the disabled path costs a single read and
+branch, and `_reconcileTraceDepth` makes sure nested `Reconcile` calls
+during the same pass don't emit their own start/stop events; only the
+top-level pass logs. `PopulateDirtyAncestorPath()` runs once per
+top-level pass and marks the realized ancestors of every self-triggered
+component so `Update`'s shallow-equality short-circuit, and the child
+reconciler's per-child skip, still descend to a component whose own
+state changed under structurally unchanged parents.
+
+The reconciler holds debug counters (`DebugElementsDiffed`,
+`DebugElementsSkipped`, `DebugUIElementsCreated`,
+`DebugUIElementsModified`) reset at depth 0 and reported at the end of
+the pass. The reconcile overlay in the [dev menu](/microsoft-ui-reactor/main/guides/dev-tooling)
+reads these.
+
+> **Caveat:** The reconciler returns the *new* `UIElement` because Update can
+> replace the control rather than patching it: `CanUpdate` may return
+> true for the type but the underlying WinUI control type may have
+> changed at runtime (e.g. a custom-type registry update), and the
+> reconciler then signals "replace me in your parent's `Children`
+> collection". If you call `Reconcile` from a custom container and
+> ignore the return value, the parent keeps pointing at a control that's
+> about to be unmounted. The framework's own
+> [`ChildReconciler`](#child-reconciler-keyed-vs-positional) handles this; custom callers
+> need to mirror it.
+
+## Mount — building a control tree [#mount-building-a-control-tree]
+
+```csharp
+public UIElement? Mount(Element element, Action requestRerender)
+{
+    var modifierTarget = element;
+    // Unwrap legacy ModifiedElement (backward compat)
+    ElementModifiers? modifiers = element.Modifiers;
+    if (element is ModifiedElement mod)
+    {
+        modifiers = mod.WrappedModifiers;
+        if (mod.Inner.Modifiers is not null)
+            modifiers = modifiers.Merge(mod.Inner.Modifiers);
+        element = mod.Inner;
+    }
+```
+
+`Mount` unwraps modifiers, enters the context/theme scopes, and then
+resolves the element through four dispatch arms: per-host `_v1Handlers`,
+per-host `_typeRegistry`, the global `ControlRegistry`, and finally a
+small switch for composition primitives. Built-in and custom WinUI
+controls such as `Button`, `TextBlock`, and stacks mount through their
+registered `ControlDescriptor` or `IElementHandler`; those handlers rent
+or allocate the control, apply initial properties, reconcile children
+through their declared children strategy, wire event trampolines, and
+return the control. The fallback switch in `Reconciler.Mount.cs` is only
+for structural elements: components, function components, memo
+components, error boundaries, transparent `KeyedMemoElement` wrappers,
+and `EmptyElement`.
+
+The reconciler maintains a context-value scope so children rendered
+inside `Mount` see the same [Context](/microsoft-ui-reactor/main/guides/context) values their
+parents pushed. Stagger scopes work the same way: a parent declaring
+`.WithStagger(delay)` pushes an index that descendants' enter
+transitions consume.
+
+`Mount` also threads through the [element pool](/microsoft-ui-reactor/main/how-it-works/element-pool). For
+poolable types, the framework tries to rent a recycled control before
+allocating — this is why long-running apps with lots of list churn
+don't end up paying GC cost proportional to scroll velocity.
+
+## Update — patching in place [#update-patching-in-place]
+
+`Update` mirrors the Mount dispatch: per-host `_v1Handlers`,
+per-host `_typeRegistry`, the global `ControlRegistry`, then the
+composition-primitive fallback switch. Real WinUI controls are patched
+by their registered descriptor or handler, which compares the old and
+new element fields and writes only the changed properties onto the
+existing control. `Button.Content` changed? The descriptor path updates
+that DP. `IsEnabled` is the same? Its prop entry skips the write.
+Modifiers like margin and corner-radius diff the same way, just against
+the merged `ElementModifiers` records. The fallback switch only updates
+structural wrappers such as components and error boundaries; an unchanged
+`KeyedMemoElement` is transparent and returns `null` to keep the
+existing control, unless a component inside it changed its own state, in
+which case the factory runs again and the pass walks down to that
+component.
+
+The early-skip optimization is in two places. At the element level,
+`Element.CanSkipUpdate(oldEl, newEl)` returns true when the records
+are structurally identical, are not theme-sensitive,
+and have the same callback presence — the reconciler can avoid the
+`children.Get(i)` COM call entirely and just refresh the
+[element tag](#element-tag-event-dispatch) if the element carries callbacks.
+The exception is a child that leads to a self-triggered component: an
+unchanged element there (a reused instance, a memoized wrapper) is still
+updated so the pass reaches the component. The child reconciler finds
+those children by index once per panel, so the other children skip
+without a COM call. At
+the property level, the descriptor or handler short-circuits per
+property: unchanged property → no DP write.
+
+`CanUpdate(old, new)` is the type-shape check: the same Element record
+type, the same control-target type. Returns true for `(ButtonElement,
+ButtonElement)`; false for `(ButtonElement, ImageElement)` — type
+swap forces unmount + mount.
+
+## Child reconciler — keyed vs positional [#child-reconciler-keyed-vs-positional]
+
+```csharp
+internal static void Reconcile(
+    Element[] oldChildren,
+    Element[] newChildren,
+    IChildCollection children,
+    Reconciler reconciler,
+    Action requestRerender,
+    UIElement? parentControl = null)
+{
+    // Filter out nulls and EmptyElements, keeping each kept child's slot (ChildSlots)
+    var oldFiltered = Filter(oldChildren, out var oldSlots);
+    var newFiltered = Filter(newChildren, out var newSlots);
+
+    bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
+
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
+
+    // Spec 042 §6 — read the active Animations.Animate ambient once
+    // per reconcile so insert / move / unmount paths can apply the
+    // same kind without re-reading AsyncLocal for every child. Stays
+    // null in the overwhelmingly common no-ambient case.
+    var ambient = AnimationAmbient.Current;
+    AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
+
+    // Children that lead to a component which updated its own state. Their elements can be
+    // unchanged — a reused instance, a memoized wrapper, a reused children array — and the
+    // skip arms below must still descend into them, or the pass never reaches the
+    // component. Resolved once here (default when nothing in the pass self-triggered).
+    var dirty = reconciler.ResolveDirtyChildIndices(parentControl, children);
+
+    if (hasKeys)
+        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || HoldsExitingControls(children, reconciler))
+        ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
+    else
+        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
+}
+```
+
+A panel's `Children` is just a list. Diffing two lists isn't free; the
+naive O(n²) "compare every pair" loses badly on large lists. Reactor
+picks one of two strategies based on whether any child carries a
+`Key`.
+
+**Positional.** No keys → match by index. Walk both lists in parallel,
+update the common prefix in place, mount any extra elements at the
+end, unmount any leftover children. Cost: O(max(old, new)). The catch
+is that an insert at the front re-updates every element rather than
+detecting the shift.
+
+**Conditional children hold their slot.** A position is the child's
+argument slot in the container factory call, not its index in the
+filtered `Children` array. The factories drop `null` and `Empty()`
+arguments and flatten `Group(...)`, but they record which argument
+each kept child came from. When a toggle shifts those slots between
+renders, the unkeyed walk matches children by slot in one merge pass:
+the toggled child mounts or unmounts in place, and every sibling after
+it is updated rather than compared against the child that used to sit
+at its index. So in
+`VStack(Header(), open ? Details() : Empty(), Footer())`, `Footer`
+keeps its state when `Details` closes, as a React sibling of a `null`
+child does. Containers whose children's slots line up by index keep the
+positional walk, unless an exit transition is still playing. Like React,
+a child whose argument slot changes is a different
+child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`. This
+applies to unkeyed containers only: once any child carries a key, the
+keyed algorithm below matches the unkeyed children positionally, so key
+the siblings of a conditional child there.
+
+**Keyed.** Any child carries a key → run a four-phase algorithm:
+
+1. Strip the common prefix (children at the same index with the same
+   key + same shape).
+2. Strip the common suffix.
+3. The middle is the only part that can have moved. If it's a pure
+   insert (old middle empty) or pure remove (new middle empty),
+   handle it directly.
+4. Otherwise, run Longest Increasing Subsequence over the new
+   middle's positions in the old middle. Elements in the LIS don't
+   move; everything else does. This is the minimum number of moves
+   for the given assignment.
+
+The keyed path is what makes `ForEach(items, item => Card(item).WithKey(item.Id))`
+behave correctly when a row is inserted at the top of a hundred-row
+list: one mount at index 0, no moves elsewhere — versus a hundred
+property writes in the positional path.
+
+## Identity and Key [#identity-and-key]
+
+`Element.Key` is the identity primitive. Two elements with the same
+key at different positions are treated as the same element by the
+keyed child reconciler; two elements with different keys at the same
+position are treated as different elements (force unmount + mount).
+Without a key, identity follows position — the child's argument slot,
+so a conditional sibling toggling before it does not shift it.
+
+```csharp
+ForEach(items, item => Card(item).WithKey(item.Id));
+```
+
+Use keys when:
+
+- The list can reorder (sort, drag-reorder).
+- Items can be inserted or removed in the middle.
+- An item carries identity beyond its visual position (selection
+  state in a controlled-input pattern, focus, an in-flight async load).
+
+Don't use the array index as a key when the list can reorder — that
+defeats the entire point. The [REACTOR_DSL_001](/microsoft-ui-reactor/main/get-started/rules-of-reactor)
+analyzer flags missing keys in `ForEach` and similar APIs.
+
+## Element-tag event dispatch [#element-tag-event-dispatch]
+
+The reconciler wires WinUI events (`Click`, `Tapped`, `TextChanged`,
+…) once at mount time and never detaches. The handler doesn't capture
+the element's callback directly — it would go stale after every
+re-render. Instead, the reconciler stamps the current element onto the
+control, and the handler reads the *live* element back out and invokes
+whatever callback is stored on it.
+
+The store is an attached dependency property,
+`Reconciler.ReactorAttached.StateProperty`, carrying a `ReactorState`
+whose `Element` field is the tag. It is deliberately *not*
+`FrameworkElement.Tag` (that belongs to app code) and deliberately not
+a `ConditionalWeakTable`: WinRT projection can hand out two managed RCWs
+for the same native `DependencyObject`, and anything keyed by managed
+identity would give each wrapper its own state and double-subscribe the
+native event. The attached DP lives on the native object, so every
+wrapper observes the same `ReactorState`.
+
+`ReactorState` also carries the per-element `ModifierEventHandlerState`
+(the routed-input family — `.OnPointerPressed` and friends — allocated
+lazily) and a per-control `ControlEventStateBox` for control-intrinsic
+events. Routed-input modifiers dispatch through that state's `Current*`
+fields, which `ApplyEventHandlers` refreshes each render, so they do not
+resolve through the tag at all.
+
+```csharp
+private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
+{
+    if (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag((WinUI.Button)s!) is ButtonElement live)
+    {
+        if (live.IsDisabledFocusable) return;
+        if (live.OnClick is not null) live.OnClick();
+        else if (live.Command is not null) global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(live.Command);
+    }
+};
+```
+
+The descriptor adapter refreshes that live tag on both mount and update:
+
+```csharp
+if (control is FrameworkElement fe)
+    Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsTeardown(control));
+```
+
+```csharp
+if (control is FrameworkElement fe)
+    Reconciler.SetElementTagIfNeeded(fe, typedNew, OwnsTeardown(control));
+```
+
+Tagging is allocation-gated. `NeedsTag(element)` is true when the
+element has callbacks (`Element.HasCallbacks`), carries a `Key`, has
+`Extensions`, or uses a reference modifier — the four cases where
+downstream code reads the element back through `GetElementTag`. An
+element with none of those never pays for a `ReactorState` allocation
+or the attached-DP write. The one addition is diagnostic: while
+`ReactorSourceMap.Enabled` is on, the `Border` wrapper of every
+`Component`, `Func` and `Memo` boundary is tagged too, so an inspector
+can find each component — one allocation per component, never per leaf
+(see [Source mapping](/microsoft-ui-reactor/main/how-it-works/source-mapping)).
+
+This is why `Element.HasCallbacks` is load-bearing in the early-skip
+path of the [child reconciler](#child-reconciler-keyed-vs-positional)
+— the skip short-circuits Update, so the tag has to be refreshed
+explicitly or the trampoline keeps dispatching through the previous
+render's closure (stale-state bug).
+
+## Gap nodes [#gap-nodes]
+
+Some WinUI controls hold children in collections that aren't the
+familiar `Panel.Children`:
+
+- **TabView** — `TabItems`
+- **NavigationView** — `MenuItems` plus `Content`
+- **TreeView** — `RootNodes` with nested `Children`
+- **MenuBar / CommandBar** — `Items` / `PrimaryCommands` / `SecondaryCommands`
+
+The child reconciler walks `Panel.Children`-shaped containers
+uniformly. Gap nodes are handled imperatively by their mount/update handlers —
+the framework knows which collection to walk for each control type and
+runs a second-pass diff over it.
+
+## Patterns [#patterns]
+
+### Stable identity through state changes [#stable-identity-through-state-changes]
+
+A keyed list whose items carry per-row state (selection, expansion,
+in-flight load) needs the key to stay stable across re-renders. The
+typical mistake is to derive the key from a value that can change:
+
+```csharp
+// Stable: row identity persists across edits
+ForEach(rows, row => Card(row).WithKey(row.Id));
+```
+
+```csharp
+// Unstable: changing the title changes the key, remounts the card,
+// loses any state attached via UseState inside Card
+ForEach(rows, row => Card(row).WithKey(row.Title))
+```
+
+The reconciler isn't psychic. When the key changes, it unmounts the
+old element and mounts a new one — the per-row state, focus, and
+animations restart from scratch. Use an immutable identifier.
+
+```csharp
+public abstract record Element
+{
+    /// <summary>
+    /// Optional key for stable identity across re-renders (like React's key prop).
+    /// When set, the reconciler uses it to match elements across list reorderings.
+    /// </summary>
+    public string? Key { get; init; }
+
+    /// <summary>
+    /// Layout modifiers (margin, padding, size, alignment, etc.) applied to this element.
+    /// Set via fluent extension methods: TextBlock("hi").Margin(10).Width(200)
+    /// Modifiers are stored inline so the concrete element type is preserved through chaining.
+    /// </summary>
+    public ElementModifiers? Modifiers { get; init; }
+```
+
+### Custom container reconciliation [#custom-container-reconciliation]
+
+When you write a control that owns children (a custom panel, a
+third-party container Reactor doesn't wrap), the integration point is
+the same one the built-in controls use: register a handler with the
+global `ControlRegistry` — either a
+`ControlDescriptor<TElement, TControl>` wrapped in a
+`DescriptorHandler`, where you pick a
+[children strategy](/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls) and the engine runs
+the child diff for you, or a hand-coded
+`IElementHandler<TElement, TControl>` whose `ReconcileChildren` owns the
+walk. `Reconciler.RegisterHandler` and the older raw-delegate
+`Reconciler.RegisterType(mount, update, unmount)` are the per-host
+override surfaces, useful for tests and host substitution. The
+[Architecture Overview](/microsoft-ui-reactor/main/how-it-works/architecture-overview) source-map row
+"Reconciler" lists the partial files where the registries live;
+the third-party-controls test fixtures
+(`tests/Reactor.AppTests.ThirdPartyControls/`) are the canonical
+worked example.
+
+## Common Mistakes [#common-mistakes]
+
+### Using array index as a key [#using-array-index-as-a-key]
+
+```csharp
+// Don't:
+ForEach(items.Select((item, i) => (item, i)),
+        x => Card(x.item).WithKey(x.i.ToString()))
+```
+
+```csharp
+internal static void Reconcile(
+    Element[] oldChildren,
+    Element[] newChildren,
+    IChildCollection children,
+    Reconciler reconciler,
+    Action requestRerender,
+    UIElement? parentControl = null)
+{
+    // Filter out nulls and EmptyElements, keeping each kept child's slot (ChildSlots)
+    var oldFiltered = Filter(oldChildren, out var oldSlots);
+    var newFiltered = Filter(newChildren, out var newSlots);
+
+    bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
+
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
+
+    // Spec 042 §6 — read the active Animations.Animate ambient once
+    // per reconcile so insert / move / unmount paths can apply the
+    // same kind without re-reading AsyncLocal for every child. Stays
+    // null in the overwhelmingly common no-ambient case.
+    var ambient = AnimationAmbient.Current;
+    AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
+
+    // Children that lead to a component which updated its own state. Their elements can be
+    // unchanged — a reused instance, a memoized wrapper, a reused children array — and the
+    // skip arms below must still descend into them, or the pass never reaches the
+    // component. Resolved once here (default when nothing in the pass self-triggered).
+    var dirty = reconciler.ResolveDirtyChildIndices(parentControl, children);
+
+    if (hasKeys)
+        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || HoldsExitingControls(children, reconciler))
+        ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
+    else
+        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
+}
+```
+
+An index-based key matches positions across renders, which is exactly
+what the *unkeyed* path already does. Worse, it positively asserts to
+the reconciler that "this element at index 3 is the same element as
+the previous render's index 3", so when an item is inserted at the
+front, every keyed child shifts, every key mismatches its previous
+position, and the keyed-path's LIS algorithm produces a worst-case
+move list. Use the item's own identifier (database ID, GUID, content
+hash) or skip the key and let positional matching handle it.
+
+## Tips [#tips]
+
+**Read `Reconciler.cs` as a routing function, not as the algorithm.**
+The interesting code is in `Reconciler.Mount.cs`,
+`Reconciler.Update.cs`, and `ChildReconciler.cs`. The orchestration
+file is short; the per-type handlers are where the patching logic
+lives.
+
+**Keys aren't free — but they're cheap.** Add a key whenever you can
+predict that the list will reorder or items will be inserted. Don't
+bother for static or append-only lists; positional matching is
+optimal there.
+
+**`CanSkipUpdate` lives on `Element`.** When you add a new element
+type with callbacks, override `HasCallbacks` so the early-skip path
+refreshes the tag. Forgetting this is the most common
+fresh-element-type bug; the symptom is "the handler sees stale state".
+
+**Reconciler overlays the truth.** When something rerenders that
+shouldn't, enable the reconcile-highlight overlay
+([dev-tooling](/microsoft-ui-reactor/main/guides/dev-tooling)) — it draws a border around every
+control the reconciler touched on the last pass. If your "unchanged"
+component lights up, the element-record comparison is finding a
+difference somewhere; the overlay narrows the search to one row.
+
+## Next Steps [#next-steps]
+
+- **[Reactivity Model](/microsoft-ui-reactor/main/how-it-works/reactivity-model)** — Previous: what brings the reconciler a new tree.
+- **[Hooks Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Where the state that drove this reconcile lives.
+- **[Element Pool](/microsoft-ui-reactor/main/how-it-works/element-pool)** — Next: how Mount and Unmount talk to the pool.
+- **[Effects Scheduling](/microsoft-ui-reactor/main/how-it-works/effects-scheduling)** — What runs after the reconciler commits.
+- **[Architecture Overview](/microsoft-ui-reactor/main/how-it-works/architecture-overview)** — The full render-loop picture.

@@ -1,0 +1,54 @@
+{
+  "code": "PAGE_NOT_FOUND",
+  "detail": "We couldn't find the page you're looking for.",
+  "resolution": "Where to look next: https://microsoft.github.io/microsoft-ui-reactor/main, https://microsoft.github.io/microsoft-ui-reactor/main, https://microsoft.github.io/microsoft-ui-reactor/main/get-started, https://microsoft.github.io/microsoft-ui-reactor/main/guides/components, https://microsoft.github.io/microsoft-ui-reactor/main/controls, https://microsoft.github.io/microsoft-ui-reactor/main/recipes, https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks, https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/architecture-overview, https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml, https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt, https://microsoft.github.io/microsoft-ui-reactor/main/openapi.json",
+  "status": 404,
+  "title": "Page not found",
+  "type": "about:blank",
+  "links": [
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main",
+      "label": "Back to home"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main",
+      "label": "Home"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started",
+      "label": "Get started"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/components",
+      "label": "Guides"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/controls",
+      "label": "Controls"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes",
+      "label": "Recipes"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks",
+      "label": "API reference"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/architecture-overview",
+      "label": "How it works"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml",
+      "label": "Sitemap"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt",
+      "label": "Docs index for AI agents (llms.txt)"
+    },
+    {
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/openapi.json",
+      "label": "JSON API description (openapi.json)"
+    }
+  ]
+}

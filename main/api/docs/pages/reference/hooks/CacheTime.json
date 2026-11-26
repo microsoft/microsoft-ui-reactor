@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/CacheTime.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheTime.md",
+  "route": "/reference/hooks/CacheTime",
+  "title": "CacheTime",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheTime",
+  "description": "Retention after the last subscriber leaves; null uses five minutes.",
+  "markdown": "---\ntitle: \"CacheTime\"\ndescription: \"Retention after the last subscriber leaves; null uses five minutes.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

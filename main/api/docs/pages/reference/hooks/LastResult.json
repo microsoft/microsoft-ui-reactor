@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/LastResult.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/LastResult.md",
+  "route": "/reference/hooks/LastResult",
+  "title": "LastResult",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/LastResult",
+  "description": "Most recent successful result, or default if none yet.",
+  "markdown": "---\ntitle: \"LastResult\"\ndescription: \"Most recent successful result, or default if none yet.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

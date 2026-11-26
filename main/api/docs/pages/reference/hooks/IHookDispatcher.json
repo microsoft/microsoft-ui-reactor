@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/IHookDispatcher.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IHookDispatcher.md",
+  "route": "/reference/hooks/IHookDispatcher",
+  "title": "IHookDispatcher",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IHookDispatcher",
+  "description": "Abstraction for marshalling continuations back to the render thread. Null-safe — if the callback is absent the continuation runs inline on the thread-pool completion thread (tests and headless hosts).",
+  "markdown": "---\ntitle: \"IHookDispatcher\"\ndescription: \"Abstraction for marshalling continuations back to the render thread. Null-safe — if the callback is absent the continuation runs inline on the thread-pool completion thread (tests and headless hosts).\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\nThe production implementation wraps `DispatcherQueue.TryEnqueue`; tests typically\ninstall a synchronous stub that records invocations.\n"
+}

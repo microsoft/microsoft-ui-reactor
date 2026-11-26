@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseContext.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseContext.md",
+  "route": "/reference/hooks/UseContext",
+  "title": "UseContext",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseContext",
+  "description": "Reads the nearest ancestor's provided value for the given context. Returns the context's DefaultValue if no provider exists in the ancestor chain. Follows hook rules — must be called in the same order every render.",
+  "markdown": "---\ntitle: \"UseContext\"\ndescription: \"Reads the nearest ancestor's provided value for the given context. Returns the context's DefaultValue if no provider exists in the ancestor chain. Follows hook rules — must be called in the same order every render.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Featured in [#featured-in]\n\n- [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n"
+}

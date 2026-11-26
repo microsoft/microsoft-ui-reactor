@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDevtools.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDevtools.md",
+  "route": "/reference/hooks/UseDevtools",
+  "title": "UseDevtools",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDevtools",
+  "description": "Returns true when the current process is running with the in-app devtools UI enabled. This is the AND of two independent signals:",
+  "markdown": "---\ntitle: \"UseDevtools\"\ndescription: \"Returns true when the current process is running with the in-app devtools UI enabled. This is the AND of two independent signals:\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n- The binary was built with `Reactor.DevtoolsSupport`\nenabled (build-time capability gate).\n- The process was launched with `--devtools app` or\n`--devtools run` (session-scoped opt-in by the user running the app).\n\n\nThe value is frozen for the session; this call does not consume a hook\nslot and does not cause re-renders. Components use it to gate dev-only\nUX so the subtree is never constructed in retail sessions:\n```csharp\nvar dev = ctx.UseDevtools();\nreturn VStack(Content(), dev ? DebugOverlay() : null);\n```\n"
+}

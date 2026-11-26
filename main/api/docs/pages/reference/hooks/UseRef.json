@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseRef.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseRef.md",
+  "route": "/reference/hooks/UseRef",
+  "title": "UseRef",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseRef",
+  "description": "Returns a mutable ref object that persists across renders.",
+  "markdown": "---\ntitle: \"UseRef\"\ndescription: \"Returns a mutable ref object that persists across renders.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Featured in [#featured-in]\n\n- [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n"
+}

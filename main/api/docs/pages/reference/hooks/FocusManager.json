@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/FocusManager.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusManager.md",
+  "route": "/reference/hooks/FocusManager",
+  "title": "FocusManager",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusManager",
+  "description": "Manages focus for a set of registered form fields. Supports programmatic focus control, enter-to-advance, and field ordering.",
+  "markdown": "---\ntitle: \"FocusManager\"\ndescription: \"Manages focus for a set of registered form fields. Supports programmatic focus control, enter-to-advance, and field ordering.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

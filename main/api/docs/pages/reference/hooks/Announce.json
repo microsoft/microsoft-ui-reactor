@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/Announce.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Announce.md",
+  "route": "/reference/hooks/Announce",
+  "title": "Announce",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Announce",
+  "markdown": "---\ntitle: \"Announce\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`Announce(string)`](#announcestring)\n- [`Announce(string, bool)`](#announcestring-bool)\n\n## `Announce(string)` [#announcestring]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.AnnounceHandle.Announce(System.String)`\n\n### Summary [#summary]\n\nAnnounces a message to screen readers (polite — queued after current speech).\n\n## `Announce(string, bool)` [#announcestring-bool]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.AnnounceHandle.Announce(System.String,System.Boolean)`\n\n### Summary [#summary_1]\n\nAnnounces a message to screen readers.\n\n### Parameters [#parameters]\n\n- **message** — The text to announce.\n- **assertive** — If true, interrupts current speech immediately.\nIf false (default), queued after current speech finishes.\n\n### Discussion [#discussion]\n\nThread-safe. When called on the UI thread the announcement is raised\nsynchronously. When called from any other thread it is marshalled to the\ncaptured UI `DispatcherQueue` and runs asynchronously\n(fire-and-forget) — it may complete after this method returns. Calls made\nbefore the live-region [Region](/microsoft-ui-reactor/main/reference/hooks/Region) ([guide](/microsoft-ui-reactor/main/guides/hooks)) has mounted are ignored.\n"
+}

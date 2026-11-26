@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/ComponentUseMemoCellsExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ComponentUseMemoCellsExtensions.md",
+  "route": "/reference/hooks/ComponentUseMemoCellsExtensions",
+  "title": "ComponentUseMemoCellsExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ComponentUseMemoCellsExtensions",
+  "markdown": "---\ntitle: \"ComponentUseMemoCellsExtensions\"\nseo:\n  description: \"Component-class shims for UseMemoCellsExtensions (guide) so subclasses can call UseMemoCells without going through this.Context. Same semantics as the RenderContext extension methods.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Summary [#summary]\n\n`Component`-class shims for [UseMemoCellsExtensions](/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsExtensions) ([guide](/microsoft-ui-reactor/main/guides/hooks))\nso subclasses can call `UseMemoCells` without going through\n`this.Context`. Same semantics as the `RenderContext`\nextension methods.\n\n## Discussion [#discussion]\n\nSpec 034 §C.\n"
+}

@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseNavigation.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigation.md",
+  "route": "/reference/hooks/UseNavigation",
+  "title": "UseNavigation",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigation",
+  "markdown": "---\ntitle: \"UseNavigation\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseNavigation<T1>()`](#usenavigationt1)\n- [`UseNavigation<T1>(T1)`](#usenavigationt1t1)\n\n## `UseNavigation<T1>()` [#usenavigationt1]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigation``1`\n\n### Summary [#summary]\n\nChild mode: retrieves an ancestor's `NavigationHandle`\nfrom context. Throws if no ancestor provides one (i.e., no root `UseNavigation`\nwith a `NavigationHost` exists above this component in the tree).\n\n## `UseNavigation<T1>(T1)` [#usenavigationt1t1]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigation``1(``0)`\n\n### Summary [#summary_1]\n\nRoot mode: creates a navigation stack with the given initial route.\nReturns a stable `NavigationHandle` across re-renders.\nWire this handle to a `NavigationHost` in the DSL to render route content.\nThe handle is automatically provided to descendants via context so child components\ncan call `UseNavigation<TRoute>()` (parameterless) to access it.\n"
+}

@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseWindowSize.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowSize.md",
+  "route": "/reference/hooks/UseWindowSize",
+  "title": "UseWindowSize",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowSize",
+  "markdown": "---\ntitle: \"UseWindowSize\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseWindowSize()`](/microsoft-ui-reactor/main/reference/hooks/UseWindowSize)\n- [`UseWindowSize(Window)`](#usewindowsizewindow)\n\n## `UseWindowSize()` [#usewindowsize_1]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize`\n\n### Summary [#summary]\n\nParameterless overload — resolves the window whose host renders this\ncomponent and re-renders on resize. Returns\n`(0, 0)` when the component has no owning window (tray-flyout content,\n`ReactorHostControl` embeds); no implicit fallback to `PrimaryWindow`\nor to another open window. (spec 036 §5.2 / §7.1)\n\n## `UseWindowSize(Window)` [#usewindowsizewindow]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize(Microsoft.UI.Xaml.Window)`\n\n### Summary [#summary_1]\n\nReturns (width, height) of the given window and re-renders when the window resizes.\n"
+}

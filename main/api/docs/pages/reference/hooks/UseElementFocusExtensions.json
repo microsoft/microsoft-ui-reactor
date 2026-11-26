@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseElementFocusExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementFocusExtensions.md",
+  "route": "/reference/hooks/UseElementFocusExtensions",
+  "title": "UseElementFocusExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementFocusExtensions",
+  "description": "Hook for imperative element focus (spec 027 Tier 5). Returns a stable ElementRef (survives re-renders) plus a RequestFocus action that schedules Input.FocusManager.Focus on the UI dispatcher. Scheduling defers focus past the current reconcile pass so callers can safely request focus from effects or event handlers without racing against layout.",
+  "markdown": "---\ntitle: \"UseElementFocusExtensions\"\ndescription: \"Hook for imperative element focus (spec 027 Tier 5). Returns a stable ElementRef (survives re-renders) plus a RequestFocus action that schedules Input.FocusManager.Focus on the UI dispatcher. Scheduling defers focus past the current reconcile pass so callers can safely request focus from effects or event handlers without racing against layout.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

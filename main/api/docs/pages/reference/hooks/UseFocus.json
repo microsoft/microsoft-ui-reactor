@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseFocus.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocus.md",
+  "route": "/reference/hooks/UseFocus",
+  "title": "UseFocus",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocus",
+  "markdown": "---\ntitle: \"UseFocus\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Overloads [#overloads]\n\n- [`UseFocus(Component)`](#usefocuscomponent)\n- [`UseFocus(RenderContext)`](#usefocusrendercontext)\n\n## `UseFocus(Component)` [#usefocuscomponent]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseFocusExtensions.UseFocus(Microsoft.UI.Reactor.Core.Component)`\n\n### Summary [#summary]\n\nCreates and returns a FocusManager for this component.\n\n## `UseFocus(RenderContext)` [#usefocusrendercontext]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.UseFocusExtensions.UseFocus(Microsoft.UI.Reactor.Core.RenderContext)`\n\n### Summary [#summary_1]\n\nCreates and returns a FocusManager scoped to this component.\nThe manager persists across re-renders.\n"
+}

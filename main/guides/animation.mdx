@@ -1,0 +1,966 @@
+---
+title: "Animation"
+description: "Reactor animations are declarative. You set the target value (opacity, scale, translation) and attach a transition modifier."
+---
+
+Microsoft.UI.Reactor (Reactor) exposes four animation systems and one rule about which to pick.
+The rule first: the **compositor** can only animate five properties —
+Opacity, Offset (Translation), Scale, Rotation, and CenterPoint — and
+when it does, the managed render thread is not involved and the
+animation runs at display refresh on the GPU. Everything that animates
+those five properties (implicit transitions like `.OpacityTransition()`,
+`.Animate()` for persistent implicit, `.WithAnimation()` for an event-
+scoped batch, `.Transition()` for enter/exit, `.InteractionStates()`
+for hover/press/focus, `.Keyframes()` for multi-step) is the same
+underlying pipeline at different ergonomics. The other three systems
+exist for things outside that ceiling: `.LayoutAnimation()` animates
+position changes from layout reflow (a sibling was added, the panel
+re-measured), `.ConnectedAnimation()` snapshots an element on unmount
+and plays the snapshot into the matching element on mount, and the
+WinUI `Storyboard` (reachable through `.Set(...)`) covers the rare
+properties none of the above can touch. Read [Compositor animation](#animate-modifier)
+first if you're picking between `.Animate()` and `.WithAnimation()`,
+or [Choreography](#choreography) if you're trying to sequence steps.
+
+When the value changes on the next render — driven by [hooks](/microsoft-ui-reactor/main/guides/hooks) and
+state — WinUI animates from the old value to the new one automatically.
+
+Animation and transition configuration changes are also checked on each render,
+even when the element's other properties stay the same. For example, changing
+only `.LayoutAnimation()`'s duration updates the layout animation on the next render.
+
+Unchanged declarations still skip updates, even though each render rebuilds
+them. `.Keyframes()` and `.ScrollLinked()` compare their keyframes and
+expressions, implicit transitions such as `.OpacityTransition()` compare their
+duration (and axes, for scale and translation), `.WithTransitions()` compares
+each theme transition's settings, and `.InteractionStates()` compares solid
+brushes by color and opacity. Other brushes, a `.ScrollLinked()` driven by a
+different `ScrollViewer`, a continuum navigation transition, and a transition
+type Reactor doesn't know still count as a change.
+
+> **WinUI reference:** For the full property surface and design guidance, see [Motion](https://learn.microsoft.com/en-us/windows/apps/design/motion/).
+
+## Reference [#reference]
+
+| API | Animates | Trigger | Use when |
+|-----|----------|---------|----------|
+| `.OpacityTransition(duration?)` | Opacity | Implicit, on every change | Show/hide a single element. |
+| `.ScaleTransition(transition?)` | Scale | Implicit, on every change | Element resize feedback. |
+| `.TranslationTransition(transition?)` | Translation (offset) | Implicit, on every change | Slide a single element. |
+| `.RotationTransition(duration?)` | Rotation | Implicit, on every change | Spin a single element. |
+| `.BackgroundTransition(duration?)` | Background brush | Implicit; **panels only** | Color transitions on Grid / Stack. |
+| `.Animate(curve, props?)` | Any compositor property | Implicit, persistent | One curve for every change to this element. |
+| `AnimationScope.WithAnimation(curve, action)` | Compositor properties changed inside the action | Event-scoped | One state change drives a batched animation. |
+| `.Transition(t, curve?)` | Enter / exit | When element enters or leaves the tree | Animate `When(...)` / ternary mount and unmount. |
+| `.InteractionStates(builder, curve?)` | Compositor properties per state | Hover / press / focus | Zero-reconcile pointer-state feedback. |
+| `.Keyframes(name, trigger, builder)` | Compositor properties at progress points | When `trigger` changes | Multi-step animation (pulse, shake, breathe). |
+| `.Stagger(delay, curve?)` | Container's children | Sibling cascade | Cascade enter/exit and layout animations across a list. |
+| `.LayoutAnimation(duration?)` / `.SpringLayoutAnimation(...)` | Element position from layout reflow | Layout pass | Animate position changes a sibling caused. |
+| `.ConnectedAnimation(key)` | Snapshot from old position to new | On unmount/mount of the same key | List-to-detail hero animations. |
+| `AnimationScope.WithAnimationAsync(curve, action)` | Compositor properties changed inside the action | Event-scoped, returns Task | Sequence steps with `await`. |
+
+## Opacity Transition [#opacity-transition]
+
+`.OpacityTransition()` animates opacity changes. Set `.Opacity()` to your
+target value and the transition handles the rest:
+
+```csharp
+class OpacityDemo : Component
+{
+    public override Element Render()
+    {
+        var (visible, setVisible) = UseState(true);
+
+        return VStack(12,
+            SubHeading("Opacity Transition"),
+            Button(visible ? "Fade Out" : "Fade In",
+                () => setVisible(!visible))
+                .AutomationName(visible ? "Fade out text" : "Fade in text"),
+            TextBlock("This text fades in and out")
+                .FontSize(18).Bold()
+                .Opacity(visible ? 1.0 : 0.0)
+                .OpacityTransition(TimeSpan.FromMilliseconds(500))
+        ).Padding(24);
+    }
+}
+```
+
+![Opacity transition](/microsoft-ui-reactor/main/images/animation/opacity-transition.png)
+
+The optional `TimeSpan` parameter controls duration. The default is 300ms.
+Use this for fade-in/fade-out on showing and hiding elements.
+
+## Scale Transition [#scale-transition]
+
+`.ScaleTransition()` animates scale changes. Set `.Scale()` to the target
+factor:
+
+```csharp
+class ScaleDemo : Component
+{
+    public override Element Render()
+    {
+        var (enlarged, setEnlarged) = UseState(false);
+
+        return VStack(12,
+            SubHeading("Scale Transition"),
+            Button(enlarged ? "Shrink" : "Enlarge",
+                () => setEnlarged(!enlarged))
+                .AutomationName(enlarged ? "Shrink sample" : "Enlarge sample"),
+            Border(
+                TextBlock("Scales up and down").FontSize(18).Bold()
+            ).Padding(12)
+             .CornerRadius(8)
+             .Background(Theme.CardBackground)
+             .TransformOrigin(0.5f, 0.5f)
+             .Scale(enlarged ? 1.5f : 1.0f)
+             .ScaleTransition()
+        ).Padding(24);
+    }
+}
+```
+
+![Scale transition](/microsoft-ui-reactor/main/images/animation/scale-transition.png)
+
+A value of `1.0f` is normal size, `1.5f` is 150%. Scale grows from the
+element's leading top corner by default. The sample sets `.TransformOrigin(0.5f, 0.5f)`
+so it grows from the centre (see [Transform origin](#transform-origin)). You can pass a
+custom `Vector3Transition` to control which axes animate.
+
+### Transform origin [#transform-origin]
+
+`.Scale()` and `.Rotation()` pivot on the element's leading top corner unless you
+move the pivot. `.TransformOrigin(x, y)` sets it as a fraction of the element's laid-out
+size: `(0.5f, 0.5f)` is the centre and `(1, 1)` the trailing bottom corner. The pivot
+follows resizes, hit-testing and UI Automation bounds honour it, and it works with hover
+states, keyframes and enter or exit transitions on the same element.
+
+`.CenterPoint(new Vector3(x, y, 0))` sets the pivot in pixels instead. On an element that
+also has `.TransformOrigin()`, it's an offset added to the size-relative pivot, like CSS
+`calc(50% + 10px)`.
+
+A few details:
+
+- `x` is flow-relative. In a right-to-left layout `0` is the right edge, the same as
+  the transform space WinUI uses.
+- While `.LayoutAnimation()` animates the element's size, the pivot follows the animating
+  size, while the content already renders at its final size. At rest it's exact.
+- With `.TransformOrigin()` set, `.Animate()` and `WithAnimation` animate a `.CenterPoint()`
+  change as a move of the offset, and the pivot keeps following the size.
+- `.TransformOrigin()` takes the element's composition visual, like the other transform
+  modifiers (see below). `.TransformOrigin(0, 0)` doesn't, since it's the default pivot.
+
+## Translation Transition [#translation-transition]
+
+`.TranslationTransition()` animates position offsets. Set `.Translation()`
+to the target X, Y, Z offset in pixels:
+
+```csharp
+class TranslationDemo : Component
+{
+    public override Element Render()
+    {
+        var (moved, setMoved) = UseState(false);
+
+        return VStack(12,
+            SubHeading("Translation Transition"),
+            Button(moved ? "Slide Back" : "Slide Right",
+                () => setMoved(!moved))
+                .AutomationName(moved ? "Slide sample back" : "Slide sample right"),
+            TextBlock("Slides horizontally")
+                .FontSize(18).Bold()
+                .Translation(moved ? 120f : 0f, 0f, 0f)
+                .TranslationTransition()
+        ).Padding(24);
+    }
+}
+```
+
+![Translation transition](/microsoft-ui-reactor/main/images/animation/translation-transition.png)
+
+Translation offsets are relative to the element's layout position. Positive X
+moves right, positive Y moves down. The element still occupies its original
+layout space — only the visual position changes.
+
+## Background Transition [#background-transition]
+
+`.BackgroundTransition()` animates background color changes on `VStack`,
+`HStack`, and `Grid` elements:
+
+```csharp
+class BackgroundDemo : Component
+{
+    public override Element Render()
+    {
+        var (warm, setWarm) = UseState(false);
+
+        return VStack(12,
+            SubHeading("Background Transition"),
+            Button(warm ? "Cool Colors" : "Warm Colors",
+                () => setWarm(!warm))
+                .AutomationName(warm ? "Switch to cool colors" : "Switch to warm colors"),
+            VStack(8,
+                TextBlock("Background animates between colors")
+                    .Foreground(Theme.AccentText).Bold()
+            ).Padding(16)
+             .CornerRadius(8)
+             .Background(warm ? Theme.SystemCaution : Theme.Accent)
+             .BackgroundTransition(TimeSpan.FromMilliseconds(600))
+        ).Padding(24);
+    }
+}
+```
+
+![Background transition](/microsoft-ui-reactor/main/images/animation/background-transition.png)
+
+Background transitions use WinUI's `BrushTransition`. They only work on
+panel elements (`StackPanel`, `Grid`) because WinUI restricts
+`BackgroundTransition` to those types.
+
+## Combining Transitions [#combining-transitions]
+
+You can chain multiple transition modifiers on a single element. Each
+property animates independently:
+
+```csharp
+class CombinedDemo : Component
+{
+    public override Element Render()
+    {
+        var (active, setActive) = UseState(false);
+
+        return VStack(12,
+            SubHeading("Combined Transitions"),
+            Button(active ? "Reset" : "Animate",
+                () => setActive(!active))
+                .AutomationName(active ? "Reset combined transitions" : "Run combined transitions"),
+            Border(
+                TextBlock("All at once").FontSize(16).Bold()
+                    .Foreground(Theme.AccentText)
+            ).Padding(16)
+             .CornerRadius(8)
+             .Background(Theme.Accent)
+             .Opacity(active ? 1.0 : 0.4)
+             .Scale(active ? 1.2f : 1.0f)
+             .Translation(active ? 40f : 0f, 0f, 0f)
+             .OpacityTransition(TimeSpan.FromMilliseconds(400))
+             .ScaleTransition()
+             .TranslationTransition()
+        ).Padding(24);
+    }
+}
+```
+
+![Combined transitions](/microsoft-ui-reactor/main/images/animation/combined-transitions.png)
+
+Each transition modifier is independent — `.OpacityTransition()` animates
+opacity while `.ScaleTransition()` animates scale simultaneously. Set the
+target values (`.Opacity()`, `.Scale()`, `.Translation()`) and the
+transitions handle the animation for each property in parallel.
+
+## How Implicit Transitions Run [#how-implicit-transitions-run]
+
+`.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` and
+`.TranslationTransition()` run on the element's composition visual, so they
+combine with `.Animate()`, `.LayoutAnimation()`, `.Transition()`,
+`.InteractionStates()` and `.Keyframes()` on the same element. They match
+WinUI's own implicit transitions:
+
+- **Curve.** The transition's duration (300 ms by default) with WinUI's
+  cubic-bezier (0.8, 0, 0.2, 1) ease, which starts and ends slowly.
+- **Axes.** A `Vector3Transition` passed to `.ScaleTransition()` or
+  `.TranslationTransition()` keeps its `Components` mask. With
+  `Components = Vector3TransitionComponents.X`, X animates and Y and Z jump.
+- **Reduced motion.** With the Windows "Animation effects" setting off, the
+  transitions don't animate and values jump, as WinUI's do. A change of the
+  setting takes effect the next time the element renders.
+- **Precedence.** An ambient `WithAnimation` curve wins, then `.Animate()` for
+  the properties its `AnimateProperty` flags name, then the transition.
+- **Adding or removing one.** A transition added or removed in a render
+  applies to the values that change in the same render.
+
+`.TranslationTransition()` animates the values you set with `.Translation()`.
+It doesn't animate layout moves (a margin, alignment or sibling change), which
+is `.LayoutAnimation()`'s job, and it doesn't animate a `UIElement.Translation`
+that your own code writes.
+
+`.BackgroundTransition()` stays WinUI's XAML `BrushTransition`, so it follows
+the same setting on its own.
+
+### Reading transforms back and `.Set(...)` [#reading-transforms-back-and-set]
+
+`.Scale()`, `.Rotation()`, `.Translation()`, `.CenterPoint()` and `.TransformOrigin()` write the
+element's composition visual, and so do the four transitions and every
+compositor feature on this page. A non-identity transform, a transition or a
+compositor feature takes the visual, and an identity value such as
+`.Scale(1)` on an untouched control doesn't. Once the visual is taken:
+
+- `fe.Scale`, `fe.Rotation` and `fe.CenterPoint` read back identity for values
+  set with `.Scale()`, `.Rotation()` and `.CenterPoint()`. Read
+  `ElementCompositionPreview.GetElementVisual(fe).Scale` (or `RotationAngle`,
+  in radians, and `CenterPoint`) instead. With `.TransformOrigin()` set, an
+  expression drives `CenterPoint` and the getter doesn't return it. The pivot is
+  the element's size times the origin, plus the `.CenterPoint()` offset.
+- WinUI rejects `.Set(fe => fe.Rotation = …)`, and the same for `Scale`,
+  `CenterPoint`, `RotationAxis`, `TransformMatrix`, `UIElement.StartAnimation`
+  and the XAML `*Transition` properties, and the same writes from `.OnMount(...)`.
+  Use `.Rotation()`, `.Scale()`, `.CenterPoint()` and the transition modifiers
+  instead. Reactor logs a warning that names the modifier when that happens,
+  and the `REACTOR_ANIM_004` analyzer flags the `.Set` at build time and
+  rewrites the simple cases.
+
+### Don't mix `fe.Translation` with `.Translation()` [#dont-mix-fetranslation-with-translation]
+
+A drag that writes `fe.Translation` from a handler or an `ElementRef` keeps
+working next to `.Scale()`, `.Rotation()` and the other features, because
+Reactor enables translation on the visual only for a declared Translation
+channel: `.Translation()`, a `translation:` keyframe or an
+`.InteractionStates()` translation. On an element that declares one, WinUI
+ignores `fe.Translation` writes once the element has rendered. Either drive
+the position through `.Translation()` or write `fe.Translation` yourself, not
+both.
+
+## Layout Animation [#layout-animation]
+
+`.LayoutAnimation()` animates elements when their position changes due to
+layout reflow — items entering, leaving, or reordering in a [collection](/microsoft-ui-reactor/main/controls/collections):
+
+```csharp
+class LayoutAnimationDemo : Component
+{
+    public override Element Render()
+    {
+        var (items, updateItems) = UseReducer(
+            new List<string> { "Apple", "Banana", "Cherry" });
+        var nextId = UseRef(3);
+
+        return VStack(12,
+            SubHeading("Layout Animation"),
+            HStack(8,
+                Button("Add Item", () =>
+                {
+                    nextId.Current++;
+                    updateItems(l => [$"Item {nextId.Current}", .. l]);
+                }).AutomationName("Add layout animation item"),
+                Button("Remove First", () =>
+                    updateItems(l => l.Count > 0 ? l[1..] : l))
+                    .AutomationName("Remove first layout animation item")
+            ),
+            VStack(4, items.Select(item =>
+                Border(
+                    TextBlock(item)
+                ).Padding(horizontal: 8, vertical: 12)
+                    .Background(Theme.CardBackground)
+                    .CornerRadius(4)
+                    .LayoutAnimation()
+                    .WithKey($"item-{item}")
+            ).ToArray())
+        ).Padding(24);
+    }
+}
+```
+
+![Layout animation](/microsoft-ui-reactor/main/images/animation/layout-animation.png)
+
+Layout animation works at the Composition layer. When WinUI repositions an
+element (e.g., a sibling is added or removed), Reactor animates from the old
+position to the new one. Use `.WithKey()` on each element so the reconciler
+can track identity across reorders.
+
+You can also use `.LayoutAnimation(TimeSpan)` for a custom duration or
+`.SpringLayoutAnimation()` for a bouncy feel.
+
+## Connected Animation [#connected-animation]
+
+`.ConnectedAnimation(key)` creates a visual continuity effect between two
+views. When an element with a key is unmounted and another with the same key
+is mounted, WinUI animates a snapshot from the old position to the new one:
+
+```csharp
+class ConnectedAnimationDemo : Component
+{
+    public override Element Render()
+    {
+        var (selected, setSelected) = UseState<string?>(null);
+
+        if (selected is not null)
+            return VStack(12,
+                Button("Back to list", () => setSelected(null))
+                    .AutomationName("Return to animation list"),
+                TextBlock(selected)
+                    .FontSize(28).Bold()
+                    .ConnectedAnimation($"title-{selected}")
+            ).Padding(24);
+
+        var items = new[] { "Photos", "Music", "Videos" };
+        return VStack(12,
+            SubHeading("Connected Animation"),
+            VStack(4,
+                items.Select(item =>
+                    Button(item, () => setSelected(item))
+                        .AutomationName($"Open {item}")
+                        .ConnectedAnimation($"title-{item}")
+                        .WithKey($"source-{item}")
+                ).ToArray()
+            )
+        ).Padding(24);
+    }
+}
+```
+
+![Connected animation](/microsoft-ui-reactor/main/images/animation/connected-animation.png)
+
+For a `NavigationHost` page transition, mark both elements with the same key
+and set `NavigateOptions.ConnectedAnimationKey = key` for that navigation. Select
+page motion independently with `Transition` (for example, `NavigationTransition.DrillIn()`). The host
+prepares the selected source before page teardown, waits for the destination's
+layout, and runs the selected page transition alongside the shared element.
+Both animations finish before page teardown.
+The host coordinates caching and back/forward navigation, retaining the outgoing
+page throughout the motion. See [navigation](/microsoft-ui-reactor/main/guides/navigation#page-transitions).
+
+Outside that navigation-owned path, both the source and destination elements must use the same key string. The
+animation runs automatically when the reconciler detects the transition.
+Source and destination must appear in the **same render** — the reconciler
+publishes the outgoing element's snapshot during the reconcile pass and plays
+it into the incoming element at the end of that same pass.
+
+If two renders in the same frame unmount elements with the same key, only the
+first one animates.
+
+Reactor snapshots *every* outgoing element that carries a key, because it cannot
+know which sibling you activated. Collapsing a list of keyed rows to one detail
+element therefore leaves the unpicked rows' snapshots behind, and WinUI keeps
+each of those painted at its old position for about a second before expiring it.
+Keep the keyed set small — key the rows you actually navigate between — if that
+overlap is distracting.
+
+Connected animation does not compose with an exit `.Transition(...)` on the
+**same** element: the exit transition defers the element's teardown, and with it
+the snapshot, past the point where the destination looks for it, so the
+animation silently does not play. Put the key and the exit transition on
+different elements.
+
+Use connected animations for list-to-detail [navigation](/microsoft-ui-reactor/main/guides/navigation)
+where an element "flies" from the list into the detail view.
+
+## Transactional animation — `Animations.Animate(...)` [#transactional-animation-animationsanimate]
+
+`Animations.Animate(kind, action)` is Reactor's SwiftUI-style transactional
+animation primitive. Wrap a state mutation, and any **structural** change to
+a keyed list (insert, move, remove) that comes out of that mutation picks up
+the kind — without a per-element modifier in sight.
+
+```csharp
+// ListView<T> keys rows by T.Key, so the model implements IReactorKeyed.
+// That is what lets the reconciler tell an insert from a replace — and
+// therefore what makes the transactional animation meaningful.
+record Todo(string Id, string Title) : IReactorKeyed
+{
+    public string Key => Id;
+}
+
+class TransactionalAnimateDemo : Component
+{
+    public override Element Render()
+    {
+        var initialItems = UseMemo<IReadOnlyList<Todo>>(() =>
+            [new Todo("seed-1", "First"), new Todo("seed-2", "Second")]);
+        var (items, setItems) = UseState(initialItems);
+
+        return VStack(12,
+            SubHeading("Animations.Animate — structural changes"),
+
+            // Wrapping the setter makes the resulting list insert animate
+            // with a spring. No per-element modifier needed.
+            Button("Add", () =>
+                Animations.Animate(AnimationKind.Spring, () =>
+                    setItems([.. items, new Todo(Guid.NewGuid().ToString(), "New")])))
+                .AutomationName("Add animated todo"),
+
+            ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8))
+                .Height(200)
+        ).Padding(24);
+    }
+}
+```
+
+`AnimationKind` is the declarative knob — `Spring`, `EaseIn`, `EaseOut`,
+`EaseInOut`, `Default`, or `None`. The kind flows through an `AsyncLocal`
+ambient: a setter invoked inside `Animate` snapshots the ambient before
+queuing the render, and the reconciler re-pushes the snapshot around the
+diff pass so `ListView`, `GridView`, `LazyVStack` (and hand-built
+`FlexColumn(items.Select(...).WithKey(...))` children) all animate the
+resulting insert / move / remove. (See spec 042 §6.)
+
+The templated `ListView<T>(items, viewBuilder)` overload constrains
+`T : IReactorKeyed` — the model exposes a stable `string Key`, which is
+what lets the reconciler classify a change as an insert rather than a
+replace. Use the
+`ListView<T>(items, keySelector, viewBuilder)` overload when the model
+type can't implement the interface.
+
+### What `Animate` does *not* do [#what-animate-does-not-do]
+
+`Animate` is **scoped to structural changes**. A leaf `TextBlock` whose
+`Foreground` changes inside `Animate(.Spring)` does **not** animate the
+foreground — that remains the job of per-element implicit-transition
+modifiers like `.OpacityTransition(...)` / `.ScaleTransition(...)` /
+`.TranslationTransition(...)` / `.RotationTransition(...)`, or
+[`AnimationScope.WithAnimation(...)`](#withanimation-scope). The two
+channels are deliberately independent so the SwiftUI "`withAnimation` only
+animates layout-shape ops" contract holds; conflating them would surprise
+users coming from that mental model.
+
+Per-element animation modifiers continue to win when set: declaring
+`.Transition(Transition.Fade)` on a row makes that row's enter / exit use
+Fade regardless of the ambient. The ambient is a default for the
+transactional case, not a hammer for every change.
+
+### Nesting and explicit suppression [#nesting-and-explicit-suppression]
+
+Nested `Animate` calls stack like `using` blocks — the inner kind wins for
+state changes inside its scope, and the outer kind resumes after:
+
+```csharp
+Animations.Animate(AnimationKind.Spring, () =>
+{
+    // Insert: animates with Spring.
+    setItems([.. items, x]);
+
+    Animations.Animate(AnimationKind.None, () =>
+    {
+        // Insert inside None: no animation, even though we're still inside
+        // an outer Spring transaction. Useful when a child component needs
+        // to opt out of the caller's implicit animation intent.
+        setOtherItems([.. others, y]);
+    });
+});
+```
+
+### Reduced motion [#reduced-motion]
+
+`Animate` respects the system's reduced-motion preference *at the call
+site*. Read `UseReducedMotion()` and skip the wrapper when the user has
+opted out:
+
+```csharp
+var reduceMotion = UseReducedMotion();
+Action<Todo> addItem = x =>
+{
+    Action commit = () => setItems([.. items, x]);
+    if (reduceMotion) commit();
+    else Animations.Animate(AnimationKind.Spring, commit);
+};
+```
+
+## WithAnimation Scope [#withanimation-scope]
+
+`AnimationScope.WithAnimation()` wraps a state change so that every
+compositor property modified during the scope animates with the given curve.
+Call it inside a button handler or effect:
+
+```csharp
+class WithAnimationDemo : Component
+{
+    public override Element Render()
+    {
+        var (opacity, setOpacity) = UseState(1.0);
+
+        return VStack(12,
+            SubHeading("WithAnimation Scope"),
+            Button(opacity > 0.5 ? "Fade Out" : "Fade In", () =>
+            {
+                Microsoft.UI.Reactor.Animation.AnimationScope.WithAnimation(
+                    Microsoft.UI.Reactor.Animation.Curve.Ease(300, Microsoft.UI.Reactor.Animation.Easing.Decelerate), () =>
+                    {
+                        setOpacity(opacity > 0.5 ? 0.2 : 1.0);
+                    });
+            }).AutomationName(opacity > 0.5 ? "Fade out with animation" : "Fade in with animation"),
+            TextBlock("Compositor-animated via WithAnimation scope")
+                .FontSize(18).Bold()
+                .Opacity(opacity)
+        ).Padding(24);
+    }
+}
+```
+
+![WithAnimation scope](/microsoft-ui-reactor/main/images/animation/with-animation.png)
+
+`WithAnimation` captures the curve, triggers the state change, and any
+`.Opacity()`, `.Scale()`, `.Translation()`, or `.Rotation()` values that
+change during the render animate on the compositor thread. The managed
+render completes instantly — animation runs on the GPU.
+
+> **Caveat:** `AnimationScope` stores its current curve in a `[ThreadStatic]` field,
+> so the ambient scope is alive only on the call stack that opened it.
+> The classic failure: `WithAnimation(Curve.Spring(), async () => { await
+> Task.Delay(100); setVisible(false); })`. The `setVisible` after the
+> `await` runs with no ambient scope — the continuation is a fresh
+> stack frame and `[ThreadStatic]` is empty — and the property change
+> applies instantly with no animation. For sequenced animation,
+> `WithAnimationAsync` (which uses a `CompositionScopedBatch` and
+> returns a task) is the right shape, not `await` inside `WithAnimation`.
+> The framework's render host uses internal `PushScope`/`PopScope` calls
+> to re-establish the scope across its own async boundaries; user code
+> does not have that hook.
+
+## .Animate() Modifier [#animate-modifier]
+
+`.Animate(curve)` attaches a persistent implicit animation to an element.
+Every time a compositor property changes (opacity, offset, scale, rotation),
+it animates with the given curve — no scope needed:
+
+```csharp
+class AnimateDemo : Component
+{
+    public override Element Render()
+    {
+        var (active, setActive) = UseState(false);
+
+        return VStack(12,
+            SubHeading(".Animate() Modifier"),
+            Button(active ? "Reset" : "Animate", () => setActive(!active))
+                .AutomationName(active ? "Reset animate modifier" : "Run animate modifier"),
+            Border(
+                TextBlock("Spring-animated").FontSize(18).Bold()
+            ).Padding(12).CornerRadius(8).Background(Theme.CardBackground)
+             .Opacity(active ? 0.5 : 1.0)
+             .Animate(Microsoft.UI.Reactor.Animation.Curve.Spring(0.65f))
+        ).Padding(24);
+    }
+}
+```
+
+![Animate modifier](/microsoft-ui-reactor/main/images/animation/animate-modifier.png)
+
+Pass a `Curve.Spring()` for a bouncy feel or `Curve.Ease(ms)` for a timed
+ease. You can restrict which properties animate with the `AnimateProperty`
+flags: `.Animate(Curve.Spring(), AnimateProperty.Opacity | AnimateProperty.Scale)`.
+
+The compositor ceiling is `Opacity | Offset | Scale | Rotation |
+CenterPoint` — anything outside that flag set (`Width`, `Height`, layout
+slot, brush) is *not* covered by `.Animate()`. Use `.LayoutAnimation()`
+for size changes driven by layout, or fall through to a WinUI
+`Storyboard` via `.Set(...)` for the unusual property.
+
+Changing the curve takes effect on the next render. Removing `.Animate()`
+makes subsequent property changes immediate, unless another animation is
+configured.
+
+## Interaction States [#interaction-states]
+
+`.InteractionStates()` applies hover, press, and focus effects at the
+compositor layer with zero reconciles. The visual feedback runs entirely on
+the GPU — Reactor's render loop is never involved:
+
+```csharp
+class InteractionStatesDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            SubHeading("InteractionStates"),
+            TextBlock("Hover and press — zero reconcile, compositor-driven."),
+            HStack(12,
+                Border(
+                    TextBlock("Hover me").FontSize(16).Bold()
+                        .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
+                ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.SystemSuccess)
+                 .TransformOrigin(0.5f, 0.5f)
+                 .InteractionStates(s => s
+                    .PointerOver(opacity: 0.85f, scale: 1.05f)
+                    .Pressed(scale: 0.95f, opacity: 0.7f)),
+                Border(
+                    TextBlock("Press me").FontSize(16).Bold()
+                        .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
+                ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.AccentSecondary)
+                 .TransformOrigin(0.5f, 0.5f)
+                 .InteractionStates(s => s
+                    .PointerOver(scale: 1.03f)
+                    .Pressed(scale: 0.97f, opacity: 0.8f),
+                    curve: Microsoft.UI.Reactor.Animation.Curve.Spring(0.5f))
+            )
+        ).Padding(24);
+    }
+}
+```
+
+![Interaction states](/microsoft-ui-reactor/main/images/animation/interaction-states.png)
+
+The builder supports `.PointerOver(...)`, `.Pressed(...)`, and
+`.Focused(...)`. Each accepts optional `opacity`, `scale`, `translation`,
+`rotation` (degrees, clockwise, like `.Rotation()`), `background`, `foreground`, `borderBrush` parameters. Pass
+a `curve:` parameter for spring or ease transitions between states.
+
+States combine with `.Scale()`, `.Rotation()`, `.Translation()`, and
+`.CenterPoint()` on the same element. A state's `scale`, `translation`, and
+`rotation` are the values the element animates to, not offsets from its own
+transform, and leaving the state returns to the element's own values. Use
+`.TransformOrigin(0.5f, 0.5f)` to make a hover scale grow from the centre, as the
+sample does, or `.CenterPoint()` for a pivot in pixels.
+
+## Enter/Exit Transitions [#enterexit-transitions]
+
+`.Transition()` animates an element when it enters or leaves the tree.
+Combine transitions with `+` (parallel) and `|` (asymmetric enter/exit):
+
+```csharp
+class TransitionDemo : Component
+{
+    public override Element Render()
+    {
+        var (visible, setVisible) = UseState(true);
+
+        return VStack(12,
+            SubHeading("Enter/Exit Transition"),
+            Button(visible ? "Hide" : "Show", () => setVisible(!visible))
+                .AutomationName(visible ? "Hide transition sample" : "Show transition sample"),
+            visible
+                ? Border(
+                    TextBlock("Fade + Slide").FontSize(16).Bold()
+                        .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
+                ).Padding(12).CornerRadius(8).Size(200, 60).Background(Theme.SystemCritical)
+                 .Transition(Microsoft.UI.Reactor.Animation.Transition.Fade + Microsoft.UI.Reactor.Animation.Transition.Slide(Microsoft.UI.Reactor.Animation.Edge.Bottom))
+                : (Element)TextBlock("(removed from tree)")
+        ).Padding(24);
+    }
+}
+```
+
+![Enter/exit transition](/microsoft-ui-reactor/main/images/animation/enter-exit-transition.png)
+
+Built-in transitions:
+
+| Transition | Effect |
+|-----------|--------|
+| `Transition.Fade` | Fade in from 0 to the element's own opacity (`.Opacity()` or a style's), and out to 0 |
+| `Transition.Slide(edge)` | Slide from an edge (Left, Top, Right, Bottom) |
+| `Transition.Scale(from)` | Scale from `from` times the element's own `.Scale()` to its full size |
+| `a + b` | Run both in parallel |
+| `enter \| exit` | Different transitions for enter and exit |
+
+The default curve is 300ms with Decelerate easing. Pass a custom `Curve`
+as the second parameter to override.
+
+## Stagger [#stagger]
+
+`.Stagger(delay)` on a container adds an incremental delay to each child's
+enter transition and layout animation, creating a cascade effect:
+
+```csharp
+class StaggerDemo : Component
+{
+    public override Element Render()
+    {
+        var initialItems = UseMemo(() => new[] { "One", "Two", "Three", "Four", "Five" });
+        var (items, setItems) = UseState(initialItems);
+
+        return VStack(12,
+            SubHeading("Staggered Animation"),
+            Button("Shuffle", () => setItems(items.OrderBy(_ => Random.Shared.Next()).ToArray()))
+                .AutomationName("Shuffle staggered items"),
+            VStack(4, items.Select(item =>
+                Border(TextBlock(item)).Padding(horizontal: 8, vertical: 12).Background(Theme.CardBackground)
+                    .CornerRadius(4).LayoutAnimation()
+                    .WithKey(item)
+            ).ToArray()).Stagger(TimeSpan.FromMilliseconds(40))
+        ).Padding(24);
+    }
+}
+```
+
+![Staggered animation](/microsoft-ui-reactor/main/images/animation/stagger.png)
+
+Each child's animation starts `delay` milliseconds after the previous one.
+Combine with `.LayoutAnimation()` on each child and `.WithKey()` for smooth
+reorder cascades.
+
+## Keyframes [#keyframes]
+
+`.Keyframes(name, trigger, configure)` runs a multi-property keyframe
+animation whenever `trigger` changes, even if the element's other properties
+stay unchanged. Re-rendering with the same trigger does not restart it.
+Define keyframes at progress points from 0.0 to 1.0:
+
+```csharp
+class KeyframeDemo : Component
+{
+    public override Element Render()
+    {
+        var (count, setCount) = UseState(0);
+
+        return VStack(12,
+            SubHeading("Keyframe Animation"),
+            Button("Pulse!", () => setCount(count + 1))
+                .AutomationName("Run pulse keyframe animation"),
+            Border(
+                TextBlock("Pulse target").FontSize(16).Bold()
+                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
+            ).Padding(12).CornerRadius(8).Size(200, 60).Background(Theme.AccentSecondary)
+             .TransformOrigin(0.5f, 0.5f)
+             .Keyframes("pulse", count, kf => kf
+                .Duration(600)
+                .At(0.0f, scale: global::System.Numerics.Vector3.One)
+                .At(0.4f, scale: new global::System.Numerics.Vector3(1.3f, 1.3f, 1f), easing: Microsoft.UI.Reactor.Animation.Easing.Decelerate)
+                .At(0.7f, scale: new global::System.Numerics.Vector3(0.95f, 0.95f, 1f))
+                .At(1.0f, scale: global::System.Numerics.Vector3.One, easing: Microsoft.UI.Reactor.Animation.Easing.Accelerate))
+        ).Padding(24);
+    }
+}
+```
+
+![Keyframe animation](/microsoft-ui-reactor/main/images/animation/keyframes.png)
+
+The builder supports `.Duration(ms)`, `.Loop()` for infinite repeat, and
+`.At(progress, opacity?, scale?, translation?, rotation?, easing?)` for
+each keyframe, with `rotation` in degrees like `.Rotation()`. Keyframes run on the compositor — no managed-code
+involvement during playback.
+
+## Choreography [#choreography]
+
+`AnimationScope.WithAnimationAsync()` returns a `Task` that completes when
+the compositor animation finishes. Chain multiple calls with `await` to
+build sequenced animations:
+
+```csharp
+class ChoreographyDemo : Component
+{
+    public override Element Render()
+    {
+        var (phase, setPhase) = UseState(0);
+
+        return VStack(12,
+            SubHeading("Choreography (WithAnimationAsync)"),
+            Button("Run Sequence", async () =>
+            {
+                await Microsoft.UI.Reactor.Animation.AnimationScope.WithAnimationAsync(
+                    Microsoft.UI.Reactor.Animation.Curve.Ease(200), () => setPhase(1));
+                await Microsoft.UI.Reactor.Animation.AnimationScope.WithAnimationAsync(
+                    Microsoft.UI.Reactor.Animation.Curve.Spring(0.7f), () => setPhase(2));
+            }).AutomationName("Run choreography sequence"),
+            TextBlock($"Phase: {phase}").FontSize(18).Bold()
+                .Opacity(phase == 0 ? 1.0 : phase == 1 ? 0.3 : 1.0)
+        ).Padding(24);
+    }
+}
+```
+
+![Choreography](/microsoft-ui-reactor/main/images/animation/choreography.png)
+
+Each `await` waits for the `CompositionScopedBatch` to complete before
+starting the next step. Use this for onboarding flows, multi-step reveals,
+or any animation that must happen in order.
+
+## Patterns [#patterns]
+
+### Page enter/exit on route change [#page-enterexit-on-route-change]
+
+Wrap the route-mapped page in a `.Transition(...)` so each new page
+slides or fades into view. Pair `Transition.Slide(Edge.Right) |
+Transition.Slide(Edge.Left)` (asymmetric — enter from right, exit to
+left) with [`NavigationTransition.None`](/microsoft-ui-reactor/main/guides/navigation) on the host so
+the compositor animation runs without competing with the host's
+default `Slide`. See [Navigation](/microsoft-ui-reactor/main/guides/navigation) for the route
+plumbing.
+
+### Skeleton-to-content fade [#skeleton-to-content-fade]
+
+When data is loading, render a skeleton element; when it arrives,
+swap to the real content. Apply `.Transition(Transition.Fade, Curve.Ease(150))`
+on the content element and the skeleton element separately so the
+crossfade looks intentional rather than a hard pop. Combine with
+[`UseResource`](/microsoft-ui-reactor/main/guides/async-resources) for the pending-state plumbing.
+
+### Reorder list with stable identity [#reorder-list-with-stable-identity]
+
+Layout animations need [`UseState`](/microsoft-ui-reactor/main/guides/hooks) updates that preserve
+identity across reorders. Always set `.WithKey($"item-{model.Id}")`
+on each list child — the reconciler matches keys to track which
+element moved where, and `.LayoutAnimation()` reads the old → new
+position from the matched element. Without keys the reconciler treats
+the reorder as a destroy + create, and the animation falls back to a
+fade because there is no "old position" to animate from.
+
+## Common Mistakes [#common-mistakes]
+
+### Animating Width or Height with `.Animate()` [#animating-width-or-height-with-animate]
+
+```csharp
+// Don't:
+Border(content).Width(expanded ? 400 : 200).Animate(Curve.Spring())
+```
+
+`.Animate()` only covers compositor properties: Opacity, Offset
+(Translation), Scale, Rotation, CenterPoint. `Width` and `Height` are
+layout properties; the compositor doesn't see them. The element will
+snap from 200 to 400 with no animation. Two correct shapes: scale
+instead (`Scale(expanded ? 2 : 1)` plus `.ScaleTransition()` — the
+element renders at 200 and is *visually* 400), or animate via
+`.LayoutAnimation()` if a sibling-driven layout pass is what's
+changing the size.
+
+### Awaiting inside `WithAnimation` [#awaiting-inside-withanimation]
+
+```csharp
+// Don't:
+AnimationScope.WithAnimation(Curve.Ease(300), async () =>
+{
+    setStage("loading");
+    await api.SaveAsync();
+    setStage("done");   // No animation — scope is gone.
+});
+```
+
+`AnimationScope` is `[ThreadStatic]`; the `await` continuation runs on
+a different stack frame with an empty scope. The second `setStage`
+runs unanimated. Use `WithAnimationAsync` (returns a Task tied to a
+composition batch) and one curve per phase, or sequence two separate
+`WithAnimation` calls between awaits.
+
+### Re-running keyframes on every render [#re-running-keyframes-on-every-render]
+
+```csharp
+// Don't:
+.Keyframes("pulse", DateTime.Now, kf => ...)
+```
+
+`.Keyframes` re-runs whenever its `trigger` value changes. Passing a
+value that changes every render (`DateTime.Now`, a freshly-allocated
+list, an inline lambda) restarts the animation on every reconcile —
+the element flickers as the keyframes constantly reset. Use a state
+counter that increments only when you mean to retrigger
+(`var (count, updateCount) = UseReducer(0)`, then `updateCount(c => c + 1)`).
+
+## Tips [#tips]
+
+**Keep durations short.** 200--400ms feels responsive. Anything over 500ms
+feels sluggish. Use the default duration unless you have a specific reason.
+
+**Use `.InteractionStates()` for hover/press effects.** It runs entirely on
+the compositor with zero reconciles — far cheaper than tracking pointer
+state in `UseState` and re-rendering.
+
+**Use `.Transition()` for conditional rendering.** When an element enters or
+leaves the tree via `When()` or ternary, `.Transition()` adds polish
+without manual mount/unmount tracking.
+
+**Combine transitions sparingly.** One or two transitions per element is
+natural. Three or more competing animations can feel chaotic.
+
+**Always set `.WithKey()` with layout animations.** Without stable keys, the
+reconciler cannot track which element moved where, and the animation falls
+back to a simple fade.
+
+**Use `Curve.Spring()` for interactive feedback.** Spring curves feel
+natural for user-triggered animations. Use `Curve.Ease()` for timed,
+non-interactive transitions.
+
+## Next Steps [#next-steps]
+
+- **[Localization](/microsoft-ui-reactor/main/guides/localization)** — previous topic: translate strings, format numbers/dates, and support RTL layouts
+- **[Charting](/microsoft-ui-reactor/main/controls/charting)** — next topic: data visualization with line, bar, area, and pie charts
+- **[Navigation](/microsoft-ui-reactor/main/guides/navigation)** — pair connected animations with page transitions
+- **[Collections](/microsoft-ui-reactor/main/controls/collections)** — animate list items as they enter, reorder, and leave
+- **[Styling and Theming](/microsoft-ui-reactor/main/guides/styling)** — combine animations with theme-aware colors
+- **[Async Resources](/microsoft-ui-reactor/main/guides/async-resources)** — pair compositor-batched animation with data load lifecycles

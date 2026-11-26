@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/Customize.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Customize.md",
+  "route": "/reference/hooks/Customize",
+  "title": "Customize",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Customize",
+  "description": "Author hook — add the bespoke descriptor entries for the [WrapManual] props.",
+  "markdown": "---\ntitle: \"Customize\"\ndescription: \"Author hook — add the bespoke descriptor entries for the [WrapManual] props.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

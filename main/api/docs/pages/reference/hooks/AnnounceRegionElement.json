@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/AnnounceRegionElement.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceRegionElement.md",
+  "route": "/reference/hooks/AnnounceRegionElement",
+  "title": "AnnounceRegionElement",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceRegionElement",
+  "description": "Internal Reactor element that mounts a hidden TextBlock with LiveSetting for announcements.",
+  "markdown": "---\ntitle: \"AnnounceRegionElement\"\ndescription: \"Internal Reactor element that mounts a hidden TextBlock with LiveSetting for announcements.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

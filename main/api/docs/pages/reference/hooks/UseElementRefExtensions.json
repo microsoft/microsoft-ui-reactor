@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseElementRefExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRefExtensions.md",
+  "route": "/reference/hooks/UseElementRefExtensions",
+  "title": "UseElementRefExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRefExtensions",
+  "description": "Hook that returns a strongly-typed ElementRef for binding to a concrete WinUI control via the .Ref(...) modifier. The typed ref removes the (Button)ref.Current cast at consumers (Composition, Ink, focus, …).",
+  "markdown": "---\ntitle: \"UseElementRefExtensions\"\ndescription: \"Hook that returns a strongly-typed ElementRef for binding to a concrete WinUI control via the .Ref(...) modifier. The typed ref removes the (Button)ref.Current cast at consumers (Composition, Ink, focus, …).\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\nSpec 033 §3. The same `ElementRef` instance is returned across\nre-renders (identity stable), so storing the ref in a deps array or comparing\nwith `Object.ReferenceEquals` is safe.\n\n## Examples [#examples]\n\n```csharp\nvar btn = ctx.UseElementRef<Button>();\nctx.UseEffect(() => btn.Current?.Focus(FocusState.Programmatic), Array.Empty<object>());\nreturn Button(\"Press me\", onPress).Ref(btn);\n```\n"
+}

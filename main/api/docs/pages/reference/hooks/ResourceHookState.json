@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/ResourceHookState.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ResourceHookState.md",
+  "route": "/reference/hooks/ResourceHookState",
+  "title": "ResourceHookState",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ResourceHookState",
+  "description": "Mutable state backing a single UseResource hook instance. Instances are owned per-component, per-hook-slot, and are disposed on unmount.",
+  "markdown": "---\ntitle: \"ResourceHookState\"\ndescription: \"Mutable state backing a single UseResource hook instance. Instances are owned per-component, per-hook-slot, and are disposed on unmount.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

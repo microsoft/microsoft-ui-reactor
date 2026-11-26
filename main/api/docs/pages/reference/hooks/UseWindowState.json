@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseWindowState.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowState.md",
+  "route": "/reference/hooks/UseWindowState",
+  "title": "UseWindowState",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowState",
+  "description": "Subscribes to the host window's StateChanged event and re-renders on change. Returns WindowState.Normal outside a window. (spec 036 §7)",
+  "markdown": "---\ntitle: \"UseWindowState\"\ndescription: \"Subscribes to the host window's StateChanged event and re-renders on change. Returns WindowState.Normal outside a window. (spec 036 §7)\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

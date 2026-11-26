@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/FocusTrapHandle.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapHandle.md",
+  "route": "/reference/hooks/FocusTrapHandle",
+  "title": "FocusTrapHandle",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapHandle",
+  "description": "Handle returned by UseFocusTrap. When active, traps keyboard focus within the container element so Tab/Shift+Tab cycles within the trapped scope. Essential for modal dialogs and flyouts.",
+  "markdown": "---\ntitle: \"FocusTrapHandle\"\ndescription: \"Handle returned by UseFocusTrap. When active, traps keyboard focus within the container element so Tab/Shift+Tab cycles within the trapped scope. Essential for modal dialogs and flyouts.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

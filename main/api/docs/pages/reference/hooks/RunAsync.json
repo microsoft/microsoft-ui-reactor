@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/RunAsync.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RunAsync.md",
+  "route": "/reference/hooks/RunAsync",
+  "title": "RunAsync",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RunAsync",
+  "description": "Kick off the mutator with input. Returns a task that completes with the mutator's result or fault.",
+  "markdown": "---\ntitle: \"RunAsync\"\ndescription: \"Kick off the mutator with input. Returns a task that completes with the mutator's result or fault.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\n\n\nOrdering: [OnOptimistic](/microsoft-ui-reactor/main/reference/hooks/MutationOptions) fires\nsynchronously before the mutator starts. [OnSuccess](/microsoft-ui-reactor/main/reference/hooks/MutationOptions)\nor [OnError](/microsoft-ui-reactor/main/reference/hooks/MutationOptions) fires on the hook's dispatcher\nthread after completion.\n\n\n\nIf [OnOptimistic](/microsoft-ui-reactor/main/reference/hooks/MutationOptions) throws, the\nmutator is never invoked and the returned task is faulted with the optimistic\nexception — prevents half-applied state where the optimistic patch ran but the\nreal request can't.\n"
+}

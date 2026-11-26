@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/PendingProps.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingProps.md",
+  "route": "/reference/hooks/PendingProps",
+  "title": "PendingProps",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingProps",
+  "markdown": "---\ntitle: \"PendingProps\"\nseo:\n  description: \"Props for PendingComponent (guide).\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Summary [#summary]\n\nProps for [PendingComponent](/microsoft-ui-reactor/main/reference/hooks/PendingComponent) ([guide](/microsoft-ui-reactor/main/guides/hooks)).\n"
+}

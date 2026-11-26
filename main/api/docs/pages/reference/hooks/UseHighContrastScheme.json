@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseHighContrastScheme.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrastScheme.md",
+  "route": "/reference/hooks/UseHighContrastScheme",
+  "title": "UseHighContrastScheme",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrastScheme",
+  "description": "Returns the high contrast scheme name (e.g., \"High Contrast Black\", \"High Contrast White\") or null if not in high contrast mode. Automatically re-renders the component when the scheme changes.",
+  "markdown": "---\ntitle: \"UseHighContrastScheme\"\ndescription: \"Returns the high contrast scheme name (e.g., \\\"High Contrast Black\\\", \\\"High Contrast White\\\") or null if not in high contrast mode. Automatically re-renders the component when the scheme changes.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n\nMust be called instead of (not in addition to) [UseHighContrast](/microsoft-ui-reactor/main/reference/hooks/UseHighContrast) ([guide](/microsoft-ui-reactor/main/guides/hooks))\nbecause each consumes the same hook slots. Use one or the other.\n"
+}

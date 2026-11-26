@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseExternalStore.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseExternalStore.md",
+  "route": "/reference/hooks/UseExternalStore",
+  "title": "UseExternalStore",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseExternalStore",
+  "description": "Subscribes to an external store that exposes a current snapshot getter. Re-renders only when a change notification yields a different snapshot.",
+  "markdown": "---\ntitle: \"UseExternalStore\"\ndescription: \"Subscribes to an external store that exposes a current snapshot getter. Re-renders only when a change notification yields a different snapshot.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\n\n\n`subscribe` is the effect dependency that decides whether the\nsubscription is torn down and re-established, so it must be a **stable** delegate\nacross renders. Pass a method group (e.g. `store.Subscribe`) or a\n[UseCallback](/microsoft-ui-reactor/main/reference/hooks/UseCallback#usecallbackaction-object) ([guide](/microsoft-ui-reactor/main/guides/hooks))-memoized delegate. A fresh capturing lambda\n(`onChanged => store.Subscribe(onChanged)`) is a new delegate every render and\nwill unsubscribe/resubscribe on each one. This mirrors React's guidance for\n`useSyncExternalStore`.\n\n\n\n`getSnapshot` must return a **cached/stable** value that only changes\nidentity when the underlying data changes. Returning a fresh, never-equal value on every\ncall (e.g. `() => items.ToArray()`) combined with an unstable `subscribe`\ncan spin: re-render re-runs the effect, the immediate re-check observes a \"change\", and that\nforces another render. Memoize the snapshot or return a value the supplied comparer treats as\nequal when nothing changed.\n\n## Featured in [#featured-in]\n\n- [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n"
+}

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/FocusTrapElementExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapElementExtensions.md",
+  "route": "/reference/hooks/FocusTrapElementExtensions",
+  "title": "FocusTrapElementExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapElementExtensions",
+  "description": "Fluent extension to attach a FocusTrapHandle to an element. The handle captures the mounted WinUI element for focus trapping.",
+  "markdown": "---\ntitle: \"FocusTrapElementExtensions\"\ndescription: \"Fluent extension to attach a FocusTrapHandle to an element. The handle captures the mounted WinUI element for focus trapping.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

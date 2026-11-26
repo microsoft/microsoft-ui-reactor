@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseObservableTree.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservableTree.md",
+  "route": "/reference/hooks/UseObservableTree",
+  "title": "UseObservableTree",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservableTree",
+  "description": "Observes an object and all nested INotifyPropertyChanged values reachable through its properties. Re-renders when any property at any depth changes. Automatically subscribes/unsubscribes as property values change.",
+  "markdown": "---\ntitle: \"UseObservableTree\"\ndescription: \"Observes an object and all nested INotifyPropertyChanged values reachable through its properties. Re-renders when any property at any depth changes. Automatically subscribes/unsubscribes as property values change.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

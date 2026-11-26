@@ -1,0 +1,902 @@
+[
+  {
+    "from": "/microsoft-ui-reactor/main/accessibility",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/accessibility"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/accessibility.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/accessibility.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/accessibility.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/accessibility.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/advanced",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/advanced"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/advanced.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/advanced.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/advanced.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/advanced.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/analyzer-architecture",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/analyzer-architecture"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/analyzer-architecture.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/analyzer-architecture.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/analyzer-architecture.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/analyzer-architecture.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/animation",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/animation"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/animation.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/animation.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/animation.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/animation.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/animation-pipeline",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/animation-pipeline"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/animation-pipeline.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/animation-pipeline.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/animation-pipeline.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/animation-pipeline.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/architecture-overview",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/architecture-overview"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/architecture-overview.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/architecture-overview.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/architecture-overview.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/architecture-overview.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/async-resources",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/async-resources"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/async-resources.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/async-resources.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/async-resources.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/async-resources.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/charting",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/charting"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/charting.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/charting.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/charting.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/charting.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/cheat-sheet",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/cheat-sheet"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/cheat-sheet.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/cheat-sheet.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/cheat-sheet.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/cheat-sheet.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/collections",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/collections"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/collections.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/collections.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/collections.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/collections.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/commanding",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/commanding"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/commanding.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/commanding.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/commanding.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/commanding.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/components",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/components"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/components.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/components.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/components.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/components.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/context",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/context"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/context.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/context.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/context.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/context.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/control-reconciler-protocol",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/control-reconciler-protocol.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/control-reconciler-protocol.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/data-system",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/data-system"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/data-system.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/data-system.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/data-system.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/data-system.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/dev-tooling",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/dev-tooling"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/dev-tooling.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/dev-tooling.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/dev-tooling.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/dev-tooling.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/devtools-internals",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/devtools-internals"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/devtools-internals.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/devtools-internals.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/devtools-internals.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/devtools-internals.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/diagnostics",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/diagnostics"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/diagnostics.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/diagnostics.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/diagnostics.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/diagnostics.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/dialogs-and-flyouts",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/dialogs-and-flyouts"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/dialogs-and-flyouts.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/dialogs-and-flyouts.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/dialogs-and-flyouts.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/dialogs-and-flyouts.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/docking",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/docking"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/docking.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/docking.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/docking.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/docking.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/effects",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/effects"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/effects.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/effects.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/effects.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/effects.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/effects-scheduling",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/effects-scheduling"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/effects-scheduling.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/effects-scheduling.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/effects-scheduling.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/effects-scheduling.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/element-pool",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/element-pool"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/element-pool.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/element-pool.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/element-pool.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/element-pool.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/extending-reactor-controls",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/extending-reactor-controls.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/extending-reactor-controls.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/flex-layout",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/flex-layout"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/flex-layout.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/flex-layout.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/flex-layout.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/flex-layout.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/focus-and-input-internals",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/focus-and-input-internals"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/focus-and-input-internals.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/focus-and-input-internals.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/focus-and-input-internals.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/focus-and-input-internals.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/forms",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/forms"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/forms.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/forms.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/forms.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/forms.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/getting-started",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/quickstart"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/getting-started.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/quickstart.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/getting-started.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/quickstart.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/hooks",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/hooks"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/hooks.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/hooks.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/hooks.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/hooks.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/hooks-internals",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/hooks-internals"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/hooks-internals.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/hooks-internals.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/hooks-internals.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/hooks-internals.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/input-and-gestures",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/input-and-gestures"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/input-and-gestures.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/input-and-gestures.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/input-and-gestures.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/input-and-gestures.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/layout",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/layout"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/layout.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/layout.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/layout.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/layout.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/localization",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/localization"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/localization.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/localization.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/localization.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/localization.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/migration/050-optional-t",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/optional-t"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/migration/050-optional-t.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/optional-t.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/migration/050-optional-t.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/optional-t.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/migration/054-windowing-evolution",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windowing-evolution"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/migration/054-windowing-evolution.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windowing-evolution.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/migration/054-windowing-evolution.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windowing-evolution.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/modifier-system",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/modifier-system"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/modifier-system.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/modifier-system.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/modifier-system.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/modifier-system.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/navigation",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/navigation"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/navigation.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/navigation.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/navigation.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/navigation.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/packaging",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/packaging"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/packaging.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/packaging.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/packaging.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/packaging.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/perf-instrumentation",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/perf-instrumentation"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/perf-instrumentation.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/perf-instrumentation.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/perf-instrumentation.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/perf-instrumentation.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/performance",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/performance"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/performance.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/performance.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/performance.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/performance.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/persistence",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/persistence"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/persistence.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/persistence.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/persistence.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/persistence.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reactivity-model",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/reactivity-model"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reactivity-model.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/reactivity-model.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reactivity-model.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/reactivity-model.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reactor-vs-xaml",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/reactor-vs-xaml"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reactor-vs-xaml.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/reactor-vs-xaml.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reactor-vs-xaml.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/reactor-vs-xaml.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reconciliation",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/reconciliation"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reconciliation.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/reconciliation.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/reconciliation.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/reconciliation.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/rules-of-reactor",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/rules-of-reactor"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/rules-of-reactor.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/rules-of-reactor.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/rules-of-reactor.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/rules-of-reactor.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/source-mapping",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/source-mapping"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/source-mapping.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/source-mapping.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/source-mapping.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/source-mapping.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/status-and-info",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/status-and-info"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/status-and-info.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/status-and-info.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/status-and-info.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/status-and-info.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/styling",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/styling"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/styling.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/styling.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/styling.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/styling.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/testing",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/testing"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/testing.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/testing.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/testing.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/testing.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/text-and-media",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/text-and-media"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/text-and-media.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/text-and-media.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/text-and-media.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/text-and-media.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/theming-tokens",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/theming-tokens"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/theming-tokens.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/theming-tokens.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/theming-tokens.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/theming-tokens.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/thinking-in-reactor",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/thinking-in-reactor"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/thinking-in-reactor.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/thinking-in-reactor.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/thinking-in-reactor.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/thinking-in-reactor.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/threading-and-dispatch",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/threading-and-dispatch.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/threading-and-dispatch.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/vs-extension",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/vs-extension"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/vs-extension.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/vs-extension.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/vs-extension.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/vs-extension.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/win2d-canvas",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/win2d-canvas"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/win2d-canvas.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/win2d-canvas.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/win2d-canvas.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/controls/win2d-canvas.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/windowing-advanced",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windowing-advanced"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/windowing-advanced.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windowing-advanced.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/windowing-advanced.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windowing-advanced.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/windows",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windows"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/windows.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windows.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/windows.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/windows.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/winforms-interop",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/winforms-interop"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/winforms-interop.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/winforms-interop.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/winforms-interop.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/winforms-interop.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/wpf-interop",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/wpf-interop"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/wpf-interop.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/wpf-interop.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/wpf-interop.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/guides/wpf-interop.mdx"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/xaml-developers",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/xaml-developers"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/xaml-developers.md",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/xaml-developers.md"
+  },
+  {
+    "from": "/microsoft-ui-reactor/main/xaml-developers.mdx",
+    "status": 301,
+    "to": "/microsoft-ui-reactor/main/get-started/xaml-developers.mdx"
+  }
+]

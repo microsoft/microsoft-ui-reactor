@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseMutationExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutationExtensions.md",
+  "route": "/reference/hooks/UseMutationExtensions",
+  "title": "UseMutationExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutationExtensions",
+  "description": "Extension methods providing UseMutation on RenderContext.",
+  "markdown": "---\ntitle: \"UseMutationExtensions\"\ndescription: \"Extension methods providing UseMutation on RenderContext.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Discussion [#discussion]\n\nSee `docs/specs/020-async-resources-design.md` §8 for the state machine and\nthe rationale for splitting reads (`UseResource`) from writes.\n"
+}

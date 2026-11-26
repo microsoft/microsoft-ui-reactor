@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/Region.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Region.md",
+  "route": "/reference/hooks/Region",
+  "title": "Region",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Region",
+  "description": "A zero-size, invisible Reactor element that acts as the live-region anchor. Include this anywhere in your component tree (it renders nothing visible).",
+  "markdown": "---\ntitle: \"Region\"\ndescription: \"A zero-size, invisible Reactor element that acts as the live-region anchor. Include this anywhere in your component tree (it renders nothing visible).\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

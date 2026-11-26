@@ -1,0 +1,26 @@
+/microsoft-ui-reactor/main/*.md
+  Content-Type: text/markdown; charset=utf-8
+/microsoft-ui-reactor/main/*.mdx
+  Content-Type: text/markdown; charset=utf-8
+/microsoft-ui-reactor/main/*.txt
+  Content-Type: text/plain; charset=utf-8
+/microsoft-ui-reactor/main/*
+  X-Powered-By: Blume
+/microsoft-ui-reactor/main/
+  Link: </microsoft-ui-reactor/main/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"", </microsoft-ui-reactor/main/.well-known/ai-catalog.json>; rel="ai-catalog"; type="application/ai-catalog+json", </microsoft-ui-reactor/main/openapi.json>; rel="service-desc"; type="application/json", </microsoft-ui-reactor/main/agent-readability.json>; rel="describedby"; type="application/json", </microsoft-ui-reactor/main/llms.txt>; rel="describedby"; type="text/plain", </microsoft-ui-reactor/main/index.md>; rel="alternate"; type="text/markdown"
+/microsoft-ui-reactor/main/.well-known/api-catalog
+  Content-Type: application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"
+/microsoft-ui-reactor/main/.well-known/ai-catalog.json
+  Access-Control-Allow-Origin: *
+/microsoft-ui-reactor/main/.well-known/ard.json
+  Access-Control-Allow-Origin: *
+/microsoft-ui-reactor/main/.well-known/api-catalog
+  Access-Control-Allow-Origin: *
+/microsoft-ui-reactor/main/.well-known/agent-skills/*.md
+  Content-Type: text/markdown; charset=utf-8
+/microsoft-ui-reactor/main/.well-known/agent-skills/*.tar.gz
+  Content-Type: application/gzip
+/microsoft-ui-reactor/main/blume-assets/*.svg
+  Content-Security-Policy: sandbox
+/microsoft-ui-reactor/main/blume-assets/*.svg
+  X-Content-Type-Options: nosniff

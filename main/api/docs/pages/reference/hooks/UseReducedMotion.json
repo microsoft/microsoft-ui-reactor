@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseReducedMotion.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducedMotion.md",
+  "route": "/reference/hooks/UseReducedMotion",
+  "title": "UseReducedMotion",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducedMotion",
+  "description": "Returns true when the user or system prefers reduced motion (e.g., Windows \"Show animations\" is off, or SPI_GETCLIENTAREAANIMATION returns false). Automatically re-renders the component when the preference changes.",
+  "markdown": "---\ntitle: \"UseReducedMotion\"\ndescription: \"Returns true when the user or system prefers reduced motion (e.g., Windows \\\"Show animations\\\" is off, or SPI_GETCLIENTAREAANIMATION returns false). Automatically re-renders the component when the preference changes.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n\nUse this to skip entrance/exit animations, disable pan inertia, terminate\nforce-graph simulations immediately, and keep only ≤ 150 ms opacity fades\n(WCAG 2.3.3).\n\n\n\nThe value is seeded during the first render and then tracked live through\n`UISettings.AnimationsEnabledChanged`. That event needs Windows 10 2004 (19041);\non older builds the preference is re-read whenever a theme or palette change arrives\ninstead, so it updates on the next such notification rather than immediately.\n"
+}

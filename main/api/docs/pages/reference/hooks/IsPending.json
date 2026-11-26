@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/IsPending.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsPending.md",
+  "route": "/reference/hooks/IsPending",
+  "title": "IsPending",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsPending",
+  "markdown": "---\ntitle: \"IsPending\"\nseo:\n  description: \"True while at least one RunAsync (guide) call is in-flight.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Summary [#summary]\n\nTrue while at least one [RunAsync](/microsoft-ui-reactor/main/reference/hooks/RunAsync) ([guide](/microsoft-ui-reactor/main/guides/hooks)) call is in-flight.\n"
+}

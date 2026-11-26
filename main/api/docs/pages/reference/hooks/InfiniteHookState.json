@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/InfiniteHookState.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/InfiniteHookState.md",
+  "route": "/reference/hooks/InfiniteHookState",
+  "title": "InfiniteHookState",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/InfiniteHookState",
+  "description": "Per-hook state for UseInfiniteResource. Coordinates in-flight page fetches, cache subscriptions, deps-change restart, and unmount teardown.",
+  "markdown": "---\ntitle: \"InfiniteHookState\"\ndescription: \"Per-hook state for UseInfiniteResource. Coordinates in-flight page fetches, cache subscriptions, deps-change restart, and unmount teardown.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

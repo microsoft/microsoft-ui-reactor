@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseWindow.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindow.md",
+  "route": "/reference/hooks/UseWindow",
+  "title": "UseWindow",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindow",
+  "description": "Resolves the ReactorWindow whose host renders this component — including nested components and virtualized rows realized outside the host's render pass — or null when it has no owning window (tray-flyout content, ReactorHostControl embeds). O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)",
+  "markdown": "---\ntitle: \"UseWindow\"\ndescription: \"Resolves the ReactorWindow whose host renders this component — including nested components and virtualized rows realized outside the host's render pass — or null when it has no owning window (tray-flyout content, ReactorHostControl embeds). O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

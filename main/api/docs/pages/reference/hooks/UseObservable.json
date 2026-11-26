@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseObservable.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservable.md",
+  "route": "/reference/hooks/UseObservable",
+  "title": "UseObservable",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservable",
+  "description": "Subscribes to an INotifyPropertyChanged source and re-renders when any property changes. Returns the same source object.",
+  "markdown": "---\ntitle: \"UseObservable\"\ndescription: \"Subscribes to an INotifyPropertyChanged source and re-renders when any property changes. Returns the same source object.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n\n## Featured in [#featured-in]\n\n- [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n"
+}

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseAnnounceExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounceExtensions.md",
+  "route": "/reference/hooks/UseAnnounceExtensions",
+  "title": "UseAnnounceExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounceExtensions",
+  "description": "Extension methods for the UseAnnounce hook.",
+  "markdown": "---\ntitle: \"UseAnnounceExtensions\"\ndescription: \"Extension methods for the UseAnnounce hook.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

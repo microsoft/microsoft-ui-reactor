@@ -1,0 +1,364 @@
+---
+title: "Rules of Reactor"
+description: "Microsoft.UI.Reactor (Reactor)'s render loop has a small set of invariants. Most are enforced by analyzers, so a violation surfaces at build time with a specific code; the rest are conventions that the framework expects. This page lists them, names the analyzer where one exists, and shows the before/after pair so the catch is visible."
+---
+
+The five core rules:
+
+1. [Hook order is stable across renders.](#1-hook-order-is-stable-across-renders)
+2. [Render functions are pure.](#2-render-functions-are-pure)
+3. [Lists need stable keys.](#3-lists-need-stable-keys)
+4. [Setters returned by hooks are stable; deps must be stable too.](#4-setters-are-stable-and-deps-must-be-stable-too)
+5. [Theme-aware modifiers want a token, not a literal.](#5-theme-aware-modifiers-want-a-token-not-a-literal)
+
+```csharp
+// REACTOR_HOOKS_001 — hooks must run unconditionally on every render.
+// Wrapping a hook in `if` shifts the hook indices when the branch flips,
+// and the next render reads slot N expecting `UseEffect` but finds
+// `UseState`. The HookOrderException it raises is loud, but the bug
+// can ship if the conditional is rarely true.
+class HookOrderBad : Component
+{
+    public bool ShouldCount;
+
+    public override Element Render()
+    {
+        if (ShouldCount)
+        {
+            var (count, _) = UseState(0);             // REACTOR_HOOKS_001
+            return TextBlock($"Count: {count}");
+        }
+        return TextBlock("No counter.");
+    }
+}
+```
+
+![Trivial app — rules-of-reactor doc-app shell](/microsoft-ui-reactor/main/images/rules-of-reactor/ok.png)
+
+## Rule index [#rule-index]
+
+| Rule | Analyzer | Page |
+|---|---|---|
+| Hook order is stable | `REACTOR_HOOKS_001`, `REACTOR_HOOKS_002` | [Hooks](/microsoft-ui-reactor/main/guides/hooks) |
+| Hooks called from Render only | `REACTOR_HOOKS_005` | [Hooks](/microsoft-ui-reactor/main/guides/hooks) |
+| Deps are stable | `REACTOR_HOOKS_004` | [Hooks](/microsoft-ui-reactor/main/guides/hooks) |
+| Debounced commands need UseCommand | `REACTOR_HOOKS_009` | [Commanding](/microsoft-ui-reactor/main/guides/commanding) |
+| Render is pure | *(convention)* | [Components](/microsoft-ui-reactor/main/guides/components) |
+| Lists need stable keys | `REACTOR_DSL_001..004` | [Collections](/microsoft-ui-reactor/main/controls/collections) |
+| Theme tokens not literals | `REACTOR_THEME_001`, `REACTOR_THEME_004` | [Theming Tokens](/microsoft-ui-reactor/main/guides/theming-tokens) |
+| Lightweight styling | `REACTOR_THEME_002` | [Styling](/microsoft-ui-reactor/main/guides/styling) |
+| Accessible names | `REACTOR_A11Y_001..004` | [Accessibility](/microsoft-ui-reactor/main/guides/accessibility) |
+
+Each rule below covers one row in the index with the before / after
+shape and the analyzer's catch.
+
+## 1. Hook order is stable across renders [#1-hook-order-is-stable-across-renders]
+
+Hooks store their state at a slot index in the component's hook list.
+The reconciler walks the list by ordinal on every render — so if
+`UseState` was at slot 0 on render 1 and slot 1 on render 2, the
+state migrates to the wrong slot and the value silently corrupts.
+
+**The rule:** call every hook unconditionally at the top of `Render()`,
+in the same order, every time. No `if`, no `for`, no `try/catch`
+around a hook call, no early return.
+
+**Analyzer:** `REACTOR_HOOKS_001` (conditional hook call),
+`REACTOR_HOOKS_002` (hook after an early-return guard), and
+`REACTOR_HOOKS_005` (hook called outside a `Render()` override or a
+`Use*` helper).
+
+Before:
+
+```csharp
+// REACTOR_HOOKS_001 — hooks must run unconditionally on every render.
+// Wrapping a hook in `if` shifts the hook indices when the branch flips,
+// and the next render reads slot N expecting `UseEffect` but finds
+// `UseState`. The HookOrderException it raises is loud, but the bug
+// can ship if the conditional is rarely true.
+class HookOrderBad : Component
+{
+    public bool ShouldCount;
+
+    public override Element Render()
+    {
+        if (ShouldCount)
+        {
+            var (count, _) = UseState(0);             // REACTOR_HOOKS_001
+            return TextBlock($"Count: {count}");
+        }
+        return TextBlock("No counter.");
+    }
+}
+```
+
+After:
+
+```csharp
+class HookOrderGood : Component
+{
+    public bool ShouldCount;
+
+    public override Element Render()
+    {
+        // Hook always runs; the conditional moves into the render output.
+        var (count, _) = UseState(0);
+        return ShouldCount
+            ? TextBlock($"Count: {count}")
+            : TextBlock("No counter.");
+    }
+}
+```
+
+The hook runs unconditionally; the branch moves into the element tree
+returned by `Render()`. Same UI, stable hook order.
+
+Full coverage on [Hooks](/microsoft-ui-reactor/main/guides/hooks).
+
+## 2. Render functions are pure [#2-render-functions-are-pure]
+
+`Render()` runs *every* time the component re-renders — which can be
+many times per second under animation or input. A side effect inside
+`Render()` (writing to a static counter, calling a logger, opening a
+file) fires on each render, including dev-mode double-renders that
+catch the bug. The right place for a side effect is inside `UseEffect`,
+which runs once per render commit after the tree is materialized.
+
+**The rule:** `Render` reads state and returns elements. It does not
+mutate, call I/O, or fire telemetry. Side effects go in `UseEffect`.
+
+Before:
+
+```csharp
+// Render must be pure. Side effects (file I/O, mutation of static state,
+// timers) belong inside UseEffect, which runs after the render commits.
+// A logger call inside Render mounts will fire on every re-render,
+// including ones triggered by the debugger — and it makes snapshot tests
+// flaky because the rendered output now depends on a side effect.
+static class TelemetryBad
+{
+    public static int CardRenders;
+}
+
+class CardBad : Component
+{
+    public override Element Render()
+    {
+        TelemetryBad.CardRenders++;                    // side effect in Render
+        return TextBlock("Card");
+    }
+}
+```
+
+After:
+
+```csharp
+static class Telemetry
+{
+    public static int CardRenders;
+}
+
+class CardGood : Component
+{
+    public override Element Render()
+    {
+        UseEffect(() =>
+        {
+            Telemetry.CardRenders++;
+            return () => { };
+        });
+        return TextBlock("Card");
+    }
+}
+```
+
+The counter still increments on every render, but it does so inside
+the effect — which means a snapshot test of `CardGood` doesn't have a
+side-effect-on-render bug; the effect fires after the test inspects
+the tree. Full coverage on [Effects](/microsoft-ui-reactor/main/guides/effects) and
+[Components](/microsoft-ui-reactor/main/guides/components).
+
+## 3. Lists need stable keys [#3-lists-need-stable-keys]
+
+When the items in a `ForEach` / `ListView` / `Select(...).ToArray()`
+reorder, the reconciler diffs the old tree against the new one.
+Without keys, it diffs positionally — and a row that swapped places
+gets the previous row's local state (focus, scroll offset, in-flight
+edit). With `.WithKey(id)`, the reconciler matches by key and moves
+the right state to the right row.
+
+**The rule:** every element produced inside a list-like construct gets
+a `.WithKey(stableId)` whose value persists across re-renders. The id
+must be the record's primary key, not the array index. If the item
+implements `IReactorKeyed`, `ForEach` fills the key for you — write it
+only when you mean something other than `item.Key`.
+
+**Analyzer:** `REACTOR_DSL_001` (dynamic list item missing `.WithKey`),
+`REACTOR_DSL_002` (non-stable `.WithKey`),
+`REACTOR_DSL_003` (typed collection `keySelector` never keys by item), and
+`REACTOR_DSL_004` (a `.WithKey` that only restates the key `ForEach`
+already supplies for an `IReactorKeyed` item).
+
+Before:
+
+```csharp
+// A list reorder without keys forces the reconciler to walk both lists in
+// order and reuse slot 0 for whatever new item lands first. Local state
+// (focus, scroll position, in-flight edits) gets attached to the wrong
+// row. WithKey on each child binds state to identity rather than slot.
+class TodoListBad : Component
+{
+    public TodoItem[] Items = System.Array.Empty<TodoItem>();
+
+    public override Element Render() => VStack(4,
+        Items.Select(i =>
+            // No .WithKey — reorder is destructive.
+            TextBox(i.Title, title => Rename(i, title), header: i.Id.ToString())
+        ).ToArray()
+    );
+
+    void Rename(TodoItem item, string title)
+    {
+        var index = System.Array.IndexOf(Items, item);
+        if (index >= 0)
+            Items[index] = item with { Title = title };
+    }
+}
+public record TodoItem(int Id, string Title);
+```
+
+After:
+
+```csharp
+class TodoListGood : Component
+{
+    public TodoItem[] Items = System.Array.Empty<TodoItem>();
+
+    public override Element Render() => VStack(4,
+        Items.Select(i =>
+            TextBox(i.Title, title => Rename(i, title), header: i.Id.ToString())
+                .WithKey(i.Id.ToString())                  // stable identity
+        ).ToArray()
+    );
+
+    void Rename(TodoItem item, string title)
+    {
+        var index = System.Array.IndexOf(Items, item);
+        if (index >= 0)
+            Items[index] = item with { Title = title };
+    }
+}
+```
+
+Full coverage on [Collections](/microsoft-ui-reactor/main/controls/collections) and
+[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation).
+
+## 4. Setters are stable, and deps must be stable too [#4-setters-are-stable-and-deps-must-be-stable-too]
+
+The `Action<T>` setter returned by `UseState`, `UseReducer`, and
+`UsePersisted` keeps the same delegate identity across renders. You
+can safely close over it inside a `UseEffect` cleanup, a captured
+event handler, or a `Task` — the captured reference is the live
+setter.
+
+The same can't be said of dependency arrays. A freshly-allocated
+array or a freshly-allocated record passed as `deps` differs by
+reference on every render, so the effect re-fires every time:
+
+```csharp
+// Wrong:
+UseEffect(Setup, new[] { name, version });    // freshly-allocated array
+// REACTOR_HOOKS_004 flags this.
+```
+
+```csharp
+// Right:
+UseEffect(Setup, name, version);              // params overload — items
+                                              // compared by value.
+```
+
+**The rule:** pass `deps` via the `params` overload of `UseEffect`/
+`UseMemo`/`UseCallback`, not as a freshly-allocated array. The
+analyzer catches the common shape; for cases the analyzer can't see
+(a `Tuple<...>` allocated inline), assign the deps to a local first.
+
+**Analyzer:** `REACTOR_HOOKS_004` (unstable deps),
+`REACTOR_HOOKS_007` (`UseMemoCells` builder missing a captured
+dependency).
+
+Full coverage on [Hooks](/microsoft-ui-reactor/main/guides/hooks).
+
+## 5. Theme-aware modifiers want a token, not a literal [#5-theme-aware-modifiers-want-a-token-not-a-literal]
+
+`.Background`, `.Foreground`, and `.WithBorder` take a brush. A hex
+literal works for the demo but breaks the moment the user flips
+themes — the literal is locked to the value you typed, so the
+brand-blue button stays blue on a now-dark background and the
+contrast collapses.
+
+**The rule:** pass a `Theme.*` token (or `Theme.Ref("CustomKey")` for
+a custom XAML resource key) to any theme-aware modifier. Reserve hex
+literals for the rare case where the color is *intentionally*
+theme-invariant (a brand mark, a print preview) — and leave a comment
+saying so.
+
+**Analyzer:** `REACTOR_THEME_001` (hard-coded color string on a
+theme-aware modifier) and `REACTOR_THEME_004` (hard-coded
+`Brush`/`Color` object bypasses theme tokens).
+
+```csharp
+// Don't:
+Button("Save", () => { }).Background("#0066CC");   // REACTOR_THEME_001
+```
+
+```csharp
+// Do:
+Button("Save", () => { }).Background(Theme.Accent);
+```
+
+Full coverage on [Theming Tokens](/microsoft-ui-reactor/main/guides/theming-tokens).
+
+## Reference [#reference]
+
+| Rule | Analyzer | Where the page lives |
+|---|---|---|
+| Hook order is stable | `REACTOR_HOOKS_001`, `REACTOR_HOOKS_002` | [Hooks](/microsoft-ui-reactor/main/guides/hooks) |
+| Hooks called from `Render` only | `REACTOR_HOOKS_005` | [Hooks](/microsoft-ui-reactor/main/guides/hooks) |
+| Deps must be stable | `REACTOR_HOOKS_004` | [Hooks](/microsoft-ui-reactor/main/guides/hooks) |
+| UseResource fetcher is idempotent | `REACTOR_HOOKS_006` | [Async Resources](/microsoft-ui-reactor/main/guides/async-resources) |
+| UseMemoCells builder must close over deps | `REACTOR_HOOKS_007` | [Hooks](/microsoft-ui-reactor/main/guides/hooks) |
+| Debounced commands routed through UseCommand | `REACTOR_HOOKS_009` | [Commanding](/microsoft-ui-reactor/main/guides/commanding) |
+| Render must be pure | *(convention — no analyzer)* | [Components](/microsoft-ui-reactor/main/guides/components), [Effects](/microsoft-ui-reactor/main/guides/effects) |
+| Lists need stable keys | `REACTOR_DSL_001..004` | [Collections](/microsoft-ui-reactor/main/controls/collections), [Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation) |
+| Theme-aware modifiers want a token | `REACTOR_THEME_001`, `REACTOR_THEME_004` | [Theming Tokens](/microsoft-ui-reactor/main/guides/theming-tokens) |
+| Lightweight styling, not implicit resources | `REACTOR_THEME_002` | [Styling](/microsoft-ui-reactor/main/guides/styling) |
+| `RequestedTheme` is a render input, not a setter | `REACTOR_THEME_003` | [Styling](/microsoft-ui-reactor/main/guides/styling) |
+| XML docs on public APIs | `REACTOR_DOC_001` | (framework code) |
+| `<see cref="..."/>` resolves | `CS1574` | (framework code) |
+| Accessible name on interactive elements | `REACTOR_A11Y_001..004` | [Accessibility](/microsoft-ui-reactor/main/guides/accessibility) |
+
+## Tips [#tips]
+
+**Treat analyzer warnings as build errors in CI.** Every rule with an
+analyzer has a known false-positive rate near zero; the cost of a
+suppression is small, the cost of a regression that the analyzer
+would have caught is large.
+
+**The "pure render" rule is conventional, not enforced.** No
+analyzer catches it; review and snapshot tests are the safety net.
+The [testing](/microsoft-ui-reactor/main/guides/testing) page covers the snapshot pattern that makes
+purity visible.
+
+**`.WithKey` is cheap; reach for it whenever a list reorders.** Even
+when the analyzer doesn't flag the omission, a missing key is one of
+the bugs most likely to ship to a customer (it's invisible at small
+list sizes and devastating at scale).
+
+## Next Steps [#next-steps]
+
+- **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — Where rules 1 and 4 are exercised most.
+- **[Components](/microsoft-ui-reactor/main/guides/components)** — Render purity in depth.
+- **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — Why keys matter at the
+  reconciler level.
+- **[Theming Tokens](/microsoft-ui-reactor/main/guides/theming-tokens)** — Token catalog for rule 5.
+- **[Accessibility](/microsoft-ui-reactor/main/guides/accessibility)** — The A11Y_001..004 rules.

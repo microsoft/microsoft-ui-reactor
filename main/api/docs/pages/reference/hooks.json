@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks.md",
+  "route": "/reference/hooks",
+  "title": "Hooks reference",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks",
+  "description": "Hooks are how Reactor components subscribe to state, schedule effects, and reach into the framework's lifecycle from a function-shaped Render body. Each entry on this index is generated from the <summary> XML doc comments authored alongside the source in src/Reactor/Hooks/ — the canonical surface — and is grouped by the hooks category in docs/_pipeline/reference-map.yaml.",
+  "markdown": "---\ntitle: \"Hooks reference\"\ndescription: \"Hooks are how Reactor components subscribe to state, schedule effects, and reach into the framework's lifecycle from a function-shaped Render body. Each entry on this index is generated from the <summary> XML doc comments authored alongside the source in src/Reactor/Hooks/ — the canonical surface — and is grouped by the hooks category in docs/_pipeline/reference-map.yaml.\"\nsidebar:\n  label: \"Overview\"\n---\n\nFor the narrative walkthrough of how hooks compose with components,\ncontext, and effects, see the [Hooks](/microsoft-ui-reactor/main/guides/hooks) and\n[Effects](/microsoft-ui-reactor/main/guides/effects) guide pages. The reference leaves below\nare the exhaustive index.\n\n## Generated leaves [#generated-leaves]\n\nThe leaf pages in this folder are produced by the doc pipeline's `compile`\nreference-generation step (spec 041 §10.4). Each page covers one\npublic type / method / property / field / event in the Hooks\nnamespace, with sections for Summary, Parameters, Returns,\nDiscussion, Examples, Caveats, and See Also.\n\n> **Heads up.** This index is one of the few hand-authored files\n> under `docs/guide/reference/` — the per-member pages around it are\n> compiler output and should not be hand-edited. See\n> [spec 041 §10.4](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/041-docs-comprehensive-uplift.md)\n> for the full rationale.\n"
+}

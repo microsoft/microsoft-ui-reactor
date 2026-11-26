@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/SetSubmitHandler.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetSubmitHandler.md",
+  "route": "/reference/hooks/SetSubmitHandler",
+  "title": "SetSubmitHandler",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetSubmitHandler",
+  "description": "Sets the callback for submit (Enter on last field).",
+  "markdown": "---\ntitle: \"SetSubmitHandler\"\ndescription: \"Sets the callback for submit (Enter on last field).\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseIsCovered.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsCovered.md",
+  "route": "/reference/hooks/UseIsCovered",
+  "title": "UseIsCovered",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsCovered",
+  "description": "Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.",
+  "markdown": "---\ntitle: \"UseIsCovered\"\ndescription: \"Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}

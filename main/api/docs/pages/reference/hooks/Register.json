@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/Register.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Register.md",
+  "route": "/reference/hooks/Register",
+  "title": "Register",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Register",
+  "markdown": "---\ntitle: \"Register\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n\n## Members [#members]\n\n> These members share a name but are declared on unrelated types. They are not overloads of one another.\n\n- [`Register(string)`](#registerstring) — `Microsoft.UI.Reactor.Hooks.FocusManager`\n- [`Register(object, bool)`](#registerobject-bool) — `Microsoft.UI.Reactor.Hooks.PendingScope`\n\n## `Register(string)` [#registerstring]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.FocusManager.Register(System.String)`\n\n### Summary [#summary]\n\nRegisters a field name in ordering. Call on every render to maintain order.\n\n## `Register(object, bool)` [#registerobject-bool]\n\n`method`  \n_cref_: `M:Microsoft.UI.Reactor.Hooks.PendingScope.Register(System.Object,System.Boolean)`\n\n### Summary [#summary_1]\n\nStart tracking `token` with the given initial `isLoading`\nstate. A hook typically uses its own `this`-equivalent as the token.\n"
+}

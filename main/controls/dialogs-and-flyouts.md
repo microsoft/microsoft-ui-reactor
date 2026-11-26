@@ -1,0 +1,784 @@
+---
+title: "Dialogs and Flyouts"
+description: "ContentDialog, MenuFlyout, CommandBarFlyout and Popup: when to reach for each one, and how to drive them from component state."
+sidebar:
+  label: "Dialogs and flyouts"
+---
+
+Dialog and flyout surfaces interrupt the user. That makes them the most
+costly UI primitive in the app's attention budget — every modal dialog
+steals focus, every flyout dismisses on outside click, every popup
+arrives without a route back. Microsoft.UI.Reactor (Reactor) treats dialogs and flyouts as
+controlled components: you own the open/closed boolean, the component
+tree always contains the dialog element, and the visibility is a state
+flag the user-driven event handlers flip back. That is the same shape as
+`TextBox` from [Forms](/microsoft-ui-reactor/main/controls/forms), and it makes the dialog testable —
+the dialog is open if and only if its driving state says so. Read this
+page when you are reaching for `ContentDialog` for a Save/Discard choice,
+`MenuFlyout` for a right-click menu, `CommandBarFlyout` for a selection
+toolbar, or `Popup` for the bespoke overlay that none of the above
+covers. Pair every dialog with a corresponding entry in
+[commanding.md](/microsoft-ui-reactor/main/guides/commanding) — the same `Command` should usually back
+the trigger (button or menu) and the dialog's primary action.
+
+Four primitives sit on this page. Pick by shape, not by aesthetic:
+
+| Control | Shape | Dismiss | Use when |
+|---|---|---|---|
+| `ContentDialog` | Modal, screen-centered, three buttons | Button click | The user has to make a choice before continuing. |
+| `MenuFlyout` | Pop-up menu next to a target | Outside click / Esc | Right-click or chevron menu of discrete actions. |
+| `CommandBarFlyout` | Mini-toolbar next to a target | Outside click / Esc | Selection context — "what to do with this thing". |
+| `Popup` | Free-form overlay | Light-dismiss / explicit | Anything the three above can't render — color picker, in-place editor, custom tooltip. |
+
+> **WinUI reference:** For the full property surface and design guidance, see [Dialogs And Flyouts](https://learn.microsoft.com/en-us/windows/apps/design/controls/dialogs-and-flyouts/).
+
+## ContentDialog [#contentdialog]
+
+```csharp
+ContentDialog(string title, Element content, string primaryButtonText = "OK")
+```
+
+```csharp
+class BasicDialogDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+
+        return VStack(8,
+            SubHeading("Basic ContentDialog"),
+            Button("Show dialog", () => setOpen(true)),
+            // Dialog lives in the tree at all times. IsOpen controls
+            // visibility; OnClosed flips it back when the user dismisses.
+            ContentDialog(
+                "Welcome",
+                TextBlock("Thank you for trying Reactor."),
+                primaryButtonText: "OK") with
+            {
+                IsOpen = open,
+                OnClosed = _ => setOpen(false),
+            }
+        ).Padding(24);
+    }
+}
+```
+
+![Basic ContentDialog with one button](/microsoft-ui-reactor/main/images/dialogs-and-flyouts/basic-dialog.png)
+
+`ContentDialog` is the modal. Pass a title, a content element, and the
+primary button label. The factory returns a `ContentDialogElement`
+record; you spread additional init-only properties (`IsOpen`,
+`OnClosed`, secondary/close button text) with the `with { ... }`
+expression. The dialog element lives in the tree at all times — it's a
+record, not a method call. `IsOpen = false` keeps it hidden; flipping
+`IsOpen = true` from a button handler opens it; the `OnClosed` callback
+flips it back when the user dismisses.
+
+| Property (via `with { ... }`) | Effect |
+|---|---|
+| `IsOpen` | The controlled visibility flag. |
+| `PrimaryButtonText` | Default-action button label. Set via the factory argument. |
+| `SecondaryButtonText` | Optional second button (left of primary). |
+| `CloseButtonText` | Optional close button. The "X" / Esc dismiss. |
+| `DefaultButton` | Which button gets the accent color and the Enter binding (`Primary` / `Secondary` / `Close`). |
+| `OnClosed` | `Action<ContentDialogResult>` — `Primary` / `Secondary` / `None`. |
+| `OnOpened` | Fires after the dialog finishes opening (useful for autofocus). |
+| `IsPrimaryButtonEnabled` | Disable the primary action without removing it. |
+| `IsSecondaryButtonEnabled` | Same for the secondary. |
+
+### The dialog is live while it is open [#the-dialog-is-live-while-it-is-open]
+
+An open dialog is not a snapshot. Every render of the owning component
+reconciles the dialog the same way it reconciles the rest of the tree:
+
+- **Content re-renders in place.** State updated from inside the dialog —
+  a `TextBox` the user is typing into, a counter its own button
+  increments — re-renders immediately. Because the content subtree is
+  patched rather than remounted, transient control state (focus, caret,
+  scroll position, text selection) survives the update.
+- **Properties re-sync.** `Title`, `IsPrimaryButtonEnabled`,
+  `DefaultButton`, and the button labels track the element on every
+  render, so they can depend on state that lives inside the dialog.
+  `SecondaryButtonText` and `CloseButtonText` are nullable, and null
+  means "no such button" — dropping one back to null on a later render
+  removes the button, the same as never setting it.
+- **`IsOpen` is fully controlled.** Setting `IsOpen = false` closes the
+  dialog, exactly as `true` opens it. The close runs the normal dismissal
+  path, so `OnClosed` still fires with `ContentDialogResult.None`.
+- **Content is unmounted on close.** Effect cleanups and
+  [`UseEffect`](/microsoft-ui-reactor/main/guides/effects) teardowns inside the dialog run when it
+  closes — including when the component that owns the dialog element
+  unmounts while the dialog is still showing. That teardown path is
+  silent: `OnClosed` reports dismissals, not the owner going away, so a
+  handler that writes back into already-unmounted state never runs.
+  Disposing the host or reconciler also hides the dialog without `OnClosed`
+  and cancels deferred opens without `OnOpened`. Put state reset needed during
+  teardown in effect cleanup rather than `OnClosed`.
+
+### Dialog theme [#dialog-theme]
+
+A dialog follows the effective theme (`ActualTheme`) at its declaration's
+position, including a local ancestor override, even though WinUI displays the
+dialog outside that subtree. Changes to the owner's effective theme also update
+an already-open dialog; closing or unmounting detaches the listener.
+
+Use the existing `.RequestedTheme(ElementTheme.Dark)` modifier to override the
+real dialog's theme explicitly. Changing that declaration updates the open dialog
+in place; removing it or explicitly requesting `ElementTheme.Default` resumes
+following the owner, consistent with theme inheritance elsewhere in Reactor.
+Native `.Set(dialog => ...)` callbacks run last and can override the theme.
+
+### Dialog style and entrance animation [#dialog-style-and-entrance-animation]
+
+Reactor resolves the dialog style before mounting its content and calling
+`ShowAsync`. An application-level implicit `ContentDialog` style, including one
+in a merged resource dictionary, takes priority over `DefaultContentDialogStyle`.
+Resolving the style before the first template realization restores WinUI's native
+entrance animation
+([WinUI #8476](https://github.com/microsoft/microsoft-ui-xaml/issues/8476)).
+Native `.Set(dialog => dialog.Style = customStyle)` callbacks run afterward,
+so an explicitly supplied style takes priority when opening or updating a dialog.
+The order is: caller `.Set(...)` style, application implicit style, then
+`DefaultContentDialogStyle`.
+
+### Three-button dialogs [#three-button-dialogs]
+
+The three-button shape (`Primary` + `Secondary` + `Close`) is the
+default for destructive confirmations. The convention from
+[Fluent UI](https://learn.microsoft.com/en-us/windows/apps/design/controls/dialogs-and-flyouts/dialogs)
+and macOS HIG agrees: place the destructive action in `Primary`, the
+non-destructive cancel in `Secondary`, and route Esc to whichever the
+`DefaultButton` is set to:
+
+```csharp
+class ConfirmDialogDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+        var (result, setResult) = UseState("(none)");
+
+        return VStack(8,
+            SubHeading("Confirmation with three buttons"),
+            Button("Delete item…", () => setOpen(true)),
+            TextBlock($"Last result: {result}").Opacity(0.6),
+            ContentDialog(
+                "Delete this item?",
+                TextBlock("This action cannot be undone."),
+                primaryButtonText: "Delete") with
+            {
+                IsOpen = open,
+                SecondaryButtonText = "Cancel",
+                CloseButtonText = "Close",
+                DefaultButton = ContentDialogButton.Close,
+                OnClosed = r =>
+                {
+                    setResult(r.ToString());
+                    setOpen(false);
+                },
+            }
+        ).Padding(24);
+    }
+}
+```
+
+![Three-button confirm dialog](/microsoft-ui-reactor/main/images/dialogs-and-flyouts/confirm-dialog.png)
+
+The `ContentDialogResult` value in `OnClosed` tells you which path the
+user took. `Primary` and `Secondary` correspond to the labeled buttons;
+`None` covers Esc, Close button, and click-on-scrim dismissal — treat
+all three as Cancel.
+
+### Gated primary [#gated-primary]
+
+When the dialog content is itself a form (rename file, set password),
+the primary button should be disabled until the form is valid. Use
+`IsPrimaryButtonEnabled` rather than `.IsEnabled(false)` on a custom button
+inside the content — the dialog primary keeps the accent color, the
+keyboard binding to Enter, and the focus trap that the WinUI dialog
+provides:
+
+```csharp
+class DialogGatedPrimaryDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+        var (name, setName) = UseState("");
+
+        return VStack(8,
+            SubHeading("Primary disabled until input is valid"),
+            Button("Rename file…", () => setOpen(true)),
+            ContentDialog(
+                "Rename file",
+                VStack(8,
+                    TextBox(name, setName, placeholderText: "untitled.txt", header: "New filename")
+                        .Width(280)),
+                primaryButtonText: "Rename") with
+            {
+                IsOpen = open,
+                SecondaryButtonText = "Cancel",
+                // .IsPrimaryButtonEnabled drives the inline primary
+                // disabled state without taking it out of tab order.
+                IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(name),
+                OnClosed = _ => setOpen(false),
+            }
+        ).Padding(24);
+    }
+}
+```
+
+![Dialog with TextBox; primary disabled until non-empty](/microsoft-ui-reactor/main/images/dialogs-and-flyouts/dialog-gated-primary.png)
+
+The gate works because the dialog's properties re-sync on every render:
+the `TextBox` inside the content updates the state, the component
+re-renders, and `IsPrimaryButtonEnabled` follows on the already-open
+dialog without it flickering closed.
+
+> **Caveat:** `ContentDialog.ShowAsync` is single-instance per `XamlRoot` — the WinUI
+> control raises `Show another ContentDialog before closing the previous`
+> if two dialogs try to open at once. Reactor's controlled-`IsOpen`
+> pattern routes through the same constraint: opening dialog B from
+> dialog A's `Primary` handler runs B's `IsOpen = true` set before A's
+> close completes, and the second show throws. Always close dialog A
+> first (via `setOpenA(false)` and the dispatcher's commit), then open B
+> in the next render — for example, queue B's open via a
+> [`UseEffect`](/microsoft-ui-reactor/main/guides/effects) keyed on A's `IsOpen` going false.
+
+WinUI design page: [Dialogs](https://learn.microsoft.com/en-us/windows/apps/design/controls/dialogs-and-flyouts/dialogs).
+
+## MenuFlyout [#menuflyout]
+
+```csharp
+MenuFlyout(Element target, params MenuFlyoutItemBase[] items)
+```
+
+```csharp
+class MenuFlyoutDemo : Component
+{
+    public override Element Render()
+    {
+        var (action, setAction) = UseState("(none)");
+
+        return VStack(8,
+            SubHeading("MenuFlyout — right-click or button-click"),
+            MenuFlyout(
+                Button("Edit ▾"),
+                MenuItem("Cut",   () => setAction("Cut"),   icon: "Cut"),
+                MenuItem("Copy",  () => setAction("Copy"),  icon: "Copy"),
+                MenuItem("Paste", () => setAction("Paste"), icon: "Paste"),
+                MenuSeparator(),
+                MenuSubItem("Format",
+                    ToggleMenuItem("Bold", isChecked: false),
+                    ToggleMenuItem("Italic", isChecked: true)),
+                MenuSeparator(),
+                MenuItem("Delete…", () => setAction("Delete"))
+            ),
+            TextBlock($"Last action: {action}").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+![MenuFlyout with submenu and separators](/microsoft-ui-reactor/main/images/dialogs-and-flyouts/menu-flyout.png)
+
+`MenuFlyout` attaches a popup menu to a target element. Click the
+target — the menu opens at it. Click outside the menu — it dismisses.
+The factory takes the target as the first argument and the items as a
+variadic tail; the result wraps the target so it appears in the tree at
+the target's position.
+
+| Item factory | Shape |
+|---|---|
+| `MenuItem(text, onClick?, icon?)` | Standard menu item with a click handler. |
+| `MenuItem(Command)` | Bind to a command. Label, icon, enabled-state, accelerator come from the command. |
+| `MenuItem<T>(Command<T>, T parameter)` | Bind to a parameterized command with the row's data. |
+| `ToggleMenuItem(text, isChecked?, onIsCheckedChanged?, icon?)` | Two-state check item. |
+| `RadioMenuItem(text, groupName, isChecked?, onClick?, icon?)` | One of a radio group. |
+| `MenuSeparator()` | Horizontal divider. |
+| `MenuSubItem(text, items...)` | Nested submenu. |
+
+The same `Command` record that drives a `Button` plugs into
+[`MenuItem(Command)`](/microsoft-ui-reactor/main/guides/commanding) — one declaration, three surfaces
+(button, menu, keyboard shortcut). See the
+[commanding integration pattern](#commanding-integration) below.
+
+WinUI design page: [Menus and context menus](https://learn.microsoft.com/en-us/windows/apps/design/controls/menus).
+
+## CommandBarFlyout [#commandbarflyout]
+
+```csharp
+CommandBarFlyout(
+    Element target,
+    AppBarItemBase[]? primaryCommands = null,
+    AppBarItemBase[]? secondaryCommands = null)
+```
+
+```csharp
+class CommandBarFlyoutDemo : Component
+{
+    public override Element Render()
+    {
+        var (action, setAction) = UseState("(none)");
+
+        return VStack(8,
+            SubHeading("CommandBarFlyout"),
+            CommandBarFlyout(
+                Button("Selection ▾"),
+                primaryCommands: new AppBarItemBase[]
+                {
+                    AppBarButton("Cut",   () => setAction("Cut"),   icon: "Cut"),
+                    AppBarButton("Copy",  () => setAction("Copy"),  icon: "Copy"),
+                    AppBarButton("Paste", () => setAction("Paste"), icon: "Paste"),
+                },
+                secondaryCommands: new AppBarItemBase[]
+                {
+                    AppBarButton("Select All", () => setAction("Select All")),
+                    AppBarButton("Find",       () => setAction("Find")),
+                }),
+            TextBlock($"Last action: {action}").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+![CommandBarFlyout with primary and secondary commands](/microsoft-ui-reactor/main/images/dialogs-and-flyouts/command-bar-flyout.png)
+
+`CommandBarFlyout` is the selection-context toolbar — the Cut / Copy /
+Paste row that floats over a text selection, the inline "actions on
+this row" surface that some lists show. Primary commands render
+inline as icon buttons; secondary commands collapse into the overflow
+menu. The same `AppBarItemBase` records that fill a `CommandBar` fill
+this surface — the entire item array is interchangeable.
+
+A `Button` or `SplitButton` target opens the flyout on click with no
+extra wiring. To open it from your own state instead — say, when a
+selection appears — set `IsOpen`:
+
+```csharp
+CommandBarFlyout(Border(selection), primaryCommands: commands)
+    with { IsOpen = hasSelection }
+```
+
+`IsOpen` is a one-shot trigger, like `FlyoutElement.IsOpen`: it opens the
+flyout on the `false` → `true` edge and the user dismisses it from there.
+
+| Item factory | Shape |
+|---|---|
+| `AppBarButton(label, onClick?, icon?)` | Standard tool-strip button. |
+| `AppBarButton(Command)` | Command-driven variant. |
+| `AppBarToggleButton(label, isChecked?, onIsCheckedChanged?, icon?)` | Two-state. |
+| `AppBarSeparator()` | Vertical divider. |
+
+WinUI design page: [Command bar flyout](https://learn.microsoft.com/en-us/windows/apps/design/controls/command-bar-flyout).
+
+## TeachingTip target references [#teachingtip-target-references]
+
+`TeachingTip` can anchor to an element that lives in another container.
+Create an `ElementRef<FrameworkElement>`, attach it to the target with
+`.Ref(target)`, and pass the same cell to the tip with the factory
+`target:` parameter or the `.Target(target)` fluent:
+
+```csharp
+class TeachingTipTargetDemo : Component
+{
+    public override Element Render()
+    {
+        var (show, setShow) = UseState(false);
+
+        // ElementRef<T> converts implicitly to the non-generic ElementRef the
+        // TeachingTip target: parameter takes. UseElementRef is an extension on
+        // Component, so call it through `this.`.
+        var target = this.UseElementRef<FrameworkElement>();
+
+        return HStack(16,
+            Border(
+                Button("Show anchored tip", () => setShow(true))
+                    .Ref(target)),
+            Border(
+                TeachingTip(
+                    "Cross-container target",
+                    "This TeachingTip is declared in a different subtree.",
+                    target: target) with
+                {
+                    IsOpen = show,
+                    OnClosed = () => setShow(false),
+                })
+        ).Padding(24);
+    }
+}
+```
+
+The target is a reactive reference property, not a one-time
+`target.Current` read. The tip can mount before or after the button,
+and if the button is recreated the edge re-resolves before the next
+open. The gallery's `TeachingTipPage` uses this pattern for its
+"TeachingTip targeting another subtree" sample.
+
+## Popup [#popup]
+
+```csharp
+Popup(Element child, bool isOpen = false, Action? onClosed = null)
+```
+
+```csharp
+class PopupDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+
+        // Popup is a free-form positioned surface. Use it for overlays
+        // that aren't dialogs or flyouts — color pickers, in-place
+        // editors, custom tooltips.
+        var popupContent = Border(
+            VStack(8,
+                TextBlock("This is a Popup.").Bold(),
+                TextBlock("Click outside to dismiss.")
+            ).Padding(12)
+        ).Background(Theme.SolidBackground).WithBorder(Theme.ControlStroke).CornerRadius(6);
+
+        return VStack(8,
+            SubHeading("Popup"),
+            Button(open ? "Hide popup" : "Show popup",
+                () => setOpen(!open))
+                .AutomationName(open ? "Hide popup" : "Show popup"),
+            Popup(popupContent, isOpen: open,
+                onClosed: () => setOpen(false))
+                .IsLightDismissEnabled()
+                .Offset(120, 0)
+        ).Padding(24);
+    }
+}
+```
+
+![Popup anchored to a button with light-dismiss enabled](/microsoft-ui-reactor/main/images/dialogs-and-flyouts/popup.png)
+
+`Popup` is the unstructured overlay — what you reach for when
+`ContentDialog`, `MenuFlyout`, and `CommandBarFlyout` are all the wrong
+shape. Color pickers, in-place rename editors, custom tooltips, dropdown
+content that isn't a menu — all of them are popups.
+
+| Fluent | Effect |
+|---|---|
+| `.IsLightDismissEnabled(bool enabled = true)` | Close on outside click. Off by default (matching WinUI); call `.IsLightDismissEnabled()` to enable. |
+| `.Offset(horizontal, vertical)` | Position relative to the popup's anchor point. |
+| `.Opened(Action)` | Fires after the popup is on screen. |
+| `.Closed(Action)` | Fires after the popup leaves the screen. |
+| `.Set(p => p.PlacementTarget = ...)` | Anchor to a specific element. |
+
+The popup itself does not provide a focus trap or an ARIA dialog role.
+For modal-feeling popups, wrap the content in your own focus management
+(`UseFocusTrap` from [accessibility.md](/microsoft-ui-reactor/main/guides/accessibility)) and apply
+dialog semantics to the root with `.Semantics(role: "dialog")`.
+For non-modal popups (tooltips, hover cards), neither is needed.
+
+WinUI primitives reference: [Popup class](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.primitives.popup).
+
+## Commanding integration [#commanding-integration]
+
+The cleanest way to keep dialog logic out of every surface that opens
+it is to put the action behind a `Command`. The same record lights up
+a button, a menu item, and (with `.Accelerator`) a keyboard shortcut —
+authoring the dialog primary as `Command.Execute` is the natural
+extension:
+
+```csharp
+class CommandingIntegrationDemo : Component
+{
+    public override Element Render()
+    {
+        // One Command drives the button, the menu item, and (via
+        // .Accelerator) Ctrl+S. The same Command can light up an
+        // AppBarButton in a CommandBarFlyout too — same declaration,
+        // three surfaces.
+        var (saved, setSaved) = UseState(false);
+
+        var save = new Command
+        {
+            Label = "Save",
+            Execute = () => setSaved(true),
+            CanExecute = !saved,
+            Icon = SymbolIcon("Save"),
+        };
+
+        return VStack(8,
+            SubHeading("One Command, two surfaces"),
+            Button(save),                          // primary CTA
+            MenuFlyout(
+                Button("File ▾"),
+                MenuItem(save),                    // menu duplicate
+                MenuSeparator(),
+                MenuItem("Reset", () => setSaved(false))),
+            TextBlock(saved ? "Saved." : "Unsaved changes.")
+                .Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+`Command.CanExecute = false` greys out every surface bound to that
+command — the menu item, the button, the keyboard binding all disable
+in one place. Without commanding, you would duplicate the
+`isEnabled` derivation per surface. See [commanding.md](/microsoft-ui-reactor/main/guides/commanding)
+for the full pattern (async commands, parameterized `Command<T>`,
+re-entrance guards).
+
+## Focus and ARIA [#focus-and-aria]
+
+WinUI's `ContentDialog` ships a focus trap and the `Dialog` ARIA role
+out of the box. When the dialog opens, focus moves to the default
+button; tabbing wraps within the dialog; Esc closes via the close
+button. Screen readers announce the dialog title as the
+`AutomationProperties.Name`. None of this needs configuration — pass
+the title and content, and the accessibility surface is correct.
+
+`MenuFlyout` and `CommandBarFlyout` apply the same focus rules at the
+WinUI level: opening moves focus to the first enabled item, arrow keys
+navigate, Esc dismisses, focus returns to the originating element on
+close.
+
+The exception is `Popup`. The popup has none of the above; it is a
+positioning primitive. For a popup that should behave like a modal,
+wrap its content with `UseFocusTrap` and apply dialog semantics
+explicitly. `UseFocusTrap(bool isActive)` takes the active flag, the
+handle attaches with the `.FocusTrap(handle)` element modifier, and
+`.Semantics(role: "dialog")` supplies the screen-reader role — inside a
+`Component`, call the hook as `this.UseFocusTrap(...)` because it is an
+extension method:
+
+```csharp
+class ModalPopupDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+
+        // UseFocusTrap is an extension on Component (hence `this.`) and takes the
+        // active flag; attach the handle with .FocusTrap(...).
+        var trap = this.UseFocusTrap(open);
+
+        return VStack(8,
+            SubHeading("Popup that behaves modally"),
+            Button("Open modal popup", () => setOpen(true)),
+            Popup(
+                Border(
+                    VStack(8,
+                        TextBlock("Focus stays inside this popup."),
+                        Button("Close", () => setOpen(false))
+                    ).Padding(16)
+                ).FocusTrap(trap)
+                 .Semantics(role: "dialog"),
+                isOpen: open,
+                onClosed: () => setOpen(false))
+        ).Padding(24);
+    }
+}
+```
+
+The trap shape and the ARIA mapping are documented in
+[accessibility.md](/microsoft-ui-reactor/main/guides/accessibility).
+
+## Dismiss reasons [#dismiss-reasons]
+
+Every dialog and flyout can close five different ways. Treat them as
+equivalent in your handlers — there is no "real cancel" vs. "implicit
+cancel":
+
+| Surface | Primary close paths |
+|---|---|
+| `ContentDialog` | Primary button, Secondary button, Close button, Esc, click-on-scrim (returns `None`). |
+| `MenuFlyout` | Item click (the action), outside click, Esc. |
+| `CommandBarFlyout` | Command click, outside click, Esc. |
+| `Popup` | Outside click (when `LightDismiss = true`), explicit `IsOpen = false`. |
+
+For `ContentDialog`, the `OnClosed` callback is the single dismiss
+notification — read `ContentDialogResult` to discover which path the
+user took, but accept that `None` is the user's right.
+
+## Reference [#reference]
+
+| Element | Factory | Open/close | Lifecycle |
+|---|---|---|---|
+| `ContentDialogElement` | `ContentDialog(title, content, primaryButtonText)` | `IsOpen` (init), `OnClosed(result)` | `OnOpened`, `OnClosed` |
+| `MenuFlyoutElement` | `MenuFlyout(target, items...)` | Auto on target click | n/a |
+| `CommandBarFlyoutElement` | `CommandBarFlyout(target, primary?, secondary?)` | Auto on target click, or `IsOpen` (init) | n/a |
+| `PopupElement` | `Popup(child, isOpen?, onClosed?)` | `isOpen` arg or `.IsOpen` init | `.Opened`, `.Closed` |
+
+## Patterns [#patterns]
+
+### Dialog-driven async command [#dialog-driven-async-command]
+
+Async confirmations — "Are you sure?" → "Doing it…" → "Done." — fit a
+single `Command` with `ExecuteAsync`. The dialog primary triggers the
+command; [`UseCommand`](/microsoft-ui-reactor/main/guides/commanding) wraps `ExecuteAsync` into `Execute`
+and tracks `IsExecuting`, so `Command.IsEnabled` (`CanExecute &&
+!IsExecuting && !IsDebouncing`) goes false for the duration and the
+dialog's primary disables itself while the action runs. The user
+can't double-tap the destructive button:
+
+```csharp
+class DialogAsyncCommandDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+        var (deleted, setDeleted) = UseState(false);
+
+        // UseCommand wraps ExecuteAsync into Execute and tracks IsExecuting,
+        // so IsEnabled goes false for the duration of the async action.
+        var delete = UseCommand(new Command
+        {
+            Label = "Delete",
+            ExecuteAsync = async () =>
+            {
+                await Task.Delay(400);
+                setDeleted(true);
+                setOpen(false);
+            },
+            CanExecute = !deleted,
+        });
+
+        return VStack(8,
+            SubHeading("Dialog-driven async command"),
+            Button("Delete item…", () => setOpen(true)),
+            TextBlock(deleted ? "Deleted." : "Not deleted.").Opacity(0.6),
+            ContentDialog(
+                "Delete this item?",
+                TextBlock("This action cannot be undone."),
+                primaryButtonText: "Delete") with
+            {
+                IsOpen = open,
+                SecondaryButtonText = "Cancel",
+                IsPrimaryButtonEnabled = delete.IsEnabled,
+                OnClosed = r =>
+                {
+                    if (r == ContentDialogResult.Primary && delete.IsEnabled)
+                        delete.Execute?.Invoke();
+                    else
+                        setOpen(false);
+                },
+            }
+        ).Padding(24);
+    }
+}
+```
+
+This mirrors the [`recipes/modal-dialog`](/microsoft-ui-reactor/main/recipes/modal-dialog)
+recipe, which builds the same shape out of an inline modal instead of
+the WinUI control.
+
+### Right-click on a list row [#right-click-on-a-list-row]
+
+`MenuFlyout` attaches to its target. Inside a [`ListView`](/microsoft-ui-reactor/main/controls/collections)
+row template, wrap the row in `MenuFlyout(rowContent, items...)` and
+the menu binds to that row instance. Tie the menu items to the row's
+data — `MenuItem<T>(Command<T>, T)` lets a single command apply to every
+row's context. The keyed `ListView<T>` overload takes a `Func<T, string>`
+key selector, so project non-string ids to a string:
+
+```csharp
+ListView(items, item => item.Id.ToString(), (item, _) =>
+    MenuFlyout(
+        RowContent(item),
+        MenuItem(deleteCommand, item),
+        MenuItem(renameCommand, item),
+        MenuSeparator(),
+        MenuItem(propertiesCommand, item)))
+```
+
+## Common Mistakes [#common-mistakes]
+
+### Imperatively opening a dialog from an event handler [#imperatively-opening-a-dialog-from-an-event-handler]
+
+```csharp
+// Don't:
+Button("Save", async () =>
+{
+    var dialog = new ContentDialog { Title = "Confirm" };
+    await dialog.ShowAsync();
+})
+```
+
+```csharp
+class BasicDialogDemo : Component
+{
+    public override Element Render()
+    {
+        var (open, setOpen) = UseState(false);
+
+        return VStack(8,
+            SubHeading("Basic ContentDialog"),
+            Button("Show dialog", () => setOpen(true)),
+            // Dialog lives in the tree at all times. IsOpen controls
+            // visibility; OnClosed flips it back when the user dismisses.
+            ContentDialog(
+                "Welcome",
+                TextBlock("Thank you for trying Reactor."),
+                primaryButtonText: "OK") with
+            {
+                IsOpen = open,
+                OnClosed = _ => setOpen(false),
+            }
+        ).Padding(24);
+    }
+}
+```
+
+The imperative path drops out of the Reactor render model — the dialog
+isn't in the tree, so it can't be styled by the parent's theme, can't
+be tested by the renderer fixture from [testing.md](/microsoft-ui-reactor/main/guides/testing), and
+can't share state with the rest of the component. The controlled
+`IsOpen` flag is the canonical pattern.
+
+### Reusing a single dialog for unrelated decisions [#reusing-a-single-dialog-for-unrelated-decisions]
+
+```csharp
+// Don't:
+var (open, setOpen) = UseState(false);
+var (dialogType, setDialogType) = UseState("");
+
+// One dialog, branching on dialogType for title/body/buttons.
+```
+
+Two decisions, two dialogs. The branching version makes every dialog
+state read the dialog-type string, which leaks dialog concerns into
+your component's data model and makes the testing fixture fragile.
+Each modal action gets its own dialog element with its own state pair
+— the cost is two `useState` calls and an extra `ContentDialog`
+declaration, both nearly free.
+
+## Tips [#tips]
+
+**Pair every dialog trigger with a `Command`.** The trigger lives in
+one or more surfaces (toolbar, menu, keyboard shortcut); the command
+gives you one place to wire enabled-state, telemetry, and undo. The
+dialog primary then routes through `command.Execute`.
+
+**Treat `ContentDialogResult.None` as Cancel.** Esc, click-on-scrim,
+and the close-X all return `None`. Don't try to distinguish them — if
+the user didn't pick `Primary` or `Secondary`, they didn't pick.
+
+**Don't reach for `Popup` until the three structured surfaces have
+failed.** `ContentDialog`, `MenuFlyout`, and `CommandBarFlyout` carry
+their own focus and ARIA semantics. `Popup` doesn't, and you have to
+re-implement focus trapping yourself.
+
+**Open the dialog once per decision, not once per render.** If
+`open` is in your state, only the button handler should flip it true.
+A `UseEffect` that does `setOpen(true)` on a condition will reopen the
+dialog after every dismiss until the condition changes — gate the
+effect with a "user-acknowledged" flag.
+
+**Show a long-running action's progress *inside* the dialog, not
+after.** Closing a dialog mid-action is jarring. Wire the dialog
+primary to an async [`Command`](/microsoft-ui-reactor/main/guides/commanding), let `IsExecuting` swap
+the primary label for a spinner, then close on completion.
+
+## Next Steps [#next-steps]
+
+- **[Status and Info](/microsoft-ui-reactor/main/controls/status-and-info)** — Previous: non-interactive feedback (InfoBar, ProgressRing, TeachingTip).
+- **[Data System](/microsoft-ui-reactor/main/controls/data-system)** — Next: DataGrid and the data-source pipeline.
+- **[Commanding](/microsoft-ui-reactor/main/guides/commanding)** — The Command record that drives buttons, menu items, dialogs, and shortcuts.
+- **[Accessibility](/microsoft-ui-reactor/main/guides/accessibility)** — Focus traps, ARIA roles, and dialog landmark behavior.
+- **[Recipes: Modal dialog](/microsoft-ui-reactor/main/recipes/modal-dialog)** — End-to-end recipe building a confirmation modal.

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/FocusTrap.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrap.md",
+  "route": "/reference/hooks/FocusTrap",
+  "title": "FocusTrap",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrap",
+  "description": "Attaches a focus trap to this element. When the trap is active, Tab/Shift+Tab cycles within this element's visual subtree.",
+  "markdown": "---\ntitle: \"FocusTrap\"\ndescription: \"Attaches a focus trap to this element. When the trap is active, Tab/Shift+Tab cycles within this element's visual subtree.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+}
