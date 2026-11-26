@@ -1,4 +1,8 @@
 
+# Effects Scheduling
+
+This page is about when `UseEffect` fires and why.
+
 The thing that trips up most readers in Microsoft.UI.Reactor (Reactor) is the order. `UseEffect` does
 not run during render — it runs *after* the reconciler has finished
 committing the new tree to WinUI, on the UI thread, in hook-declaration
@@ -14,14 +18,11 @@ when your effect body runs, the WinUI controls you described in this
 render are already mounted and visible, and the previous round's
 cleanup has already run.
 
-# Effects Scheduling
-
-This page is about when [`UseEffect`](hooks.md) fires and why.
-Surface-level usage is on the [Effects](effects.md) page; the
-async-resource pipeline — `UseResource`, `UseInfiniteResource`,
-`Pending`, `QueryCache` — has its own deep walk in the
-[async-system reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md). What
-follows is the render-loop view of the same callbacks.
+Surface-level usage is on the [Effects](effects.md) page; the async-resource
+pipeline — `UseResource`, `UseInfiniteResource`, `Pending`, `QueryCache` —
+has its own deep walk in the [async-system
+reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md).
+What follows is the render-loop view of the same callbacks.
 
 ## The render → commit → flush sequence
 

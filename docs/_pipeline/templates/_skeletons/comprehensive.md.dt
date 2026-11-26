@@ -8,7 +8,7 @@
 # would fail until the placeholders are filled in.
 #
 # Required structural elements (everything from solid plus):
-#   - ≥80-word mental-model lead paragraph above the first heading
+#   - ≥80-word mental-model lead between the title and the first `##`
 #   - ≥1 `<!-- ai:caveat -->...<!-- /ai:caveat -->` block
 #   - `## Patterns` section with at least one real-world recipe
 #   - `## Common Mistakes` section with anti-pattern + correction
@@ -30,23 +30,23 @@ tier: comprehensive
 # winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/{{REPLACE_ME: control-slug}}
 ---
 
+# {{REPLACE_ME: human-readable title}}
+
+{{REPLACE_ME: one or two plain sentences (at most 420 characters) that say
+what this page covers. No links: the docs site shows this paragraph as the
+page subtitle, in plain text.}}
+
 {{REPLACE_ME: mental-model lead paragraph. ≥80 words. Explain why this
 concept exists, when to reach for it, and what it replaces in classic
 WinUI / WPF / React. This is the SwiftUI "Discussion" treatment —
 philosophy and orientation, not API rehearsal. Land a sentence on the
 trade-off that picks this primitive over the alternatives, and a
 sentence on the most common mistake a reader will make if they skim.
-The lint heuristic counts at least eighty words above the first
-heading, so do not skimp on this paragraph; it is what separates a
-solid page from a comprehensive one. Cross-link two or three related
-concepts inline so the reader can branch out without scrolling.}}
-
-# {{REPLACE_ME: human-readable title}}
-
-{{REPLACE_ME: a sentence or two restating the topic in concrete terms now
-that the mental-model paragraph has framed the abstraction. Include at
-least one inline link to a related page, e.g.
-[hooks](hooks.md).}}
+The lint heuristic counts at least eighty words between the title and
+the first `##` section, so do not skimp on this paragraph; it is what
+separates a solid page from a comprehensive one. Cross-link two or three
+related concepts inline, e.g. [hooks](hooks.md), so the reader can branch
+out without scrolling.}}
 
 ## {{REPLACE_ME: first concept heading}}
 

@@ -159,4 +159,115 @@ overrides:
 """));
         Assert.Equal("REACTOR_DOC_REGISTRY_001", ex.Code);
     }
+
+    /// <summary>Ids become folder and file names under docs/guide/reference, so
+    /// anything that is not a lowercase slug is rejected wherever an id appears.</summary>
+    [Theory]
+    [InlineData("defaults", "../escape")]
+    [InlineData("defaults", "Hooks")]
+    [InlineData("categories", "a/b")]
+    [InlineData("categories", "two--hyphens")]
+    [InlineData("groups", "state ")]
+    [InlineData("areas", "c:")]
+    [InlineData("modifier-areas", "-lead")]
+    [InlineData("overrides", "trail-")]
+    public void NonSlugId_RaisesRegistry001(string where, string id)
+    {
+        string Q(string s) => "\"" + s + "\"";
+        var cat = where is "defaults" ? Q(id) : "hooks";
+        var catId = where is "categories" ? Q(id) : "hooks";
+        var groupId = where is "groups" ? Q(id) : "state";
+        var areaId = where is "areas" ? Q(id) : "layout";
+        var modId = where is "modifier-areas" ? Q(id) : "spacing";
+        var overrideCat = where is "overrides" ? Q(id) : "hooks";
+        var yaml = $"""
+categories:
+  - id: {catId}
+    title: Hooks
+    summary: "s"
+    groups:
+      - id: {groupId}
+        title: State
+        hooks: ["UseState*"]
+areas:
+  - id: {areaId}
+    title: Layout
+modifier-areas:
+  - id: {modId}
+    title: Spacing
+defaults:
+  - match: "Microsoft.UI.Reactor.Hooks.*"
+    category: {cat}
+overrides:
+  - cref: "T:Microsoft.UI.Reactor.Hooks.UseState"
+    category: {overrideCat}
+""";
+        var ex = Assert.Throws<DocPipelineException>(() => ReferenceMap.Parse(yaml));
+        Assert.Equal("REACTOR_DOC_REGISTRY_001", ex.Code);
+        Assert.Contains($"`{id}` is not a slug", ex.Message);
+    }
+
+    /// <summary>Positive control for the theory above: the same document with every id
+    /// a valid slug parses.</summary>
+    [Fact]
+    public void SlugIds_Parse()
+    {
+        var map = ReferenceMap.Parse("""
+categories:
+  - id: focus-and-keyboard
+    title: Focus
+    summary: "s"
+defaults:
+  - match: "Microsoft.UI.Reactor.Hooks.*"
+    category: focus-and-keyboard
+""");
+        Assert.Equal("focus-and-keyboard", map.Resolve("M:Microsoft.UI.Reactor.Hooks.UseState")!.Category);
+    }
+
+    /// <summary>Once <c>categories:</c> is declared, a rule that names any other category
+    /// (a typo such as <c>themeing</c>) is an error instead of a new, empty section.</summary>
+    [Fact]
+    public void UndeclaredCategory_WhenCategoriesAreDeclared_RaisesRegistry001()
+    {
+        var ex = Assert.Throws<DocPipelineException>(() => ReferenceMap.Parse("""
+categories:
+  - id: theming
+    title: Theming
+    summary: "s"
+defaults:
+  - match: "Microsoft.UI.Reactor.Theming.*"
+    category: themeing
+"""));
+        Assert.Equal("REACTOR_DOC_REGISTRY_001", ex.Code);
+        Assert.Contains("`themeing`", ex.Message);
+    }
+
+    /// <summary>A map without <c>categories:</c> still gets one category per rule
+    /// category, and <c>excluded</c> is never declared.</summary>
+    [Fact]
+    public void NoDeclaredCategories_AreSynthesizedFromTheRules()
+    {
+        var map = ReferenceMap.Parse(SpecExample);
+        Assert.Equal(new[] { "hooks", "factories", "charting" }, map.Categories.Select(c => c.Id));
+    }
+
+    /// <summary>An unknown key, for example <c>modifier_areas</c> instead of
+    /// <c>modifier-areas</c>, fails the load instead of being dropped.</summary>
+    [Theory]
+    [InlineData("modifier_areas:\n  - id: spacing\n    title: Spacing\n")]
+    [InlineData("defaults:\n  - match: \"Microsoft.UI.Reactor.*\"\n    category: core\n    guide_pages: [core]\n")]
+    public void UnknownKey_RaisesRegistry001(string yaml)
+    {
+        var ex = Assert.Throws<DocPipelineException>(() => ReferenceMap.Parse(yaml));
+        Assert.Equal("REACTOR_DOC_REGISTRY_001", ex.Code);
+        Assert.Contains("malformed", ex.Message);
+    }
+
+    /// <summary>The committed map passes every check above.</summary>
+    [Fact]
+    public void CommittedMap_Loads()
+    {
+        var map = ReferenceMap.Load(Path.Join(TestRepo.Root, "docs", "_pipeline", "reference-map.yaml"));
+        Assert.NotEmpty(map.Categories);
+    }
 }

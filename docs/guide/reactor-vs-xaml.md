@@ -1,4 +1,8 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Winui3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/).
+
+# Reactor vs XAML
+
+This page is for the XAML developer who wants the *why* behind Reactor's
+design.
 
 If you've spent years inside XAML, the question that keeps coming back
 is "where did my bindings go?" Microsoft.UI.Reactor (Reactor) renders the same WinUI controls
@@ -16,15 +20,13 @@ codebase falls into place: nothing in [Architecture
 Overview](architecture-overview.md), [Hooks Internals](hooks-internals.md),
 or [Reconciliation](reconciliation.md) hides a binding system.
 
-# Reactor vs XAML
+The [Reactor for XAML Developers](xaml-developers.md) cookbook covers the *how*
+for common rewrite tasks ("I have a `Page` with bindings; what does that
+become?"). Indexed in two places: section 1 (Get Started) so a XAML
+developer hitting the docs cold finds it early, and section 9 (Under the
+hood) so it sits next to the architecture pages it complements.
 
-This page is for the XAML developer who wants the *why*. The
-[Reactor for XAML Developers](xaml-developers.md) cookbook covers the
-*how* for common rewrite tasks ("I have a `Page` with bindings; what
-does that become?"). Indexed in two places: section 1 (Get Started)
-so a XAML developer hitting the docs cold finds it early, and section
-9 (Under the hood) so it sits next to the architecture pages it
-complements.
+> **WinUI reference:** For the full property surface and design guidance, see [Winui3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/).
 
 ## Pull vs push, one diagram
 

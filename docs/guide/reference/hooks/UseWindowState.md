@@ -1,14 +1,19 @@
 # UseWindowState
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowState`
+Subscribes to the host window's `StateChanged` event and re-renders on change. Returns [`WindowState.Normal`](../hosting/window-options.md#values_10) outside a window. (spec 036 §7)
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public WindowState UseWindowState()
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Subscribes to the host window's `StateChanged` event and re-renders
-on change. Returns `WindowState.Normal`
-outside a window. (spec 036 §7)
+**Learn more:** [Windows](../../windows.md), [Advanced Windowing](../../windowing-advanced.md), [Hooks](../../hooks.md)
 
+## Use from a class component
 
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected WindowState UseWindowState()
+```

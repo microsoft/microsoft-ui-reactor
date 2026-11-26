@@ -108,7 +108,7 @@ internal static class TierLint
         if (!HasMentalModelLead(assembledBody))
             findings.Add(new TierLintFinding(
                 "REACTOR_DOC_TIER_008",
-                "no mental-model lead paragraph (≥80 words above the first heading)",
+                "no mental-model lead paragraph (≥80 words before the first section heading)",
                 file, 1, Severity(infoOnly)));
 
         if (template.Caveats.Count == 0)
@@ -251,16 +251,24 @@ internal static class TierLint
         return linkCount >= 3;
     }
 
+    /// <summary>
+    /// Counts prose words before the first section heading (level 2 or
+    /// deeper). The page title (<c># </c>), blockquotes, fenced code and
+    /// indented code are skipped, so the lead may sit either above or below the title.
+    /// </summary>
     internal static bool HasMentalModelLead(string body)
     {
         var lines = body.Replace("\r\n", "\n").Split('\n');
         var words = 0;
+        var fence = new MarkdownFence();
         foreach (var raw in lines)
         {
+            if (fence.InCode(raw)) continue;
+            if (SectionHeading.IsMatch(raw)) break;
+            // Four or more spaces of indent is an indented code block, not prose.
+            if (raw.StartsWith("    ") || raw.StartsWith('\t')) continue;
             var line = raw.TrimStart();
-            if (line.StartsWith("#")) break;
-            // Skip front-matter / callout markers
-            if (line.StartsWith(">") || line.StartsWith("```")) continue;
+            if (line.StartsWith("# ") || line.StartsWith(">")) continue;
             words += line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         }
         return words >= 80;
@@ -273,4 +281,6 @@ internal static class TierLint
     }
 
     private static readonly Regex LinkPattern = new(@"\[[^\]]+\]\([^)]+\)", RegexOptions.Compiled);
+
+    private static readonly Regex SectionHeading = new(@"^ {0,3}#{2,6}(\s|$)", RegexOptions.Compiled);
 }

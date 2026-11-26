@@ -204,9 +204,9 @@ public sealed class DocsDeployWiringTests
         Assert.Matches(@"published=", run);
         Assert.Contains("PUBLISHED_VERSIONS_FILE", run, StringComparison.Ordinal);
 
-        // The recorded list and mike's versions.json are produced
-        // independently. Without this cross-check a divergence would quietly
-        // shrink what verify probes instead of failing.
+        // The recorded list and the versions.json scripts/publish.mjs writes
+        // are produced independently. Without this cross-check a divergence
+        // would quietly shrink what verify probes instead of failing.
         Assert.Contains("site/versions.json", run, StringComparison.Ordinal);
         Assert.Matches(@"missing\b", run);
     }
@@ -221,7 +221,7 @@ public sealed class DocsDeployWiringTests
 
         // Comments stripped first: these steps explain themselves in prose that
         // names the very commands being located, and a comment mentioning
-        // `mike deploy` after the write would invert the ordering check.
+        // `scripts/publish.mjs` after the write would invert the ordering check.
         var run = Code(Scalar(step, "run")!);
 
         // The artifact step hard-fails on an empty list, so a step that stops
@@ -231,15 +231,15 @@ public sealed class DocsDeployWiringTests
         Assert.True(write >= 0, $"'{stepName}' records nothing, so verify cannot know what to probe.");
 
         // And only if it records *after* publishing. Recording first means a
-        // failed `mike deploy` still names a version as published, so verify
-        // would go looking for a directory that was never written and blame the
+        // failed publish still names a version as published, so verify would
+        // go looking for a directory that was never written and blame the
         // deployment for it. Asserting the mention alone would not notice the
-        // write moving back above the deploy.
-        var deployed = run.LastIndexOf("mike deploy", StringComparison.Ordinal);
-        Assert.True(deployed >= 0, $"'{stepName}' does not deploy anything.");
+        // write moving back above the publish.
+        var deployed = run.LastIndexOf("scripts/publish.mjs", StringComparison.Ordinal);
+        Assert.True(deployed >= 0, $"'{stepName}' does not publish anything.");
         Assert.True(
             write > deployed,
-            $"'{stepName}' records the version it published before `mike deploy` runs, so a failed "
+            $"'{stepName}' records the version it published before `scripts/publish.mjs` runs, so a failed "
                 + "publish would still be reported to the verify job as a directory to probe.");
     }
 

@@ -1,13 +1,15 @@
 
 # Persistence
 
-[`UsePersisted`](hooks.md) holds a value past a component re-mount —
-the user navigates away, the component unmounts, the user navigates
-back, and the captured state is still there. It's the right hook for
-"keep what the user typed across a tab switch" or "remember the
-selected row in a list while the user opens a side pane". It is *not*
-the right hook for "save to disk so the value survives an app
-restart"; that one needs a disk bridge in `UseEffect`, covered below.
+`UsePersisted` holds a value past a component re-mount — the user navigates
+away, the component unmounts, the user navigates back, and the captured
+state is still there.
+
+[`UsePersisted`](hooks.md) is the right hook for "keep what the user typed
+across a tab switch" or "remember the selected row in a list while the user
+opens a side pane". It is *not* the right hook for "save to disk so the
+value survives an app restart"; that one needs a disk bridge in `UseEffect`,
+covered below.
 
 ```csharp
 // UsePersisted with explicit Window scope. The text outlives a re-mount

@@ -179,6 +179,28 @@ updates:
           - "minor"
           - "patch"
 
+  # The docs site builder. blume is pinned to an exact version, so without this
+  # entry the site would stay on whatever version it was set up with. A bump is
+  # checked by ci.yml's docs-build job, which builds the site strictly.
+  - package-ecosystem: "npm"
+    directory: "/docs/_website"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps(docs)"
+    labels:
+      - "dependencies"
+      - "npm"
+    # Same shape as the vscode entry: one directory, so minor/patch bumps share
+    # a PR and a major gets its own.
+    groups:
+      docs-site-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
   # The remaining npm projects — the HeadTrax sample service, the React Native
   # perf harnesses, and the Figma plugin. They were unmonitored until now, so
   # transitive advisories piled up in Component Governance (qs, body-parser and

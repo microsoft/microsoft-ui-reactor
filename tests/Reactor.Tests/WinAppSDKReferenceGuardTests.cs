@@ -1125,6 +1125,17 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
     };
 
     /// <summary>
+    /// The docs site's untracked build output (see <c>docs/_website/.gitignore</c>), as
+    /// repo-relative paths. Everything here is a copy of a swept guide or of the exempt
+    /// CHANGELOG.md, so sweeping it would report CHANGELOG's historical pins as live ones
+    /// after any local docs build.
+    /// </summary>
+    private static readonly HashSet<string> PrunedRelativeDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "docs/_website/.blume", "docs/_website/.blume-verify", "docs/_website/dist", "docs/_website/docs",
+    };
+
+    /// <summary>
     /// Direct coverage of the element-parsing branches the live tree never exercises.
     /// The repo only contains ordinary single-line <c>Include</c>+<c>Version</c>
     /// attributes, so reverse ordering, single quotes, <c>VersionOverride</c>
@@ -1221,8 +1232,13 @@ ConvertTo-Json -Compress -InputObject @{{ literals = @($literals | Sort-Object -
 
             foreach (var sub in subdirs)
             {
-                if (!PrunedDirectories.Contains(Path.GetFileName(sub)))
-                    stack.Push(sub);
+                if (PrunedDirectories.Contains(Path.GetFileName(sub))
+                    || PrunedRelativeDirectories.Contains(Path.GetRelativePath(root, sub).Replace('\\', '/')))
+                {
+                    continue;
+                }
+
+                stack.Push(sub);
             }
 
             foreach (var path in files)

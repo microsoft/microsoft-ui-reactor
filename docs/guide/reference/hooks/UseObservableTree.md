@@ -1,15 +1,25 @@
 # UseObservableTree
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseObservableTree``1(``0)`
+Observes an object and all nested INotifyPropertyChanged values reachable through its properties. Re-renders when any property at any depth changes. Automatically subscribes/unsubscribes as property values change.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public T UseObservableTree<T>(T source) where T : INotifyPropertyChanged
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Observes an object and all nested INotifyPropertyChanged values
-reachable through its properties. Re-renders when any property
-at any depth changes. Automatically subscribes/unsubscribes as
-property values change.
+**Learn more:** [Reactivity Model](../../reactivity-model.md), [Hooks](../../hooks.md)
 
+## Parameters
 
+| Name | Type | Description |
+| --- | --- | --- |
+| `source` | `T` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected T UseObservableTree<T>(T source) where T : INotifyPropertyChanged
+```

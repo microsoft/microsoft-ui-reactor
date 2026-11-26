@@ -1,7 +1,7 @@
 # Spec 066 — Transform modifiers on the composition visual
 
-> Status: **accepted** (2026-11-20), in progress (layers E and 0 have landed). Rollout in §13. Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
-> Plans fixes for [#1623](https://github.com/microsoft/microsoft-ui-reactor/issues/1623),
+> Status: **implemented** (2026-11-24). Accepted 2026-11-20. All §13 layers landed: E (#1645, #1646), V (#1653), 0 (#1644), 1 (#1654), 3 (#1656), 2 (#1661), 4 (#1668) and 5 (#1671). Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
+> Fixed [#1623](https://github.com/microsoft/microsoft-ui-reactor/issues/1623),
 > [#1624](https://github.com/microsoft/microsoft-ui-reactor/issues/1624),
 > [#1625](https://github.com/microsoft/microsoft-ui-reactor/issues/1625),
 > [#1626](https://github.com/microsoft/microsoft-ui-reactor/issues/1626),
