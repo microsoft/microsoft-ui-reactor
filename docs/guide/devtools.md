@@ -1,11 +1,13 @@
 
 # Devtools
 
-The devtools for a running Reactor app are the WinUI DevTools in the
-[winapp CLI](https://github.com/microsoft/winappCli). They attach to the app from
-outside, so you don't add anything to your project. They show the component tree
-and the line of C# that created each element. They change properties, resources,
-and hook state, and they click and type into the app.
+The devtools for a running Reactor app are the WinUI DevTools in the winapp CLI.
+They attach to the app from outside, so you don't add anything to your project.
+They show the component tree and the line of C# that created each element. They
+change properties, resources, and hook state, and they click and type into the app.
+
+The winapp CLI is at
+[github.com/microsoft/winappCli](https://github.com/microsoft/winappCli).
 
 Reactor used to ship its own devtools: an in-app dev menu, an MCP server, and
 `mur devtools`. Those have been removed. The `Microsoft.UI.Reactor.Devtools`

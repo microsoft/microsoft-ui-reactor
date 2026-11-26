@@ -17,17 +17,20 @@ tier: comprehensive
 
 # DevTools Internals
 
-What is left of Microsoft.UI.Reactor (Reactor)'s own devtools is one in-app
-subsystem: the preview host in the deprecated `Microsoft.UI.Reactor.Devtools`
-package. It mounts a single component (or the whole app) in a window, and when an
-editor asks for it, runs a loopback capture server that streams frames, lists
-components, switches the previewed component, draws the reference graph, and
-hands the window to Visual Studio for embedding. Everything else — inspecting and
-editing a running app, UI automation, logs, agents — is the WinUI DevTools in the
-winapp CLI (`winapp run . --devtools on`), which attaches from outside the app and
-needs nothing in your project. The preview host is zero-cost in retail: without the
-`Reactor.DevtoolsSupport` switch the package's code is trimmed and a `--devtools`
-argument only prints how to enable it.
+What is left of Reactor's own devtools is the preview host in the deprecated
+`Microsoft.UI.Reactor.Devtools` package. The VS Code live preview and the Visual
+Studio embedded preview run on it. Everything else is the WinUI DevTools in the
+winapp CLI.
+
+The Microsoft.UI.Reactor (Reactor) preview host mounts a single component, or the
+whole app, in a window. When an editor asks for it, the host runs a loopback
+capture server that streams frames, lists components, switches the previewed
+component, draws the reference graph, and hands the window to Visual Studio for
+embedding. Inspecting and editing a running app, UI automation, logs, and agents
+are the job of the WinUI DevTools (`winapp run . --devtools on`), which attach
+from outside the app and need nothing in your project. The preview host is
+zero-cost in retail: without the `Reactor.DevtoolsSupport` switch the package's
+code is trimmed and a `--devtools` argument only prints how to enable it.
 
 > **Deprecated.** This page describes the in-app preview host in the
 > `Microsoft.UI.Reactor.Devtools` package. Its MCP server, its in-app dev menu
