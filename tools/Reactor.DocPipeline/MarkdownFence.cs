@@ -14,22 +14,27 @@ internal sealed partial class MarkdownFence
     /// <summary>True when <paramref name="line"/> is a fence line or inside fenced code.</summary>
     public bool InCode(string line)
     {
-        var trimmed = line.TrimEnd('\r').TrimStart();
-        var m = FenceRun().Match(trimmed);
+        // Fence markers count only with zero to three spaces of indent; deeper is code content.
+        line = line.TrimEnd('\r');
+        var m = FenceRun().Match(line);
+        var rest = m.Success ? line[(m.Index + m.Length)..] : "";
         if (_open is null)
         {
-            if (!m.Success) return false;
-            _open = m.Value;
+            // A backtick fence's info string can't contain a backtick, so a
+            // line like ```x``` is an inline code span, not an opening fence.
+            if (!m.Success || (m.Groups[1].Value[0] == '`' && rest.Contains('`'))) return false;
+            _open = m.Groups[1].Value;
             return true;
         }
 
-        if (m.Success && m.Value[0] == _open[0] && m.Length >= _open.Length && trimmed[m.Length..].Trim().Length == 0)
+        var run = m.Groups[1].Value;
+        if (m.Success && run[0] == _open[0] && run.Length >= _open.Length && rest.Trim().Length == 0)
         {
             _open = null;
         }
         return true;
     }
 
-    [GeneratedRegex(@"^(`{3,}|~{3,})")]
+    [GeneratedRegex(@"^ {0,3}(`{3,}|~{3,})")]
     private static partial Regex FenceRun();
 }

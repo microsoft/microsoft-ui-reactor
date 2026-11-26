@@ -121,9 +121,10 @@
         "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
         "src/Reactor/Core/Reconciler.Context.cs",
         "src/Reactor/Core/Reconciler.Keyframes.cs",
-        "src/Reactor/Core/Reconciler.InteractionStates.cs"
+        "src/Reactor/Core/Reconciler.InteractionStates.cs",
+        "src/Reactor/Core/Reconciler.CompositionState.cs"
       ],
-      "description": "Reconciler partials \u2014 per-control state, pooling, teardown, context replay, process-wide animation state"
+      "description": "Reconciler partials \u2014 per-control state, pooling, teardown, context replay, per-control composition state"
     },
     {
       "id": "lifecycle-batch-1",
@@ -1346,14 +1347,15 @@
       "agent": "general",
       "files": [
         "src/Reactor/Core/Reconciler.Modifiers.cs",
-        "src/Reactor/Core/Reconciler.Events.cs",
-        "src/Reactor/Core/Reconciler.ThemeBindings.cs",
-        "src/Reactor/Core/Reconciler.Accessibility.cs",
-        "src/Reactor/Core/Reconciler.ReferenceEdges.cs",
+        "src/Reactor/Core/ModifierEvents.cs",
+        "src/Reactor/Core/ThemeBindingApplier.cs",
+        "src/Reactor/Core/AccessibilityApplier.cs",
+        "src/Reactor/Core/ReferenceEdgeWiring.cs",
         "src/Reactor/Core/Reconciler.Flyouts.cs",
-        "src/Reactor/Core/Reconciler.Registration.cs"
+        "src/Reactor/Core/Reconciler.Registration.cs",
+        "src/Reactor/Core/Reconciler.StaticForwarders.cs"
       ],
-      "description": "Reconciler partials \u2014 modifiers, event trampolines, theme bindings, accessibility, reference edges"
+      "description": "Reconciler partials and helpers \u2014 modifiers, event trampolines, theme bindings, accessibility, reference edges"
     },
     {
       "id": "general-batch-34",
@@ -1362,6 +1364,7 @@
         "src/Reactor/Core/Reconciler.Keyframes.cs",
         "src/Reactor/Core/Reconciler.Transitions.cs",
         "src/Reactor/Core/Reconciler.InteractionStates.cs",
+        "src/Reactor/Core/Reconciler.CompositionState.cs",
         "src/Reactor/Core/Reconciler.ConnectedAnimations.cs",
         "src/Reactor/Core/Reconciler.ExitTransitions.cs"
       ],
@@ -1385,14 +1388,14 @@
       "id": "general-batch-36",
       "agent": "general",
       "files": [
-        "src/Reactor/Core/Reconciler.Gestures.cs",
-        "src/Reactor/Core/Reconciler.DragDrop.cs",
+        "src/Reactor/Core/GestureDispatch.cs",
+        "src/Reactor/Core/DragDropDispatch.cs",
         "src/Reactor/Core/Reconciler.KeyedItemsBinding.cs",
         "src/Reactor/Core/Reconciler.RichTextScrollAnchor.cs",
         "src/Reactor/Core/Reconciler.Diagnostics.cs",
         "src/Reactor/Core/V1Protocol/Reconciler.TemplatedTree.cs"
       ],
-      "description": "Reconciler partials \u2014 gestures, drag and drop, keyed items binding, rich text scroll anchor, diagnostics"
+      "description": "Reconciler partials and helpers \u2014 gestures, drag and drop, keyed items binding, rich text scroll anchor, diagnostics"
     }
   ]
 }

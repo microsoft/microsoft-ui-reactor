@@ -451,6 +451,10 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal void BeginRootPass()
     {
+        // Before Windows 10 2004 (19041) "Animation effects" has no change notification, and an
+        // unchanged element skips its update, so each root pass polls the setting (issue #1702).
+        if (!UiSettingsCapabilities.HasAnimationsEnabledChanged)
+            global::Microsoft.UI.Reactor.Navigation.TransitionEngine.PollAnimationsEnabled();
         var pending = Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
         _resourceRefreshArmed |= pending || HostThemeChanged;
     }

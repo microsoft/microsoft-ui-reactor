@@ -792,7 +792,11 @@ Note the absences:
 - `Floating` → `SetWindowPos(HWND_TOP)` whenever a sibling owned-window
   activates, via a process-wide z-order monitor. Spec 036 §9 already
   tracks owned-window relationships.
-- `AlwaysOnTop` → `SetWindowPos(HWND_TOPMOST)`.
+- `AlwaysOnTop` → `SetWindowPos(HWND_TOPMOST)`. Windows can decline it while
+  another process owns the foreground: the call returns TRUE but
+  `WS_EX_TOPMOST` stays clear. Reactor checks the bit, logs one
+  `DiagnosticLog` warning, and reapplies the level on `WM_ACTIVATEAPP` or the
+  next activation of any of the app's windows (issue #1707).
 
 **Breaking change.** `WindowSpec.IsAlwaysOnTop` is removed. Authors set
 `Level = WindowLevel.AlwaysOnTop` instead. The single-purpose bool was a

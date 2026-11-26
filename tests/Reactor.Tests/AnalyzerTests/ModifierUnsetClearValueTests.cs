@@ -1277,7 +1277,7 @@ public class ModifierUnsetClearValueTests
                 "per-slot apply callbacks that re-run whenever the referenced ElementRef changes, " +
                 "and resets them by applying a null target (emptying the DescribedBy/FlowsTo/FlowsFrom " +
                 "lists, ClearValue for PlacementTarget) when the ref is dropped or the control is torn down. " +
-                "That wiring/reset contract lives in Reconciler.ReferenceEdges.cs, not in set/unset arms " +
+                "That wiring/reset contract lives in ReferenceEdgeWiring.cs, not in set/unset arms " +
                 "these gates can read.",
         };
 

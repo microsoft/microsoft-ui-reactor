@@ -1,3 +1,4 @@
+using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
@@ -41,6 +42,49 @@ public class AnimationExtrasEqualityTests
         Assert.False(Element.HasBehavioralExtras(cleared));
     }
 
+    // Issue #1702: each render rebuilds these declarations, so identical ones must still skip.
+    [Fact]
+    public void Rebuilt_Equal_Keyframes_And_ScrollLinked_Skip()
+    {
+        static Element Render(int trigger, float opacity = 0.5f, float parallax = 0.5f, int duration = 400, bool loop = false) => Button("Go")
+            .Keyframes("pulse", trigger, k => (loop ? k.Loop() : k).Duration(duration).At(0f, opacity: 1f).At(1f, opacity: opacity, easing: Easing.EaseOut))
+            .ScrollLinked(null!, s => s.Parallax(parallax).FadeOut(0, 100));
+
+        Assert.True(Element.ShallowEquals(Render(1), Render(1)));
+        Assert.True(Element.CanSkipUpdate(Render(1), Render(1)));
+        Assert.True(Element.ExtrasEqual(Render(1), Render(1)));
+        Assert.Equal(Render(1), Render(1));
+        Assert.Equal(Render(1).GetHashCode(), Render(1).GetHashCode());
+
+        foreach (var changed in new[] { Render(2), Render(1, opacity: 0.4f), Render(1, parallax: 0.6f),
+            Render(1) with { ScrollAnimation = null }, Render(1) with { KeyframeAnimations = null },
+            Render(1, duration: 500), Render(1, loop: true) })
+        {
+            Assert.False(Element.ShallowEquals(Render(1), changed));
+            Assert.False(Element.CanSkipUpdate(changed, Render(1)));
+            Assert.False(Element.ExtrasEqual(Render(1), changed));
+        }
+    }
+
+    // Issue #1702: InteractionStateValues lists its fields by hand, so each one must decline the skip.
+    [Fact]
+    public void Each_Interaction_State_Value_Declines_The_Skip()
+    {
+        static Element Hover(InteractionStateValues values) => Button("Go") with { InteractionStates = new InteractionStatesConfig(PointerOver: values) };
+        var first = new InteractionStateValues(Opacity: 0.5f, Scale: 1.1f, ScaleV: Vector3.One, Translation: Vector3.UnitX, Rotation: 5f);
+
+        Assert.True(Element.CanSkipUpdate(Hover(first), Hover(first with { })));
+        foreach (var changed in new[]
+        {
+            first with { Opacity = 0.6f }, first with { Scale = 1.2f }, first with { ScaleV = Vector3.UnitY },
+            first with { Translation = Vector3.UnitY }, first with { Rotation = 6f },
+        })
+        {
+            Assert.False(Element.CanSkipUpdate(Hover(first), Hover(changed)));
+            Assert.NotEqual(first, changed);
+        }
+    }
+
     [Fact]
     public void Clearing_One_Animation_Preserves_Other_Extras_And_The_Original_Record()
     {
@@ -77,17 +121,18 @@ public class AnimationExtrasEqualityTests
                 // Native transition values are exercised in the WinUI selftest.
                 return (new ImplicitTransitions(), new ImplicitTransitions(), null);
             case nameof(Element.ThemeTransitions):
-                // Arrays keep reference equality, including two distinct empty arrays.
-                var children = new XamlTransition[0];
-                return (new ThemeTransitions { Children = children }, new ThemeTransitions { Children = children },
-                    new ThemeTransitions { Children = new XamlTransition[0] });
+                // Native transition values are exercised in the WinUI selftest. Distinct
+                // arrays with equal contents compare equal (issue #1702).
+                return (new ThemeTransitions { Children = new XamlTransition[0] }, new ThemeTransitions { Children = new XamlTransition[0] },
+                    new ThemeTransitions { Children = new XamlTransition[0], ItemContainer = new XamlTransition[0] });
             case nameof(Element.InteractionStates):
                 return (new InteractionStatesConfig(PointerOver: new(Opacity: 0.5f)),
                     new InteractionStatesConfig(PointerOver: new(Opacity: 0.5f)),
                     new InteractionStatesConfig(PointerOver: new(Opacity: 0.8f)));
             case nameof(Element.KeyframeAnimations):
-                var entries = new[] { new KeyframeEntry("pulse", 1, new KeyframeAnimationDef()) };
-                return (entries, entries, entries.ToArray());
+                // Distinct arrays with equal entries compare equal; a new trigger replays (issue #1702).
+                static KeyframeEntry[] Entries(int trigger) => [new KeyframeEntry("pulse", trigger, new KeyframeAnimationDef())];
+                return (Entries(1), Entries(1), Entries(2));
             case nameof(Element.StaggerConfig):
                 return (new StaggerConfig(TimeSpan.FromMilliseconds(20)), new StaggerConfig(TimeSpan.FromMilliseconds(20)),
                     new StaggerConfig(TimeSpan.FromMilliseconds(40)));

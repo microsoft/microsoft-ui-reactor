@@ -371,9 +371,10 @@ internal static class ChildReconciler
                 // hazard as Tag). Fetch the control once for either need.
                 if ((newEl.HasCallbacks
                         || Reconciler.IsFlyoutDecorator(newEl)
-                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || GestureDispatch.HasGestureOrDragSlots(newEl.Modifiers)
+                        || GestureDispatch.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && (existingControl ??= children.Get(i)) is FrameworkElement fe)
                 {
                     reconciler.RefreshSkippedChildState(fe, oldEl, newEl);
@@ -658,9 +659,10 @@ internal static class ChildReconciler
                 // (excluded from the skip predicate). Fetch the control once.
                 if ((newEl.HasCallbacks
                         || Reconciler.IsFlyoutDecorator(newEl)
-                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || GestureDispatch.HasGestureOrDragSlots(newEl.Modifiers)
+                        || GestureDispatch.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && map.At(prefixLen) < childCount
                     && (existingControl ??= map.ControlAt(prefixLen)) is FrameworkElement fe)
                 {
@@ -712,9 +714,10 @@ internal static class ChildReconciler
                 // #721 — refresh Tag + cached gesture/drag dispatch closures on skip.
                 if ((newEl.HasCallbacks
                         || Reconciler.IsFlyoutDecorator(newEl)
-                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || GestureDispatch.HasGestureOrDragSlots(newEl.Modifiers)
+                        || GestureDispatch.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && map.At(oldIdx) >= 0
                     && map.At(oldIdx) < childCount
                     && (existingControl ??= map.ControlAt(oldIdx)) is FrameworkElement fe)

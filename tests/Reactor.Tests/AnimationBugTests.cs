@@ -169,6 +169,85 @@ public class AnimationBugTests
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only architecture guard: enumerates every type of the Reactor assembly (Assembly.GetTypes) by design. JIT-only host, never trimmed.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only architecture guard: reads static field metadata of the types the GetTypes scan reached. JIT-only host, never trimmed.")]
+    public void Reactor_Keeps_No_Strong_Static_Table_Keyed_By_Control()
+    {
+        // Hosts can run on separate UI threads, so per-control animation state (interaction
+        // trackers, keyframe triggers) lives on the control's CompositionState rather than in a
+        // process-wide table keyed by the control, which two threads could race on and which
+        // keeps every control it saw alive. Only weak-keyed and per-thread tables may key on a control.
+        static bool IsControl(Type type)
+            => typeof(DependencyObject).IsAssignableFrom(type)
+                || typeof(Microsoft.UI.Composition.CompositionObject).IsAssignableFrom(type);
+
+        static bool KeyedByControl(Type key)
+            => IsControl(key)
+                || (key.IsGenericType && key.FullName?.StartsWith("System.ValueTuple`", StringComparison.Ordinal) == true
+                    && key.GetGenericArguments().Any(IsControl));
+
+        var offenders = typeof(Reconciler).Assembly.GetTypes()
+            .SelectMany(t => t.GetFields(global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.DeclaredOnly
+                | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Public))
+            .Where(f => typeof(global::System.Collections.IEnumerable).IsAssignableFrom(f.FieldType)
+                && f.FieldType.IsGenericType
+                && !f.IsDefined(typeof(ThreadStaticAttribute), inherit: false)
+                && f.FieldType.GetGenericTypeDefinition() != typeof(global::System.Runtime.CompilerServices.ConditionalWeakTable<,>)
+                && KeyedByControl(f.FieldType.GetGenericArguments()[0]))
+            .Select(f => $"{f.DeclaringType}.{f.Name}: {f.FieldType}")
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Test-only: builds a non-default value for each CompositionState field type via its parameterless constructor. JIT-only host, never trimmed.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only: probes each CompositionState field type for a parameterless constructor. JIT-only host, never trimmed.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Test-only: creates each value-type field's default to compare after the reset. JIT-only host, never trimmed.")]
+    public void CompositionState_PoolReset_Clears_Exactly_The_Renter_Owned_Fields()
+    {
+        // The handoff is permanent and the opacity sync belongs to the pool; the caller detaches the
+        // opacity restart and the interaction tracker itself. Everything else the previous renter
+        // owned must go. A new field fails here until it is classified.
+        string[] kept = ["VisualTaken", "HandedOutVisual", "OpacitySyncLayoutHandler", "PoolResetOffset", "OpacityRestart", "InteractionTracker"];
+        string[] reset = ["ModifierProperties", "TransformRest", "KeyframeChannelOwners", "DeferredModifierResets",
+            "ImplicitClaims", "StaggerDelay", "Keyframes", "TranslationEnabled", "OriginExpressionRunning"];
+
+        var fields = typeof(Reconciler.CompositionState).GetFields(global::System.Reflection.BindingFlags.Instance
+            | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Public);
+        Assert.Equal(kept.Concat(reset).OrderBy(n => n), fields.Select(f => f.Name).OrderBy(n => n));
+
+        var state = new Reconciler.CompositionState();
+        foreach (var field in fields.Where(f => reset.Contains(f.Name)))
+        {
+            var value = NonDefault(field.FieldType);
+            Assert.NotNull(value);
+            field.SetValue(state, value);
+        }
+        state.VisualTaken = true;
+        state.PoolResetOffset = Vector3.One;
+
+        state.ResetForPool();
+
+        foreach (var field in fields.Where(f => reset.Contains(f.Name)))
+            Assert.True(Equals(field.FieldType.IsValueType ? Activator.CreateInstance(field.FieldType) : null, field.GetValue(state)),
+                $"{field.Name} survived the pool reset");
+        Assert.True(state.VisualTaken);
+        Assert.Equal(Vector3.One, state.PoolResetOffset);
+
+        static object? NonDefault(Type type)
+        {
+            type = Nullable.GetUnderlyingType(type) ?? type;
+            if (type == typeof(bool)) return true;
+            if (type.IsEnum) return Enum.ToObject(type, 1);
+            if (type == typeof(TimeSpan)) return TimeSpan.FromTicks(1);
+            return type.GetConstructor(Type.EmptyTypes) is not null
+                ? Activator.CreateInstance(type)
+                : global::System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(type);
+        }
+    }
+
+    [Fact]
     public void GotFocus_Handler_Signature_Matches_RoutedEvent()
     {
         var method = typeof(Reconciler).GetMethod("OnInteractionGotFocus",
