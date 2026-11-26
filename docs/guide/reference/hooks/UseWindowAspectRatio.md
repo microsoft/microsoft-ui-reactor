@@ -1,13 +1,25 @@
 # UseWindowAspectRatio
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowAspectRatio(System.Nullable{System.Double})`
+Applies a lifetime-bound width/height aspect lock to the owning window. Last mounted hook wins; unmounting restores the previous writer.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public void UseWindowAspectRatio(double? widthOverHeight)
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Applies a lifetime-bound width/height aspect lock to the owning window.
-Last mounted hook wins; unmounting restores the previous writer.
+**Learn more:** [Windows](../../windows.md), [Advanced Windowing](../../windowing-advanced.md), [Hooks](../../hooks.md)
 
+## Parameters
 
+| Name | Type | Description |
+| --- | --- | --- |
+| `widthOverHeight` | `double?` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected void UseWindowAspectRatio(double? widthOverHeight)
+```

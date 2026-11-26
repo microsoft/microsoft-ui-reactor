@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Cli.Docs;
 using Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 using Xunit;
@@ -6,8 +5,8 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
-/// Spec 041 §10.4.1 — conceptual-guide link injection, ref-marker
-/// expansion, and the reverse "Featured in" scan.
+/// Spec 041 §10.4.1 — <c>&lt;!-- ref:X --&gt;</c> marker expansion in guide
+/// templates, the reverse marker index, and the orphaned-guide-page lint.
 /// </summary>
 public class ReferenceLinkInjectorTests
 {
@@ -34,18 +33,8 @@ defaults:
 </doc>
 """;
 
-    private static ReferenceGenResult GenerateFromXml(string xml)
-    {
-        var tmp = Path.GetTempFileName();
-        File.WriteAllText(tmp, xml);
-        try
-        {
-            var gen = new ReferenceGenerator();
-            return gen.Generate(tmp, StandardMap(), referenceRoot: "/tmp/docs/guide",
-                categoryAllowList: new HashSet<string>() { "hooks" });
-        }
-        finally { File.Delete(tmp); }
-    }
+    private static ReferenceGenResult GenerateFromXml(string xml) =>
+        new ReferenceGenerator().Generate(XmlDocReader.ReadString(xml), StandardMap());
 
     [Fact]
     public void MarkerExpansion_ResolvesShortName()
@@ -69,7 +58,50 @@ defaults:
         var template = "<!-- ref:T:Microsoft.UI.Reactor.Hooks.UseState -->";
         var expanded = ReferenceLinkInjector.ExpandMarkers(template, "hooks", result, findings);
 
-        Assert.Contains("[UseState](reference/hooks/UseState.md)", expanded);
+        Assert.Equal("[UseState](reference/hooks/UseState.md)", expanded);
+        Assert.Empty(findings);
+    }
+
+    /// <summary>
+    /// A member marker lands on the section of its type page, not on a page of
+    /// its own: the new layout has no page per property or method.
+    /// </summary>
+    [Fact]
+    public void MarkerExpansion_MemberCref_LinksToTheSectionAnchor()
+    {
+        var result = GenerateFromXml(TinyXml);
+        var findings = new List<RefGenFinding>();
+
+        var expanded = ReferenceLinkInjector.ExpandMarkers(
+            "<!-- ref:M:Microsoft.UI.Reactor.Hooks.UseState.SetValue(System.Int32) -->", "hooks", result, findings);
+
+        Assert.Empty(findings);
+        Assert.StartsWith("[SetValue](reference/hooks/UseState.md#", expanded, StringComparison.Ordinal);
+        Assert.DoesNotContain(result.Pages, p => p.RelativePath.EndsWith("/SetValue.md", StringComparison.Ordinal));
+
+        // The anchor must name a heading that is really on the page.
+        var anchor = expanded[(expanded.IndexOf('#') + 1)..^1];
+        var page = result.Pages.Single(p => p.RelativePath == "reference/hooks/UseState.md");
+        var headings = page.Body.Replace("\r\n", "\n").Split('\n')
+            .Where(l => l.StartsWith('#'))
+            .Select(l => l.TrimStart('#').Trim());
+        var tracker = new SlugTracker();
+        Assert.Contains(anchor, headings.Select(tracker.Add));
+    }
+
+    /// <summary>
+    /// Links are relative to the guide page, so a template that lives in a
+    /// sub-folder climbs one level per segment of its id.
+    /// </summary>
+    [Fact]
+    public void MarkerExpansion_NestedTemplate_ClimbsToTheGuideRoot()
+    {
+        var result = GenerateFromXml(TinyXml);
+        var findings = new List<RefGenFinding>();
+
+        var expanded = ReferenceLinkInjector.ExpandMarkers("<!-- ref:UseState -->", "recipes/forms", result, findings);
+
+        Assert.Equal("[UseState](../reference/hooks/UseState.md)", expanded);
     }
 
     [Fact]
@@ -90,11 +122,9 @@ defaults:
     }
 
     /// <summary>
-    /// The regression oracle for the raw-marker leak. Reference generation
-    /// is gated to one category, so any marker naming a type outside it
-    /// fails to resolve; before this fix the marker was emitted verbatim and
-    /// the reader saw an empty gap mid-sentence with no indication that a
-    /// cross-reference had gone missing.
+    /// The regression oracle for the raw-marker leak. Before the fix an
+    /// unresolvable marker was emitted verbatim and the reader saw an empty
+    /// gap mid-sentence with no sign that a cross-reference had gone missing.
     /// </summary>
     [Fact]
     public void MarkerExpansion_UnresolvableMarker_NeverLeaksIntoOutput()
@@ -118,10 +148,9 @@ defaults:
     }
 
     /// <summary>
-    /// Positive control for the test above: a marker that *does* resolve is
-    /// still expanded to a link, so the "no raw marker" assertion is passing
-    /// because the marker was replaced rather than because the pattern never
-    /// matched.
+    /// Positive control for the test above: a marker that does resolve is
+    /// expanded to a link, so the "no raw marker" assertion passes because the
+    /// marker was replaced, not because the pattern never matched.
     /// </summary>
     [Fact]
     public void MarkerExpansion_ResolvableMarker_AlsoLeavesNoRawMarker()
@@ -135,119 +164,6 @@ defaults:
         Assert.DoesNotContain("<!-- ref:", expanded, StringComparison.Ordinal);
         Assert.Equal("Use [UseState](reference/hooks/UseState.md) here.", expanded);
         Assert.Empty(findings);
-    }
-
-    [Fact]
-    public void Inject_AddsLearnMoreCallout()
-    {
-        var result = GenerateFromXml(TinyXml);
-        var page = result.Pages.First(p => p.Route.ShortName == "UseState");
-        var reverseIndex = new Dictionary<string, IReadOnlyList<TemplateReference>>();
-        var findings = new List<RefGenFinding>();
-
-        var injected = ReferenceLinkInjector.Inject(page, result, reverseIndex, findings);
-
-        Assert.Contains("**Learn more:**", injected);
-        Assert.Contains("(../../hooks.md)", injected);
-        Assert.Contains("(../../effects.md)", injected);
-    }
-
-    [Fact]
-    public void Inject_DualLink_AppendsGuidePointer()
-    {
-        // SetValue's <seealso> rewrites to a [UseState](UseState.md) inline
-        // link via the CrefResolver. The injector's dual-link pass then
-        // appends the guide pointer.
-        var result = GenerateFromXml(TinyXml);
-        var page = result.Pages.First(p => p.Route.ShortName == "SetValue");
-        var reverseIndex = new Dictionary<string, IReadOnlyList<TemplateReference>>();
-        var findings = new List<RefGenFinding>();
-
-        var injected = ReferenceLinkInjector.Inject(page, result, reverseIndex, findings);
-
-        // The CrefResolver only writes a See Also section for <seealso>
-        // entries; verify the resulting link carries the guide annotation.
-        Assert.Contains("[UseState](UseState.md) ([guide](../../hooks.md))", injected);
-    }
-
-    /// <summary>
-    /// The dual-link pass must also match a link carrying a member anchor.
-    /// Overloaded members get their own anchors, so every cref to an overloaded
-    /// page emits <c>Foo.md#foobar</c>; a pattern anchored on <c>.md)</c> stops
-    /// matching exactly those pages and drops the guide annotation silently
-    /// rather than failing. Observed on <c>AnnounceHandle.md</c>.
-    /// </summary>
-    [Theory]
-    [InlineData("[UseState](UseState.md)")]
-    [InlineData("[UseState](UseState.md#usestate)")]
-    [InlineData("[UseState](UseState.md#usestatet-t-rendercontext)")]
-    [InlineData("[UseState](../hooks/UseState.md#usestate)")]
-    public void InlineDualLinkPattern_MatchesWithAndWithoutAnAnchor(string link)
-    {
-        var m = ReferenceLinkInjector.InlineDualLinkPattern.Match(link);
-        Assert.True(m.Success, $"pattern did not match {link}");
-        // The whole link is what gets re-emitted, so the anchor must round-trip.
-        Assert.Equal(link, m.Value);
-    }
-
-    /// <summary>
-    /// An already-annotated link must not be annotated twice. Note the inner
-    /// <c>[guide](../../hooks.md)</c> is itself shaped like a candidate and does
-    /// match; that is harmless because no page has the short name "guide", so
-    /// the replace callback returns it unchanged. The invariant that matters is
-    /// that the <i>outer</i> link is skipped.
-    /// </summary>
-    [Theory]
-    [InlineData("[UseState](UseState.md) ([guide](../../hooks.md))")]
-    [InlineData("[UseState](UseState.md#usestate) ([guide](../../hooks.md))")]
-    public void InlineDualLinkPattern_SkipsTheAlreadyAnnotatedOuterLink(string link)
-    {
-        foreach (Match m in ReferenceLinkInjector.InlineDualLinkPattern.Matches(link))
-            Assert.NotEqual("UseState", m.Groups["name"].Value);
-    }
-
-    [Fact]
-    public void Inject_FeaturedIn_ListsReverseIndexEntries()
-    {
-        var result = GenerateFromXml(TinyXml);
-        var page = result.Pages.First(p => p.Route.ShortName == "UseState");
-        var reverseIndex = new Dictionary<string, IReadOnlyList<TemplateReference>>(StringComparer.Ordinal)
-        {
-            ["UseState"] = new[] { new TemplateReference("hooks") }
-        };
-        var findings = new List<RefGenFinding>();
-
-        var injected = ReferenceLinkInjector.Inject(page, result, reverseIndex, findings);
-
-        Assert.Contains("## Featured in", injected);
-        Assert.Contains("[Hooks](../../hooks.md)", injected);
-    }
-
-    [Fact]
-    public void Inject_NoGuidePages_EmitsW001()
-    {
-        // Build a registry with no guide-pages for the hook category.
-        var map = ReferenceMap.Parse("""
-defaults:
-  - match: "Microsoft.UI.Reactor.Hooks.*"
-    category: hooks
-""");
-        var tmp = Path.GetTempFileName();
-        File.WriteAllText(tmp, TinyXml);
-        try
-        {
-            var gen = new ReferenceGenerator();
-            var result = gen.Generate(tmp, map, referenceRoot: "/tmp/docs/guide",
-                categoryAllowList: new HashSet<string>() { "hooks" });
-            var page = result.Pages.First(p => p.Route.ShortName == "UseState");
-            var findings = new List<RefGenFinding>();
-
-            _ = ReferenceLinkInjector.Inject(page, result,
-                new Dictionary<string, IReadOnlyList<TemplateReference>>(), findings);
-
-            Assert.Contains(findings, f => f.Code == "REACTOR_DOC_REGISTRY_W001");
-        }
-        finally { File.Delete(tmp); }
     }
 
     [Fact]
@@ -265,9 +181,31 @@ defaults:
             new[] { "hooks", "effects" },
             reverseIndex).ToList();
 
-        Assert.Contains(findings, f => f.Code == "REACTOR_DOC_REGISTRY_W002"
-            && f.Message.Contains("effects"));
-        Assert.DoesNotContain(findings, f => f.Message.Contains("'hooks'"));
+        var finding = Assert.Single(findings);
+        Assert.Equal("REACTOR_DOC_REGISTRY_W002", finding.Code);
+        Assert.Contains("'effects'", finding.Message, StringComparison.Ordinal);
+        Assert.Equal("effects.md.dt", finding.FilePath);
+        Assert.DoesNotContain("hooks", finding.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Many orphans become one finding, so the warning does not bury the rest
+    /// of the phase output. Pages with no template are not orphans.
+    /// </summary>
+    [Fact]
+    public void LintOrphanedGuidePages_AggregatesSeveralOrphansIntoOneFinding()
+    {
+        var reverseIndex = ReferenceLinkInjector.BuildReverseIndex(new[] { ("hooks", "<!-- ref:UseState -->") });
+
+        var findings = ReferenceLinkInjector.LintOrphanedGuidePages(
+            new[] { "layout", "hooks", "effects", "effects", "no-template" },
+            new[] { "hooks", "effects", "layout" },
+            reverseIndex).ToList();
+
+        var finding = Assert.Single(findings);
+        Assert.StartsWith("2 guide pages have", finding.Message, StringComparison.Ordinal);
+        Assert.EndsWith(": effects, layout", finding.Message, StringComparison.Ordinal);
+        Assert.Equal("docs/_pipeline/reference-map.yaml", finding.FilePath);
     }
 
     [Fact]
@@ -275,13 +213,13 @@ defaults:
     {
         var index = ReferenceLinkInjector.BuildReverseIndex(new[]
         {
-            ("hooks", "Use <!-- ref:UseState --> and <!-- ref:UseEffect -->"),
+            ("hooks", "Use <!-- ref:UseState --> and <!-- ref:UseEffect --> and <!-- ref:UseState --> again"),
             ("effects", "Also see <!-- ref:UseEffect -->"),
         });
 
-        Assert.Equal(2, index["UseState"].Count == 1 ? 2 : 2); // sanity: dict has 2 keys
-        Assert.Single(index["UseState"]);
-        Assert.Equal("hooks", index["UseState"][0].TemplateId);
-        Assert.Equal(2, index["UseEffect"].Count);
+        Assert.Equal(2, index.Count);
+        // A template that names the same member twice is listed once.
+        Assert.Equal("hooks", Assert.Single(index["UseState"]).TemplateId);
+        Assert.Equal(new[] { "hooks", "effects" }, index["UseEffect"].Select(r => r.TemplateId));
     }
 }
