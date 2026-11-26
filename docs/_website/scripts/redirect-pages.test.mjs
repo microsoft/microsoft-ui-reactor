@@ -64,36 +64,59 @@ describe("redirect pages", () => {
 });
 
 describe("legacy home-page fragments", () => {
-  const load = ({ hash, search = "", ids = [] }) => {
-    const page = { went: null, listeners: {} };
-    page.location = { hash, search, replace: (url) => (page.went = url) };
-    vm.runInNewContext(legacyFragmentScript("/microsoft-ui-reactor/latest/get-started"), {
+  const BASE = "/microsoft-ui-reactor/latest";
+  const script = legacyFragmentScript(`${BASE}/get-started`, `${BASE}/`);
+
+  // One browser tab: the client router keeps globals and listeners across page swaps.
+  const tab = ({ pathname = `${BASE}/`, hash = "", search = "", ids = [] } = {}) => {
+    const page = { went: null, listeners: {}, ids };
+    page.location = { pathname, hash, search, replace: (url) => (page.went = url) };
+    const on = (type, fn) => (page.listeners[type] ??= []).push(fn);
+    page.context = vm.createContext({
       location: page.location,
-      document: { readyState: "complete", getElementById: (id) => (ids.includes(id) ? {} : null) },
-      addEventListener: (type, fn) => (page.listeners[type] = fn),
+      document: { readyState: "complete", getElementById: (id) => (page.ids.includes(id) ? {} : null), addEventListener: on },
+      addEventListener: on,
       decodeURIComponent,
     });
+    page.run = () => vm.runInContext(script, page.context);
+    page.fire = (type) => (page.listeners[type] ?? []).forEach((fn) => fn());
+    page.run();
     return page;
   };
-  const run = (options) => load(options).went;
 
   test("a section the home page lacks goes to the same section on /get-started", () => {
-    assert.equal(
-      run({ hash: "#minimal-project-setup", search: "?q=1" }),
-      "/microsoft-ui-reactor/latest/get-started?q=1#minimal-project-setup"
-    );
+    const page = tab({ hash: "#minimal-project-setup", search: "?q=1" });
+    assert.equal(page.went, `${BASE}/get-started?q=1#minimal-project-setup`);
   });
 
   test("the home page's own anchors and a bare root stay put", () => {
-    assert.equal(run({ hash: "#guides-title", ids: ["guides-title"] }), null);
-    assert.equal(run({ hash: "" }), null);
+    assert.equal(tab({ hash: "#guides-title", ids: ["guides-title"] }).went, null);
+    assert.equal(tab({ hash: "" }).went, null);
+    assert.equal(tab({ pathname: BASE, hash: "#why-reactor" }).went, `${BASE}/get-started#why-reactor`);
   });
 
   test("a fragment set after the page loaded is forwarded too", () => {
-    const page = load({ hash: "" });
-    assert.equal(page.went, null);
+    const page = tab();
     page.location.hash = "#why-reactor";
-    page.listeners.hashchange();
-    assert.equal(page.went, "/microsoft-ui-reactor/latest/get-started#why-reactor");
+    page.fire("hashchange");
+    assert.equal(page.went, `${BASE}/get-started#why-reactor`);
+  });
+
+  test("home, then a guide, then a legacy home link through the client router", () => {
+    const page = tab();
+    page.location.pathname = `${BASE}/guides/hooks`;
+    page.ids = ["usestate"];
+    page.fire("astro:page-load");
+    page.location.hash = "#not-on-this-page";
+    page.fire("hashchange");
+    assert.equal(page.went, null, "the listeners must not redirect other pages");
+
+    page.location.pathname = `${BASE}/`;
+    page.location.hash = "#minimal-project-setup";
+    page.ids = [];
+    page.run(); // the router skips an inline script that already ran; this must stay a no-op
+    page.fire("astro:page-load");
+    assert.equal(page.went, `${BASE}/get-started#minimal-project-setup`);
+    assert.equal(page.listeners.hashchange.length, 1, "listeners are registered once");
   });
 });
