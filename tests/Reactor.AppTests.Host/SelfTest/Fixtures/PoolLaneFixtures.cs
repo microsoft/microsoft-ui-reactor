@@ -989,12 +989,22 @@ internal static class PoolLaneFixtures
             // .Keyframes() doesn't reject a null name, and one plays, retriggers and is removed like any other.
             control = await lab.Show(Target("K").Keyframes(null!, 1, Pulse));
             bool nullPlays = control is not null && Reconciler.KeyframeControllerForTests(control, null!, "Opacity") is not null;
-            control = await lab.Show(Target("K").Keyframes(null!, 2, Pulse));
-            bool nullRetriggers = control is not null && Reconciler.KeyframeControllerForTests(control, null!, "Opacity") is not null;
+            bool stopped = false, nullRetriggers = false;
+            if (control is not null)
+            {
+                // Stop the first playback, so its cached controller can't stand in for a replay.
+                Reconciler.CancelOpacityRestart(control);
+                var visual = ElementCompositionPreview.GetElementVisual(control);
+                visual.StopAnimation("Opacity");
+                stopped = !Running(visual, "Opacity");
+                control = await lab.Show(Target("K").Keyframes(null!, 2, Pulse));
+                nullRetriggers = control is not null && visual.TryGetAnimationController("Opacity") is { } running
+                    && Equals(running, Reconciler.KeyframeControllerForTests(control, null!, "Opacity"));
+            }
             control = await lab.Show(Target("K"));
             names = control is null ? null : Reconciler.GetCompositionState(control)?.Keyframes;
-            H.Check(p + "_NullName", nullPlays && nullRetriggers && names is { Count: 0 },
-                $"plays={nullPlays} retriggers={nullRetriggers} left={names?.Count}");
+            H.Check(p + "_NullName", nullPlays && stopped && nullRetriggers && names is { Count: 0 },
+                $"plays={nullPlays} stopped={stopped} retriggers={nullRetriggers} left={names?.Count}");
         }
     }
 
