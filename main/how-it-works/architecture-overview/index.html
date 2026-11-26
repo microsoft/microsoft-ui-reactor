@@ -445,9 +445,9 @@ each have their own <code>Reconciler.&lt;Topic&gt;.cs</code> partial (<code>Modi
 <code>Keyframes</code>, <code>Transitions</code>, <code>ReactorState</code>, …), while <code>Reconciler.cs</code> keeps the
 orchestration. Helpers that need none of the reconciler’s private state
 (<code>ThemeBindingApplier</code>, <code>AccessibilityApplier</code>, <code>ModifierEvents</code>,
-<code>ReferenceEdgeWiring</code>, <code>GestureDispatch</code>, <code>DragDropDispatch</code>) are separate
-<code>internal static</code> classes. There is one reconciler instance per host; component
-recursion shares the dispatch.</p>
+<code>ReferenceEdgeWiring</code>, <code>GestureDispatch</code>, <code>DragDropDispatch</code>,
+<code>InteractionStateApplier</code>) are separate <code>internal static</code> classes. There is
+one reconciler instance per host; component recursion shares the dispatch.</p>
 <h2 id="hooks-slot-table-per-rendercontext"><a class="blume-heading-anchor" href="#hooks-slot-table-per-rendercontext">Hooks — slot table per RenderContext</a></h2>
 <pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e; overflow-x: auto;" tabindex="0" data-language="csharp"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">public</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">T</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Value</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Action</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">T</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt; </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Set</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">UseState</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&lt;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">T</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&gt;(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">T</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> initialValue</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">bool</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> threadSafe</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> false</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{</span></span>
@@ -548,8 +548,9 @@ or diagnostics.</p>
 implementation in <code>Reconciler.cs</code> itself — the dispatch lives there,
 the handlers live in <code>Reconciler.Mount.cs</code>. Same for Update, and for
 modifiers, unmount and animations, which each have their own
-<code>Reconciler.&lt;Topic&gt;.cs</code>. Events, gestures and drag-drop live in
-<code>ModifierEvents.cs</code>, <code>GestureDispatch.cs</code> and <code>DragDropDispatch.cs</code>.</p>
+<code>Reconciler.&lt;Topic&gt;.cs</code>. Events, gestures, drag-drop and interaction states
+live in <code>ModifierEvents.cs</code>, <code>GestureDispatch.cs</code>, <code>DragDropDispatch.cs</code> and
+<code>InteractionStateApplier.cs</code>.</p>
 <p><strong>The element pool is opt-in by type.</strong> If a custom control needs
 pooling, the type must be in <code>ElementPool.PoolableTypes</code> and survive a
 <code>CleanElement</code> reset pass. Interactive controls (<code>Button</code>, <code>TextBox</code>,
