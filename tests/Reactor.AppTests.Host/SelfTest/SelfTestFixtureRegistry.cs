@@ -2358,6 +2358,7 @@ internal static class SelfTestFixtureRegistry
         ("ElementPoolLanes_TranslationRenter", static harness => new PoolLaneFixtures.TranslationRenter(harness)),
         ("ElementPoolLanes_ConnectedSource", static harness => new PoolLaneFixtures.ConnectedSource(harness)),
         ("ElementPoolLanes_KeyframeNames", static harness => new PoolLaneFixtures.KeyframeNames(harness)),
+        ("ElementPoolLanes_CompositionStateReset", static harness => new PoolLaneFixtures.CompositionStateReset(harness)),
         ("ElementPoolLanes_MemoAppHandler", static harness => new PoolLaneFixtures.MemoAppHandler(harness)),
         ("ElementPoolLanes_WrapperRefs", static harness => new PoolLaneFixtures.WrapperRefs(harness)),
         ("ElementPoolLanes_RenterLocals", static harness => new PoolLaneFixtures.RenterLocals(harness)),
