@@ -42,7 +42,6 @@
     { "from": "/reference/hooks/MutationHookState", "to": "/reference/hooks/UseMutation" },
     { "from": "/reference/hooks/MutationOptions", "to": "/reference/hooks/hook-types#mutationoptionstinput-tresult" },
     { "from": "/reference/hooks/NotifyPending", "to": "/reference/hooks/UseInfiniteResource" },
-    { "from": "/reference/hooks/Pending", "to": "/reference/hooks/pending#pendingfactory" },
     { "from": "/reference/hooks/PendingComponent", "to": "/reference/hooks/pending#pendingcomponent" },
     { "from": "/reference/hooks/PendingFactory", "to": "/reference/hooks/pending#pendingfactory" },
     { "from": "/reference/hooks/PendingProps", "to": "/reference/hooks/pending#pendingprops" },
