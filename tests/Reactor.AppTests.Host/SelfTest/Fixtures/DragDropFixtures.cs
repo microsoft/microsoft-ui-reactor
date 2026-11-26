@@ -181,11 +181,11 @@ internal static class DragDropFixtures
             H.Check("DragData_PopulatePackage",
                 package.Properties.ContainsKey("reactor/custom"));
 
-            var dragEndCopy = Reconciler.BuildDragEndContext(DataPackageOperation.Copy);
-            var dragEndCancel = Reconciler.BuildDragEndContext(DataPackageOperation.None);
+            var dragEndCopy = DragDropDispatch.BuildDragEndContext(DataPackageOperation.Copy);
+            var dragEndCancel = DragDropDispatch.BuildDragEndContext(DataPackageOperation.None);
             H.Check("DragData_OperationMapping",
-                Reconciler.ToWinUI(DragOperations.Copy | DragOperations.Move | DragOperations.Link).HasFlag(DataPackageOperation.Copy)
-                && Reconciler.FromWinUI(DataPackageOperation.Copy | DataPackageOperation.Link).HasFlag(DragOperations.Link)
+                DragDropDispatch.ToWinUI(DragOperations.Copy | DragOperations.Move | DragOperations.Link).HasFlag(DataPackageOperation.Copy)
+                && DragDropDispatch.FromWinUI(DataPackageOperation.Copy | DataPackageOperation.Link).HasFlag(DragOperations.Link)
                 && dragEndCopy.CompletedOperation == DragOperations.Copy
                 && !dragEndCopy.WasCancelled
                 && dragEndCancel.WasCancelled);

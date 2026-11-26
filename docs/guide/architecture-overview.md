@@ -368,7 +368,13 @@ The reconciler is split across partial files: `Reconciler.Mount.cs`
 and `Reconciler.Update.cs` hold the dispatch logic plus the
 composition-primitive handlers, registered descriptors/handlers hold
 per-control mount/update logic, and [`ChildReconciler.cs`](reconciliation.md)
-holds the keyed-vs-positional child diff. There is one reconciler instance per host; component
+holds the keyed-vs-positional child diff. The remaining reconciler concerns
+each have their own `Reconciler.<Topic>.cs` partial (`Modifiers`, `Unmount`,
+`Keyframes`, `Transitions`, `ReactorState`, …), while `Reconciler.cs` keeps the
+orchestration. Helpers that need none of the reconciler's private state
+(`ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents`,
+`ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`) are separate
+`internal static` classes. There is one reconciler instance per host; component
 recursion shares the dispatch.
 
 ## Hooks — slot table per RenderContext
@@ -493,8 +499,10 @@ or diagnostics.
 
 **`Reconciler.cs` is partial on purpose.** Don't grep for a Mount
 implementation in `Reconciler.cs` itself — the dispatch lives there,
-the handlers live in `Reconciler.Mount.cs`. Same for Update / gestures
-/ drag-drop.
+the handlers live in `Reconciler.Mount.cs`. Same for Update, and for
+modifiers, unmount and animations, which each have their own
+`Reconciler.<Topic>.cs`. Events, gestures and drag-drop live in
+`ModifierEvents.cs`, `GestureDispatch.cs` and `DragDropDispatch.cs`.
 
 **The element pool is opt-in by type.** If a custom control needs
 pooling, the type must be in `ElementPool.PoolableTypes` and survive a

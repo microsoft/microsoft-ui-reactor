@@ -60,9 +60,11 @@ Component.Render() → Element tree (records)
 
 ### Reconciler is split across partial classes
 
-- `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
+- `Reconciler.cs` — orchestration: the `Reconcile` entry, component rendering, child reconciliation, `CanUpdate`
 - `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
 - `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
+- `Reconciler.<Topic>.cs` — one file per concern (`Modifiers`, `Keyframes`, `Transitions`, `InteractionStates`, `Unmount`, `ReactorState`, `Flyouts`, …). Put new code in the matching topic file, not `Reconciler.cs`, so unrelated PRs don't conflict
+- Per-control helpers that need none of the reconciler's private state live in standalone `internal static` classes beside it, so the compiler keeps them out of that state: `ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents` (event trampolines, `ModifierEventHandlerState`, control event payloads), `ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`. Public entry points that predate the split (`ApplyThemeBindings`, `ApplyResourceOverrides`, `Apply`/`UpdateDefaultAutomationName`) stay on `Reconciler` as forwarders in `Reconciler.StaticForwarders.cs`. `ThemeBindingApplier` (style caches), `GestureDispatch` and `DragDropDispatch` (per-element state tables) still own process-wide static state. Source-parsing gates and the reviewer-manifest gate find these files through `ReconcilerSource.HelperFiles` in `tests/Reactor.Tests/AnalyzerTests/ReconcilerSource.cs`, so add a new helper file there too
 
 ### Hooks follow React rules
 
@@ -340,7 +342,9 @@ point of return: stop and ship.
     marked block, not the JSON; an unclosed/nested marker or an id naming no control fails
     generation. Spec 064.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, skip
-  equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
+  equality, `Merge`, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
+  helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
+  gates scan it), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via

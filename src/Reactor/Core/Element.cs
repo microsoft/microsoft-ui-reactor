@@ -1437,7 +1437,7 @@ public abstract record Element
     /// them keeps the skip-path perf lever intact (grid cells use only routed
     /// handlers). The latent staleness this creates — a skipped element keeping a
     /// previous-render gesture/drag closure — is closed on the skip path itself by
-    /// <see cref="Reconciler.RefreshGestureDragStateOnSkip"/> (#721), which refreshes
+    /// <see cref="GestureDispatch.RefreshGestureDragStateOnSkip"/> (#721), which refreshes
     /// the cached dispatch closures WITHOUT re-subscribing the trampolines, so the
     /// latest closure fires while no in-flight gesture is re-armed.
     /// </summary>
@@ -5215,7 +5215,7 @@ public record NavigationHostElement(
 // DisplayModeChanged/Expanding/Collapsed events are bespoke — in Element.NavigationView.cs.
 // Every event is Excluded or named off-convention so the generator leaves it alone: all
 // NavigationView events must share the single V1.NavigationViewEventPayload, because a control
-// holds exactly one event-payload box (Reconciler.GetOrCreateControlEventPayload). Replaces
+// holds exactly one event-payload box (ModifierEvents.GetOrCreateControlEventPayload). Replaces
 // NavigationViewDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.NavigationView), Exclude = new[] { "BackRequested", "ItemInvoked", "DisplayModeChanged" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("MenuItems")]
@@ -6309,7 +6309,7 @@ public partial record TeachingTipElement(
                 return;
             }
 
-            var payload = global::Microsoft.UI.Reactor.Core.Reconciler
+            var payload = global::Microsoft.UI.Reactor.Core.ModifierEvents
                 .GetOrCreateControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(tip);
             payload.MountOpenWanted = true;
             if (payload.MountOpenLoadedHandler is not null) return;
@@ -6322,7 +6322,7 @@ public partial record TeachingTipElement(
 
                 // Re-read rather than trust the closure: a falling edge or an unmount may have
                 // disarmed this tip while it was still unparented.
-                var state = global::Microsoft.UI.Reactor.Core.Reconciler
+                var state = global::Microsoft.UI.Reactor.Core.ModifierEvents
                     .TryGetControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(loaded);
                 if (state is null) return;
                 state.MountOpenLoadedHandler = null;
@@ -6342,7 +6342,7 @@ public partial record TeachingTipElement(
         /// payload probe: a tip that never armed must not be forced to allocate state here.</summary>
         internal static void Cancel(WinUI.TeachingTip tip)
         {
-            var payload = global::Microsoft.UI.Reactor.Core.Reconciler
+            var payload = global::Microsoft.UI.Reactor.Core.ModifierEvents
                 .TryGetControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(tip);
             if (payload is null) return;
             payload.MountOpenWanted = false;

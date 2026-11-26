@@ -255,7 +255,7 @@ internal sealed class InitialOnlyPropEntry<TElement, TControl, TValue> : PropEnt
 /// the closed generic — captures nothing, allocates nothing per mount.
 /// Per-entry state (<c>_readBack</c>, <c>_getCallback</c>) lives on a
 /// per-control <see cref="DescriptorControlledPayload{TElement,TControl,TValue,TArgs}"/>
-/// stashed via <see cref="Reconciler.GetOrCreateControlEventPayload{T}"/>,
+/// stashed via <see cref="ModifierEvents.GetOrCreateControlEventPayload{T}"/>,
 /// which survives pool rent/return (KD-3 invariant). Subsequent mounts of
 /// the same control hit the null-slot check and skip the subscription
 /// entirely — zero allocations on the re-mount fast path.</para>
@@ -287,7 +287,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         // suppression check, and live-element resolution (was three GetValue
         // reads: TryGetControlEventPayload + ShouldSuppress + GetElementTag).
         if (!Reconciler.TryGetReactorState(fe, out var state)) return;
-        var payload = Reconciler.TryGetControlEventPayload<
+        var payload = ModifierEvents.TryGetControlEventPayload<
             DescriptorControlledPayload<TElement, TControl, TValue, TArgs>>(state);
 
         // Counter / setter-scope suppression still wins on this control: an
@@ -357,7 +357,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         // §8 PoC: clear any value-diff arm left on a pooled payload from a prior
         // lifecycle (the payload survives pool rent/return per KD-3) so it can't
         // suppress this lifecycle's first real event.
-        var pooled = Reconciler.TryGetControlEventPayload<
+        var pooled = ModifierEvents.TryGetControlEventPayload<
             DescriptorControlledPayload<TElement, TControl, TValue, TArgs>>(ctrl);
         if (pooled is not null)
         {
@@ -399,7 +399,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         // it does not, there is no subscription, hence no echo to suppress.
         if (_getCallback(newEl) is not null)
         {
-            var payload = Reconciler.TryGetControlEventPayload<
+            var payload = ModifierEvents.TryGetControlEventPayload<
                 DescriptorControlledPayload<TElement, TControl, TValue, TArgs>>(ctrl);
             if (payload is not null)
             {
@@ -422,7 +422,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         // subscription cost (M4/M5 dispatch suites).
         if (_getCallback(el) is null) return;
 
-        var payload = Reconciler.GetOrCreateControlEventPayload<
+        var payload = ModifierEvents.GetOrCreateControlEventPayload<
             DescriptorControlledPayload<TElement, TControl, TValue, TArgs>>(ctrl);
         if (payload.Trampoline is not null) return; // already wired for this control's lifetime
 
@@ -479,7 +479,7 @@ internal sealed class ReferencePropEntry<TElement, TControl, TTarget> : PropEntr
         TElement el)
     {
         var cell = _get(el)?.Inner;
-        Reconciler.WireReferenceEdge(
+        ReferenceEdgeWiring.WireReferenceEdge(
             ctrl,
             _slot,
             cell,
@@ -528,7 +528,7 @@ internal sealed class UntypedReferencePropEntry<TElement, TControl> : PropEntry<
         TControl ctrl,
         TElement el)
     {
-        Reconciler.WireReferenceEdge(
+        ReferenceEdgeWiring.WireReferenceEdge(
             ctrl,
             _slot,
             _get(el),
@@ -587,7 +587,7 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
                     cells.Add(r.Inner);
         }
 
-        Reconciler.WireReferenceListEdge(
+        ReferenceEdgeWiring.WireReferenceListEdge(
             ctrl,
             _slot,
             cells,
@@ -687,7 +687,7 @@ internal sealed class DescriptorControlledPayload<TElement, TControl, TValue, TA
 ///
 /// <para><b>Subscription gate:</b> if the element's callback selector
 /// returns null, no subscription happens. On non-null, the entry calls
-/// <see cref="Reconciler.GetOrCreateControlEventPayload{T}"/> for the
+/// <see cref="ModifierEvents.GetOrCreateControlEventPayload{T}"/> for the
 /// user's payload type, checks the slot-is-null predicate, and (if empty)
 /// stuffs the trampoline into the payload slot and subscribes — exactly
 /// once per control lifetime. Subsequent rents of the same control hit
@@ -816,7 +816,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         TElement el)
     {
         if (_getCallback(el) is null) return;
-        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        var payload = ModifierEvents.GetOrCreateControlEventPayload<TPayload>(ctrl);
         if (!_slotIsNull(payload)) return;
         _setSlot(payload, _trampoline);
         _subscribe(ctrl, _trampoline);
@@ -869,7 +869,7 @@ internal sealed class HandCodedEventPropEntry<TElement, TControl, TPayload, TDel
         TElement el)
     {
         if (_callbackPresent(el) is null) return;
-        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        var payload = ModifierEvents.GetOrCreateControlEventPayload<TPayload>(ctrl);
         if (!_slotIsNull(payload)) return;
         _setSlot(payload, _trampoline);
         _subscribe(ctrl, _trampoline);
@@ -1152,7 +1152,7 @@ internal sealed class ImmediatePropEntry<TElement, TControl, TPayload> : PropEnt
         TElement el)
     {
         if (_callbackGate(el) is null) return;
-        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        var payload = ModifierEvents.GetOrCreateControlEventPayload<TPayload>(ctrl);
         if (!_observeSlotIsNull(payload)) return;
         _setObserveSlot(payload, _observeCallback);
         ctrl.RegisterPropertyChangedCallback(_observeProperty, _observeCallback);
@@ -1272,7 +1272,7 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
         TElement el)
     {
         if (_callbackPresent(el) is null) return;
-        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        var payload = ModifierEvents.GetOrCreateControlEventPayload<TPayload>(ctrl);
         if (!_slotIsNull(payload)) return;
         _setSlot(payload, _trampoline);
         _subscribe(ctrl, _trampoline);

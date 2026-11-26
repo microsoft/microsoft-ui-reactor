@@ -55,7 +55,7 @@ public class ReactorDiagnosticsDefaultAutomationNameTests
     public void DefaultAutomationName_UsesTheSameTruncationAsTheApplyPath()
     {
         var caption = new string('x', 140);
-        var applied = Reconciler.DefaultAutomationNameFromCaption(caption);
+        var applied = AccessibilityApplier.DefaultAutomationNameFromCaption(caption);
 
         Assert.Equal(100, applied!.Length);
         Assert.Equal(applied, AppliedModifierMap.DescribeDefaultAutomationName(Button(caption), applied)?.Value);
@@ -66,16 +66,16 @@ public class ReactorDiagnosticsDefaultAutomationNameTests
     public void DefaultAutomationName_UpdatePathRecognisesItsOwnTruncatedDefault()
     {
         var longCaption = new string('x', 140);
-        var truncated = Reconciler.DefaultAutomationNameFromCaption(longCaption);
+        var truncated = AccessibilityApplier.DefaultAutomationNameFromCaption(longCaption);
 
         // Reactor wrote the truncated form at mount; a caption change must still replace it.
-        Assert.True(Reconciler.MayReplaceDefaultAutomationName(truncated, longCaption));
-        Assert.True(Reconciler.MayReplaceDefaultAutomationName("Save", "Save"));
-        Assert.True(Reconciler.MayReplaceDefaultAutomationName("", "Save"));
-        Assert.True(Reconciler.MayReplaceDefaultAutomationName(null, null));
+        Assert.True(AccessibilityApplier.MayReplaceDefaultAutomationName(truncated, longCaption));
+        Assert.True(AccessibilityApplier.MayReplaceDefaultAutomationName("Save", "Save"));
+        Assert.True(AccessibilityApplier.MayReplaceDefaultAutomationName("", "Save"));
+        Assert.True(AccessibilityApplier.MayReplaceDefaultAutomationName(null, null));
         // Anything else is the author's.
-        Assert.False(Reconciler.MayReplaceDefaultAutomationName("Save draft", "Save"));
-        Assert.False(Reconciler.MayReplaceDefaultAutomationName("Save", null));
+        Assert.False(AccessibilityApplier.MayReplaceDefaultAutomationName("Save draft", "Save"));
+        Assert.False(AccessibilityApplier.MayReplaceDefaultAutomationName("Save", null));
     }
 
     [Fact]
@@ -83,8 +83,8 @@ public class ReactorDiagnosticsDefaultAutomationNameTests
     {
         Assert.Null(AppliedModifierMap.DescribeDefaultAutomationName(VStack(), liveName: "anything"));
         Assert.Null(AppliedModifierMap.DescribeDefaultAutomationName(Button("   "), liveName: "   "));
-        Assert.Null(Reconciler.DefaultAutomationNameFromCaption("  "));
-        Assert.Null(Reconciler.DefaultAutomationNameFromCaption(null));
+        Assert.Null(AccessibilityApplier.DefaultAutomationNameFromCaption("  "));
+        Assert.Null(AccessibilityApplier.DefaultAutomationNameFromCaption(null));
     }
 
     [Fact]

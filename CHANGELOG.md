@@ -222,6 +222,16 @@ Conventions for contributors:
   overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and
   `REACTOR_MOD_003` now accepts the supported `.Foreground(...)` calls (issue #1674).
 
+- **`WindowLevel.AlwaysOnTop` refused by Windows is now reapplied (spec 054, issue #1707).** Windows
+  can decline a runtime topmost request from an app that doesn't own the foreground, for example
+  while the workstation is locked. The call reports success but the window never becomes topmost, and
+  Reactor never retried, so `Spec.Level` said `AlwaysOnTop` while the window wasn't. Reactor now checks
+  the result, logs a `DiagnosticLog` warning once, and reapplies the level the next time the app is
+  activated, either by gaining the foreground or by one of its windows activating.
+
+- `.LayoutAnimation()` uses linear easing for position and optional size changes in
+  non-spring mode (#1652).
+
 - **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
   layers mount no control of their own, so the ref points at the control their child mounted, and
   unmount only cleared refs declared on that control's own element and its decorators. The ref kept

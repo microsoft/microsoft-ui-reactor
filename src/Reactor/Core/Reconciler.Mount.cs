@@ -234,7 +234,7 @@ public sealed partial class Reconciler
         // clients that read AutomationProperties.Name directly don't see an
         // empty string on a Button("Save", …). Author-supplied names win.
         if (control is FrameworkElement captionFe)
-            ApplyDefaultAutomationName(captionFe, ResolveCaptionForElement(element));
+            ApplyDefaultAutomationName(captionFe, AccessibilityApplier.ResolveCaptionForElement(element));
 
         // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
         if (element.ThemeBindings is not null && control is FrameworkElement thFe)
@@ -503,7 +503,7 @@ public sealed partial class Reconciler
 
     internal static bool EnsureNumberBoxImmediateTextBoxWiring(WinUI.NumberBox box)
     {
-        var payload = GetOrCreateControlEventPayload<V1Protocol.NumberBoxEventPayload>(box);
+        var payload = ModifierEvents.GetOrCreateControlEventPayload<V1Protocol.NumberBoxEventPayload>(box);
         if (payload.ImmediateInnerWired) return true;
 
         box.ApplyTemplate();

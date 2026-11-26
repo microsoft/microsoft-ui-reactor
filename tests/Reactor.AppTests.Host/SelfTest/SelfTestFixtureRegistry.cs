@@ -916,6 +916,8 @@ internal static class SelfTestFixtureRegistry
         ("LayoutAnimation_OffsetSetup", static harness => new LayoutAnimationFixtures.OffsetAnimationSetup(harness)),
         ("LayoutAnimation_SpringSetup", static harness => new LayoutAnimationFixtures.SpringAnimationSetup(harness)),
         ("LayoutAnimation_SizeSetup", static harness => new LayoutAnimationFixtures.SizeAnimationSetup(harness)),
+        ("LayoutAnimation_LinearOffsetProgress", static harness => new LayoutAnimationFixtures.LinearProgress(harness, animateSize: false)),
+        ("LayoutAnimation_LinearSizeProgress", static harness => new LayoutAnimationFixtures.LinearProgress(harness, animateSize: true)),
         ("ImplicitSlots_LayoutKeepsTransition", static harness => new ImplicitAnimationSlotsFixtures.LayoutKeepsTransition(harness)),
         ("ImplicitSlots_RemovedTransitionClears", static harness => new ImplicitAnimationSlotsFixtures.RemovedTransitionClears(harness)),
         ("ImplicitSlots_RemovedFallbackTransitionClears", static harness => new ImplicitAnimationSlotsFixtures.RemovedFallbackTransitionClears(harness)),
@@ -1853,6 +1855,7 @@ internal static class SelfTestFixtureRegistry
         ("WindowLevel_Floating_AboveSiblings", static harness => new Phase4WindowingFixtures.WindowLevelFloatingAboveSiblings(harness)),
         ("WindowLevel_Floating_AboveOwner", static harness => new Phase4WindowingFixtures.WindowLevelFloatingAboveOwner(harness)),
         ("WindowLevel_RuntimeFlip", static harness => new Phase4WindowingFixtures.WindowLevelRuntimeFlip(harness)),
+        ("WindowLevel_RefusedTopmost_Reapplied", static harness => new Phase4WindowingFixtures.WindowLevelRefusedTopmostReapplied(harness)),
         ("WindowLevel_VerdictBranches", static harness => new Phase4WindowingFixtures.WindowLevelVerdictBranches(harness)),
         // Spec 054 Phase 5 — SizeToContent.
         ("SizeToContent_Width_Tracks", static harness => new Phase5WindowingFixtures.SizeToContentWidthTracks(harness)),

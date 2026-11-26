@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Core;
 
-public sealed partial class Reconciler
+internal static class DragDropDispatch
 {
     /// <summary>
     /// Per-element drag-and-drop dispatch state (spec 027 Tier 6 / Phase 6a).
@@ -49,7 +49,37 @@ public sealed partial class Reconciler
     internal static DragDropState? DebugTryGetDndState(FrameworkElement fe)
         => _dndStates.TryGetValue(fe, out var state) ? state : null;
 
-    private static void ApplyDragDropHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    // Same defensive sentinel as GestureDispatch's: lets a (theoretically) null newM on a
+    // remove transition reach ApplyDragDropHandlers, which needs a non-null modifier set.
+    private static readonly ElementModifiers _emptyModifiers = new();
+
+    /// <summary>
+    /// #721 — drag-drop half of <see cref="GestureDispatch.RefreshGestureDragStateOnSkip"/>,
+    /// which documents the presence-transition vs. identity-change split.
+    /// </summary>
+    internal static void RefreshDragDropStateOnSkip(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers? newM)
+    {
+        // Per-slot presence, as for gestures: a DragSource removed while a DropTarget stays present
+        // (or vice-versa) is a transition, not an identity change. Routing it to the full
+        // handler is what makes ApplyDragDropHandlers' in-flight-drag guard reachable on a
+        // mid-drag source removal (the config-only arm would null state.Source directly,
+        // stranding the pending DropCompleted -> leak + suppressed OnEnd).
+        bool dragPresenceChanged =
+            (oldM?.DragSource is null) != (newM?.DragSource is null)
+            || (oldM?.DropTarget is null) != (newM?.DropTarget is null);
+        if (dragPresenceChanged)
+        {
+            ApplyDragDropHandlers(fe, oldM, newM ?? _emptyModifiers);
+        }
+        else if ((newM?.DragSource is not null || newM?.DropTarget is not null)
+                 && _dndStates.TryGetValue(fe, out var ds))
+        {
+            ds.Source = newM!.DragSource;
+            ds.Target = newM.DropTarget;
+        }
+    }
+
+    internal static void ApplyDragDropHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         if (m.DragSource is null && m.DropTarget is null
             && oldM?.DragSource is null && oldM?.DropTarget is null)

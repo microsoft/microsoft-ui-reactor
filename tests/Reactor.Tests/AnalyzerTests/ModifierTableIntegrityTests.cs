@@ -841,24 +841,15 @@ public class ModifierTableIntegrityTests
     private static readonly HashSet<string> ElementSpecificThemeProperties = new(StringComparer.Ordinal) { "PaneBackground" };
 
     /// <summary>
-    /// Property name → the WinUI type names <c>Reconciler.GetDependencyPropertyName</c> will emit a
-    /// <c>{ThemeResource}</c> setter for, read out of <c>Reconciler.cs</c>. The method's body is a
+    /// Property name → the WinUI type names <c>ThemeBindingApplier.GetDependencyPropertyName</c> will emit a
+    /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. The method's body is a
     /// chain of <c>if (property == "X" &amp;&amp; (fe is A || fe is B)) return "X";</c>, so each
     /// branch's string comparison names the property. The type tests or the shared foreground
     /// lookup supply its receiver gate.
     /// </summary>
     private static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
     {
-        var root = RepoRootFinder.FindRepoRoot();
-        Assert.NotNull(root);
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Reconciler.cs");
-        Assert.True(File.Exists(file), $"Reconciler.cs not found at {file}");
-
-        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(File.ReadAllText(file));
-        var method = tree.GetRoot()
-            .DescendantNodes()
-            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>()
-            .FirstOrDefault(m => m.Identifier.Text == "GetDependencyPropertyName");
+        var method = ReconcilerSource.Methods("GetDependencyPropertyName").FirstOrDefault();
 
         Assert.NotNull(method);
 
@@ -885,7 +876,7 @@ public class ModifierTableIntegrityTests
                 .Where(typeName => typeName is not null);
 
             if (property == "Foreground" && CallsForegroundPropertyLookup(ifStatement.Condition))
-                typeNames = typeNames.Concat(ReadForegroundPropertyGate(ReadForegroundModifierSource(root!)));
+                typeNames = typeNames.Concat(ReadForegroundPropertyGate(ReadForegroundModifierSource(RepoRootFinder.FindRepoRoot()!)));
 
             foreach (var typeName in typeNames)
             {
@@ -1193,7 +1184,7 @@ public class ModifierTableIntegrityTests
 
     /// <summary>
     /// Modifier property name → the WinUI type names the common modifiers actually write to,
-    /// read out of <c>Reconciler.cs</c> and <c>ForegroundModifier.cs</c>.
+    /// read out of the reconciler source and <c>ForegroundModifier.cs</c>.
     /// </summary>
     /// <remarks>
     /// Parsed with Roslyn rather than matched with a regex: the gate lives in a type-test
@@ -1204,19 +1195,16 @@ public class ModifierTableIntegrityTests
     /// </remarks>
     private static Dictionary<string, HashSet<string>> ReadApplyModifierControlGates()
     {
+        // ApplyModifiers itself is an ordered sequence of per-family helper calls; the arms
+        // live in those helpers, so read the whole family.
+        var methods = ReconcilerSource.ApplyModifiersFamily();
+
+        // Two ApplyModifiers overloads are roots, so count the helpers themselves.
+        Assert.True(
+            methods.Count(method => method.Identifier.Text != ReconcilerSource.ApplyModifiersName) > 0,
+            "No ApplyModifiers family helpers found in the Reconciler partial files");
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Reconciler.cs");
-        Assert.True(File.Exists(file), $"Reconciler.cs not found at {file}");
-
-        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(File.ReadAllText(file));
-        var methods = tree.GetRoot()
-            .DescendantNodes()
-            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>()
-            .Where(m => m.Identifier.Text == "ApplyModifiers")
-            .ToList();
-
-        Assert.True(methods.Count > 0, "No ApplyModifiers method found in Reconciler.cs");
         var foregroundSource = ReadForegroundModifierSource(root!);
         methods.Add(Assert.Single(foregroundSource.DescendantNodes().OfType<MethodDeclarationSyntax>(),
             method => method.Identifier.ValueText == "Apply"));
