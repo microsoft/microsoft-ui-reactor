@@ -287,16 +287,21 @@ public class ModifierFieldContractTests
         var f = Find(id);
         var (v1, v2, _) = Samples(Property(f).PropertyType);
 
-        var ours = With(f, v1);
+        // Both orders: v1 is the type's default, so one order checks an explicit default
+        // overriding a set value, the other a set value surviving an unset incoming field.
+        foreach (var (mine, theirs) in new[] { (v1, v2), (v2, v1) })
+        {
+            var ours = With(f, mine);
 
-        // other sets it: other wins.
-        AssertCarries(f, v2, ours.Merge(With(f, v2)));
-        // other leaves it unset, but carries the same bucket so the bucket's own Merge runs.
-        AssertCarries(f, v1, ours.Merge(EmptyBucket(f.Bucket)));
-        // other has no modifiers in this bucket at all.
-        AssertCarries(f, v1, ours.Merge(new ElementModifiers()));
-        // ours is unset: other's value comes through.
-        AssertCarries(f, v2, EmptyBucket(f.Bucket).Merge(With(f, v2)));
+            // other sets it: other wins.
+            AssertCarries(f, theirs, ours.Merge(With(f, theirs)));
+            // other leaves it unset, but carries the same bucket so the bucket's own Merge runs.
+            AssertCarries(f, mine, ours.Merge(EmptyBucket(f.Bucket)));
+            // other has no modifiers in this bucket at all.
+            AssertCarries(f, mine, ours.Merge(new ElementModifiers()));
+            // ours is unset: other's value comes through.
+            AssertCarries(f, theirs, EmptyBucket(f.Bucket).Merge(With(f, theirs)));
+        }
     }
 
     private static void AssertCarries(Field f, object expected, ElementModifiers merged)

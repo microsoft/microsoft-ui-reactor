@@ -34,18 +34,18 @@ public class ModifierApplyOrderTests
         "RichToolTip", "ToolTip", "ToolTipPlacement", "AttachedFlyout", "ContextFlyout",
         "IsEnabled",
         "CornerRadius", "BorderBrush", "BorderThickness", "BorderInlineStart",
-        "Background", "Foreground",
+        "Background", "→ForegroundModifier.Apply",
         "AutomationName", "AutomationId", "IsDragRegion", "ElementSoundMode", "HeadingLevel",
         "IsTabStop", "IsHitTestVisible", "TabIndex", "AccessKey", "XYFocusKeyboardNavigation",
         "Accessibility",
-        "→ApplyAccessibilityModifiers",
+        "→AccessibilityApplier.ApplyAccessibilityModifiers",
         "FontFamily", "FontSize", "FontWeight",
-        "→ApplyEventHandlers",
-        "→ApplyGestureHandlers",
-        "→ApplyDragDropHandlers",
+        "→ModifierEvents.ApplyEventHandlers",
+        "→GestureDispatch.ApplyGestureHandlers",
+        "→DragDropDispatch.ApplyDragDropHandlers",
         "OnMountAction", "OnUpdateAction", "OnUnmountAction",
         "Ref",
-        "→ApplyModifierReferenceEdges",
+        "→ReferenceEdgeWiring.ApplyModifierReferenceEdges",
     ];
 
     /// <summary>The arm order inside <c>AccessibilityApplier.ApplyAccessibilityModifiers</c> (bag <c>a</c>).</summary>
@@ -94,20 +94,21 @@ public class ModifierApplyOrderTests
         // TransformOrigin before CenterPoint on apply (spec 066 §8.2).
         Assert.True(At("TransformOrigin") < At("CenterPoint"));
         // Event, gesture and drag-drop wiring after every property write, accessibility included.
-        var handlers = At("→ApplyEventHandlers");
+        var handlers = At("→ModifierEvents.ApplyEventHandlers");
         var propertyWrites = order.Where(o => !o.StartsWith('→') && !CallbackSlots.Contains(o)).ToList();
         Assert.True(propertyWrites.Count > 40, $"Only {propertyWrites.Count} property writes found.");
         var afterHandlers = propertyWrites.Where(o => At(o) > handlers).ToList();
         Assert.True(afterHandlers.Count == 0, $"Property writes after the handler wiring: [{string.Join(", ", afterHandlers)}]");
-        Assert.True(At("→ApplyAccessibilityModifiers") < handlers);
-        Assert.True(handlers < At("→ApplyGestureHandlers"));
-        Assert.True(At("→ApplyGestureHandlers") < At("→ApplyDragDropHandlers"));
+        Assert.True(At("→AccessibilityApplier.ApplyAccessibilityModifiers") < handlers);
+        Assert.True(At("→ForegroundModifier.Apply") < handlers);
+        Assert.True(handlers < At("→GestureDispatch.ApplyGestureHandlers"));
+        Assert.True(At("→GestureDispatch.ApplyGestureHandlers") < At("→DragDropDispatch.ApplyDragDropHandlers"));
         // OnMount / OnUpdate after every property write and the handler wiring.
-        Assert.True(At("→ApplyDragDropHandlers") < At("OnMountAction"));
-        Assert.True(At("→ApplyDragDropHandlers") < At("OnUpdateAction"));
+        Assert.True(At("→DragDropDispatch.ApplyDragDropHandlers") < At("OnMountAction"));
+        Assert.True(At("→DragDropDispatch.ApplyDragDropHandlers") < At("OnUpdateAction"));
         // Ref, then reference edges last.
         Assert.True(At("OnMountAction") < At("Ref") && At("OnUpdateAction") < At("Ref"));
-        Assert.Equal("→ApplyModifierReferenceEdges", order[^1]);
+        Assert.Equal("→ReferenceEdgeWiring.ApplyModifierReferenceEdges", order[^1]);
     }
 
     [Fact]
@@ -151,7 +152,7 @@ public class ModifierApplyOrderTests
         var order = ReadOrder(methods["ApplyModifiers"], "m", methods);
 
         Assert.Equal(
-            ["FontSize", "→ApplyEventHandlers", "OnMountAction", "FontSize", "→ApplyEventHandlers"],
+            ["FontSize", "→Events.ApplyEventHandlers", "OnMountAction", "FontSize", "→Events.ApplyEventHandlers"],
             order);
     }
 
@@ -217,11 +218,16 @@ public class ModifierApplyOrderTests
                         Walk(helper, bag, family, order);
                     else if ((ReconcilerSource.IsBagHandoff(invocation)
                               || invocation.ArgumentList.Arguments.Any(a => a.Expression is IdentifierNameSyntax id && derived.Contains(id.Identifier.Text))))
-                        order.Add("→" + name);
+                        order.Add("→" + MarkerName(invocation, name));
                     break;
             }
         }
     }
+
+    // ModifierEvents.ApplyEventHandlers rather than ApplyEventHandlers, so a handoff to a
+    // generically named method (ForegroundModifier.Apply) still says where it goes.
+    private static string MarkerName(InvocationExpressionSyntax invocation, string name) =>
+        invocation.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax owner } ? owner.Identifier.Text + "." + name : name;
 
     private static bool IsBagRead(SyntaxNode node, string bag) =>
         node is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax id } && id.Identifier.Text == bag;
