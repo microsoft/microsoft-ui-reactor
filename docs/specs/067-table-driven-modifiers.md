@@ -941,7 +941,9 @@ bucket design that keeps the common case to one or two small records.
 
 ## §14 Defects found while writing this spec
 
-1. **`XYFocusKeyboardNavigation` does not block the shallow skip.** It is a root field on
+1. **`XYFocusKeyboardNavigation` does not block the shallow skip.** *Fixed: `ModifiersEqualCore`
+   now compares it, with regression test
+   `ElementModifiersCoverageTests.ModifiersEqual_DistinguishesXYFocusKeyboardNavigation`.* It is a root field on
    `ElementModifiers` (`Element.cs:2413`), merged (`:2503`) and applied with a set and an unset arm
    (`Reconciler.Modifiers.cs:655-658`), but `ModifiersEqualCore` (`Element.cs:1280-1390`) never
    compares it and it is not in a bucket the record equality covers. An element whose only change
