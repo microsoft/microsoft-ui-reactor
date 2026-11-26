@@ -296,6 +296,11 @@ Conventions for contributors:
   read as stale and the CLI deleted its lockfile. These clients now connect directly, and only to
   loopback.
 
+- `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
+  support common `.Foreground(brush)` modifiers and interaction-state foreground
+  overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and
+  `REACTOR_MOD_003` now accepts the supported `.Foreground(...)` calls (issue #1674).
+
 - Changing `.Opacity()` preserves playback progress when the current keyframe entry
   animates opacity and its trigger stays the same. Removing the looping entry or
   finishing a one-shot applies the latest declared opacity (#1651, #1660).

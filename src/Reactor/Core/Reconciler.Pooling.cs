@@ -220,7 +220,7 @@ public sealed partial class Reconciler
             fe.ClearValue(FrameworkElement.DataContextProperty);
             // The element pointer is gone; so is what was published about it, even when the
             // pool then declines the control (pooling disabled, full, or not poolable).
-            ClearPublishedSource(fe);
+            ClearDetachedProperties(fe);
 
             _pool.Return(fe);
         }

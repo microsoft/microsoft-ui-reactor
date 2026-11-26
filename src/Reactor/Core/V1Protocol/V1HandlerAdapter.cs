@@ -24,6 +24,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
         _handler = handler;
     }
 
+    internal bool IsBackedByDescriptor<TDescriptorControl>(Descriptor.ControlDescriptor<TElement, TDescriptorControl> descriptor)
+        where TDescriptorControl : FrameworkElement, new()
+        => _handler is Descriptor.DescriptorHandler<TElement, TDescriptorControl> handler
+            && ReferenceEquals(handler.Descriptor, descriptor);
+
     public bool HasUnmount => true; // the default-body call is cheap; no point branching.
 
     /// <summary>

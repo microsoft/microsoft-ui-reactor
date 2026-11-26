@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.UI.Reactor.Analyzers;
 using Microsoft.UI.Reactor.Cli.Pack;
 using Xunit;
@@ -758,8 +760,7 @@ public class ModifierTableIntegrityTests
     /// <c>GetDependencyPropertyName</c> decides which properties a <c>ThemeRef</c> binding may emit
     /// a <c>&lt;Setter&gt;</c> for. Its allow-list matches <c>ApplyModifiers</c> by default.
     /// A separate <see cref="ModifierInfo.ThemeControlGate"/> can add receivers while preserving
-    /// those supported by <c>ApplyModifiers</c>. For example, <c>Foreground(ThemeRef)</c> also
-    /// reaches <c>RichTextBlock</c>.
+    /// those supported by <c>ApplyModifiers</c>.
     /// </summary>
     [Fact]
     public void GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table()
@@ -843,7 +844,8 @@ public class ModifierTableIntegrityTests
     /// Property name → the WinUI type names <c>ThemeBindingApplier.GetDependencyPropertyName</c> will emit a
     /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. The method's body is a
     /// chain of <c>if (property == "X" &amp;&amp; (fe is A || fe is B)) return "X";</c>, so each
-    /// branch's string comparison names the property and the type tests are the gate.
+    /// branch's string comparison names the property. The type tests or the shared foreground
+    /// lookup supply its receiver gate.
     /// </summary>
     private static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
     {
@@ -873,6 +875,9 @@ public class ModifierTableIntegrityTests
                 .Select(b => SimpleTypeName(b.Right))
                 .Where(typeName => typeName is not null);
 
+            if (property == "Foreground" && CallsForegroundPropertyLookup(ifStatement.Condition))
+                typeNames = typeNames.Concat(ReadForegroundPropertyGate(ReadForegroundModifierSource(RepoRootFinder.FindRepoRoot()!)));
+
             foreach (var typeName in typeNames)
             {
                 if (!gates.TryGetValue(property, out var set))
@@ -889,12 +894,66 @@ public class ModifierTableIntegrityTests
     /// <see langword="null"/> for any other shape (array, generic, tuple, …), which the gates never
     /// use.
     /// </summary>
-    private static string? SimpleTypeName(Microsoft.CodeAnalysis.SyntaxNode type) => type switch
+    private static string? SimpleTypeName(SyntaxNode type) => type switch
     {
         Microsoft.CodeAnalysis.CSharp.Syntax.QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
         Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax simple => simple.Identifier.Text,
         _ => null,
     };
+
+    private static bool CallsForegroundPropertyLookup(SyntaxNode node) =>
+        node.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>()
+            .Any(call => call.Expression is IdentifierNameSyntax { Identifier.ValueText: "GetProperty" }
+                or MemberAccessExpressionSyntax
+                {
+                    Expression: IdentifierNameSyntax { Identifier.ValueText: "ForegroundModifier" },
+                    Name.Identifier.ValueText: "GetProperty",
+                });
+
+    [Fact]
+    public void Foreground_Diagnostics_And_Runtime_Have_The_Same_Receivers()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+        var runtimeReceivers = ReadForegroundPropertyGate(ReadForegroundModifierSource(root!));
+
+        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.cs");
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree
+            .ParseText(File.ReadAllText(file), cancellationToken: cancellationToken)
+            .GetRoot(cancellationToken);
+        var owner = Assert.Single(source.DescendantNodes().OfType<MethodDeclarationSyntax>(),
+            method => method.Identifier.ValueText == "ForegroundOwner");
+        var diagnosticReceivers = owner.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Select(call => call.Expression)
+            .OfType<GenericNameSyntax>()
+            .Where(name => name.Identifier.ValueText == "Is")
+            .Select(name => SimpleTypeName(name.TypeArgumentList.Arguments.Single()))
+            .OfType<string>();
+
+        Assert.Equal(runtimeReceivers.OrderBy(name => name, StringComparer.Ordinal),
+            diagnosticReceivers.OrderBy(name => name, StringComparer.Ordinal));
+    }
+
+    private static SyntaxNode ReadForegroundModifierSource(string repoRoot)
+    {
+        var file = Path.Join(repoRoot, "src", "Reactor", "Core", "ForegroundModifier.cs");
+        return Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(File.ReadAllText(file)).GetRoot();
+    }
+
+    private static IEnumerable<string> ReadForegroundPropertyGate(SyntaxNode root)
+    {
+        var method = Assert.Single(root.DescendantNodes().OfType<MethodDeclarationSyntax>(),
+            declaration => declaration.Identifier.ValueText == "GetProperty");
+        var lookup = Assert.IsType<SwitchExpressionSyntax>(method.ExpressionBody?.Expression);
+        var receivers = lookup.Arms.Select(arm => arm.Pattern)
+            .OfType<DeclarationPatternSyntax>()
+            .Select(pattern => SimpleTypeName(pattern.Type))
+            .OfType<string>()
+            .ToArray();
+        Assert.NotEmpty(receivers);
+        return receivers;
+    }
 
     /// <summary>
     /// <see cref="NoOpModifierAnalyzer"/> resolves an element's mounted control from Reactor's
@@ -1124,8 +1183,8 @@ public class ModifierTableIntegrityTests
     }
 
     /// <summary>
-    /// Modifier property name → the WinUI type names <c>ApplyModifiers</c> actually writes it
-    /// to, read out of the reconciler source.
+    /// Modifier property name → the WinUI type names the common modifiers actually write to,
+    /// read out of the reconciler source and <c>ForegroundModifier.cs</c>.
     /// </summary>
     /// <remarks>
     /// Parsed with Roslyn rather than matched with a regex: the gate lives in a type-test
@@ -1144,6 +1203,11 @@ public class ModifierTableIntegrityTests
         Assert.True(
             methods.Count(method => method.Identifier.Text != ReconcilerSource.ApplyModifiersName) > 0,
             "No ApplyModifiers family helpers found in the Reconciler partial files");
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+        var foregroundSource = ReadForegroundModifierSource(root!);
+        methods.Add(Assert.Single(foregroundSource.DescendantNodes().OfType<MethodDeclarationSyntax>(),
+            method => method.Identifier.ValueText == "Apply"));
 
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
@@ -1204,6 +1268,8 @@ public class ModifierTableIntegrityTests
                     .Where(typeName => typeName is not null);
 
                 var typeNames = isPatternTypeNames.Concat(switchPatternTypeNames);
+                if (guarded.Contains("Foreground") && CallsForegroundPropertyLookup(ifStatement.Condition))
+                    typeNames = typeNames.Concat(ReadForegroundPropertyGate(foregroundSource));
 
                 foreach (var typeName in typeNames)
                 {

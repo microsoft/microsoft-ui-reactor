@@ -723,17 +723,16 @@ public sealed partial class Reconciler
             state.MemoWrapsDecorator = false;
             if (state.Composition?.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         }
-        ClearPublishedSource(fe);
+        ClearDetachedProperties(fe);
     }
 
     /// <summary>
-    /// A control that leaves Reactor's ownership (pool return, recycle, detach) stops
-    /// describing the element it no longer hosts: the published <c>ReactorSource</c> goes with
-    /// the element pointer, so neither an inspector nor <c>GetSource</c>'s published-value
-    /// fallback reports stale attribution. Applies to controls without a ReactorState too.
+    /// Drops the published source and modifier ownership attached to a native control when it
+    /// leaves Reactor's ownership (pool return, recycle, detach), even without a ReactorState.
     /// </summary>
-    private static void ClearPublishedSource(FrameworkElement fe)
+    private static void ClearDetachedProperties(FrameworkElement fe)
     {
+        ForegroundModifier.ClearApplied(fe);
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
             fe.ClearValue(Diagnostics.ReactorDiagnostics.SourceProperty);
     }
@@ -796,7 +795,7 @@ public sealed partial class Reconciler
     /// </summary>
     public static void DetachReactorState(FrameworkElement fe)
     {
-        ClearPublishedSource(fe);
+        ClearDetachedProperties(fe);
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);

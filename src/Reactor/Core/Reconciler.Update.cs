@@ -346,24 +346,36 @@ public sealed partial class Reconciler
         bool memoWrappedDecorator = newEl is KeyedMemoElement
             && control.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoWrapsDecorator: true };
 
-        // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
-        //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
-        //   (3) global `ControlRegistry`, (4) composition-primitive switch.
+        var foregroundUpdate = ForegroundModifier.UpdateAction.None;
         // V1 Update returns the UIElement to install in the parent's
         // slot. Standard handlers always return `control` unchanged
         // (§13 Q12 — no substitution on the public author surface);
         // decorator-style handlers (§14 Phase 3 completion) may return
         // a different instance (target-wrapping decorators whose
         // Target changed type). When the returned instance equals
-        // `control`, set `result` to null so callers preserve identity.
+        // `control`, return null so callers preserve identity.
+        UIElement? UpdateWithV1Handler(IV1HandlerEntry entry)
+        {
+            var oldForeground = oldModifiers?.Foreground;
+            var foreground = modifiers?.Foreground;
+            if (oldForeground is not null || foreground is not null)
+                foregroundUpdate = ForegroundModifier.PrepareUpdate(entry, control, oldEl, newEl, oldForeground, foreground,
+                    hasModifierParent: modifierParent is not null);
+            var v1Result = entry.Update(oldEl, newEl, control, requestRerender, this);
+            ownsControl = entry.OwnsControl(newEl);
+            return ReferenceEquals(v1Result, control) ? null : v1Result;
+        }
+
         // A handler's own opacity write (a descriptor such as Button's IsDisabledFocusable dimming)
         // replaces a pending opacity restart as a modifier's does (#1669). Free when none is pending.
         var opacityProbe = new OpacityRestartProbe(control);
+
+        // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
+        //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
+        //   (3) global `ControlRegistry`, (4) composition-primitive switch.
         if (_v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
         {
-            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
-            result = ReferenceEquals(v1Result, control) ? null : v1Result;
-            ownsControl = v1Entry.OwnsControl(newEl);
+            result = UpdateWithV1Handler(v1Entry);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
@@ -373,9 +385,7 @@ public sealed partial class Reconciler
         }
         else if (TryResolveFromControlRegistry(newEl.GetType(), out v1Entry))
         {
-            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
-            result = ReferenceEquals(v1Result, control) ? null : v1Result;
-            ownsControl = v1Entry.OwnsControl(newEl);
+            result = UpdateWithV1Handler(v1Entry);
         }
         else
         {
@@ -490,7 +500,8 @@ public sealed partial class Reconciler
             && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
-                ownsControl: ownsControl && result is null);
+                ownsControl: ownsControl && result is null,
+                foregroundUpdate: ReferenceEquals(target, control) ? foregroundUpdate : ForegroundModifier.UpdateAction.NewTarget);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
