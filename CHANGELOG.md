@@ -288,6 +288,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- **A pooled control no longer keeps the previous renter's `.RequestedTheme(...)` (issue #1717).**
+  The pool never cleared `RequestedTheme` when a control returned to it, and a mount doesn't clear
+  modifiers the new element doesn't declare. So a control that had rendered with
+  `.RequestedTheme(ElementTheme.Dark)` and was then reused by an element without that modifier kept
+  rendering its whole subtree in the dark theme. The pool now clears it, like every other modifier
+  value.
+
 - **`mur devtools` traffic to `127.0.0.1` no longer goes through the system proxy (issue #1718).**
   The CLI's devtools client and its session liveness probe used a default `HttpClient`. With
   Windows "Automatically detect settings" on, every request first asked WinHTTP for a proxy, so
