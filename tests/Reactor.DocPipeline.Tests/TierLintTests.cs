@@ -163,6 +163,14 @@ public class TierLintTests
     }
 
     [Fact]
+    public void A_fence_marker_indented_four_spaces_does_not_close_the_block()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\n```csharp\n    ```\n{code}\n```\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
     public void An_inline_triple_backtick_span_is_not_a_fence()
     {
         var lead = string.Join(' ', Enumerable.Repeat("word", 80));

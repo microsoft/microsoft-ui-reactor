@@ -264,8 +264,8 @@ internal static class TierLint
         foreach (var raw in lines)
         {
             if (fence.InCode(raw)) continue;
+            if (SectionHeading.IsMatch(raw)) break;
             var line = raw.TrimStart();
-            if (SectionHeading.IsMatch(line)) break;
             if (line.StartsWith("# ") || line.StartsWith(">")) continue;
             words += line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         }
@@ -280,5 +280,5 @@ internal static class TierLint
 
     private static readonly Regex LinkPattern = new(@"\[[^\]]+\]\([^)]+\)", RegexOptions.Compiled);
 
-    private static readonly Regex SectionHeading = new(@"^#{2,6}(\s|$)", RegexOptions.Compiled);
+    private static readonly Regex SectionHeading = new(@"^ {0,3}#{2,6}(\s|$)", RegexOptions.Compiled);
 }

@@ -76,6 +76,16 @@ public class WinUiRefFrontMatterTests
     }
 
     [Fact]
+    public void A_heading_indented_up_to_three_spaces_is_a_section()
+    {
+        var body = "# Page\n\nIntro.\n\n   ## Usage\n\nBody.\n";
+
+        var result = TemplateParser.InsertBeforeFirstSection(body, "CALLOUT").Replace("\r\n", "\n");
+
+        Assert.Contains("Intro.\n\nCALLOUT\n\n   ## Usage", result);
+    }
+
+    [Fact]
     public void Title_cases_hyphenated_path_segments()
     {
         var content = """
