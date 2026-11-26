@@ -156,13 +156,13 @@ public class ModifierSchemaTests
                     if (old is not null && (Field(current) == old || current is IdentifierNameSyntax) && Protects(guard.Statement, old))
                         byValue.Add(old);
                 }
-                foreach (var argument in condition.OfType<InvocationExpressionSyntax>()
+                foreach (var name in condition.OfType<InvocationExpressionSyntax>()
                              .Where(i => ReconcilerSource.InvokedName(i) == "ReferenceEquals")
-                             .SelectMany(i => i.ArgumentList.Arguments))
-                {
-                    if (Seeded(argument.Expression) is { } name && Protects(guard.Statement, name))
-                        byReference.Add(name);
-                }
+                             .SelectMany(i => i.ArgumentList.Arguments)
+                             .Select(argument => Seeded(argument.Expression))
+                             .OfType<string>()
+                             .Where(n => Protects(guard.Statement, n)))
+                    byReference.Add(name);
             }
         }
 
@@ -403,11 +403,19 @@ public class ModifierSchemaTests
         var all = global::System.IO.Directory.GetFiles(global::System.IO.Path.Join(root, "src", "Reactor", "Elements"), "*.cs")
             .SelectMany(file => CSharpSyntaxTree.ParseText(global::System.IO.File.ReadAllText(file), cancellationToken: TestContext.Current.CancellationToken)
                 .GetRoot(TestContext.Current.CancellationToken).DescendantNodes().OfType<MethodDeclarationSyntax>())
-            .Where(m => m.Modifiers.Any(SyntaxKind.StaticKeyword))
+            .Where(m => m.Modifiers.Any(SyntaxKind.StaticKeyword) && !IsTypedExtension(m))
             .ToLookup(m => m.Identifier.Text, StringComparer.Ordinal);
+        // Roots are the generic `X<T>(this T el, …)` modifiers. A typed overload such as
+        // FontSize(this TextBlockElement, …) assigns the element's own same-named property, not the
+        // common slot, so it may neither certify a root nor be followed from one.
         var methods = all.SelectMany(g => g)
             .Where(m => m.ParameterList.Parameters.FirstOrDefault()?.Modifiers.Any(SyntaxKind.ThisKeyword) == true)
             .ToLookup(m => m.Identifier.Text, StringComparer.Ordinal);
+
+        static bool IsTypedExtension(MethodDeclarationSyntax m) =>
+            m.ParameterList.Parameters.FirstOrDefault() is { } first
+            && first.Modifiers.Any(SyntaxKind.ThisKeyword)
+            && !(m.TypeParameterList?.Parameters.Any(tp => tp.Identifier.Text == first.Type?.ToString()) ?? false);
 
         // Direct assignment, or through a forwarder (`.Visible` → `.IsVisible`, `.Backdrop` → its
         // helper), followed by name a few calls deep.
@@ -421,6 +429,7 @@ public class ModifierSchemaTests
         Assert.Contains(methods["Width"], m => Writes(m, "Width"));        // positive controls: direct,
         Assert.Contains(methods["Visible"], m => Writes(m, "IsVisible"));  // and through a forwarder
         Assert.DoesNotContain(methods["Drag"], m => Writes(m, "DragSource"));
+        Assert.DoesNotContain(methods["FontSize"], m => m.TypeParameterList is null);   // the typed overload is excluded
 
         var wrong = ModifierSchema.Slots
             .SelectMany(s => s.FluentNames.Select(name => (s.Name, Fluent: name)))

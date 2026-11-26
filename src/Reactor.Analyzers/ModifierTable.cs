@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.UI.Reactor.Analyzers.Modifiers;
 
 namespace Microsoft.UI.Reactor.Analyzers;
@@ -627,9 +628,8 @@ internal static class ModifierTable
     private static Dictionary<string, string> BuildGateOnlyInReconciler()
     {
         var map = new Dictionary<string, string>(System.StringComparer.Ordinal);
-        foreach (var slot in ModifierSchema.Slots)
-            if (slot.GateOnlyInReconcilerReason is { } reason)
-                map[slot.Name] = reason;
+        foreach (var slot in ModifierSchema.Slots.Where(s => s.GateOnlyInReconcilerReason is not null))
+            map[slot.Name] = slot.GateOnlyInReconcilerReason!;
         return map;
     }
 

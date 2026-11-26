@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Microsoft.UI.Reactor.Analyzers.Modifiers;
 
@@ -179,12 +180,8 @@ internal sealed class ModifierSlot
     public string? IdentityValue { get; private set; }
 
     /// <summary>Receivers that carry <paramref name="role"/>.</summary>
-    public IEnumerable<ModifierReceiver> ReceiversWith(ReceiverRole role)
-    {
-        foreach (var receiver in _receivers)
-            if ((receiver.Roles & role) != 0)
-                yield return receiver;
-    }
+    public IEnumerable<ModifierReceiver> ReceiversWith(ReceiverRole role) =>
+        _receivers.Where(receiver => (receiver.Roles & role) != 0);
 
     // ── Builders, used only while ModifierSchema.Slots is constructed ──
 
