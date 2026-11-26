@@ -231,11 +231,34 @@ public sealed partial class Reconciler
             TransformOriginBinding.Deactivate(control);
     }
 
+    private void ApplyDeclaredOpacity(FrameworkElement element, float value, Element? source)
+    {
+        var state = GetOrCreateReactorState(element);
+        bool defer = ShouldDeferOpacityWrite(element, state);
+        var previous = state.DeclaredOpacity;
+        state.DeclaredOpacity = (value, defer && (previous.Deferred || previous.Value != value));
+        if (state.Composition is { } composition) composition.DeferredModifierResets &= ~AnimateProperty.Opacity;
+
+        // XAML pushes a changed local value to the visual on its next frame (#1669).
+        // Hold the declaration until the keyframe releases opacity to preserve its controller.
+        if (!defer)
+            AnimationHelper.SetOrAnimate(element, "Opacity", value, source, ChannelAnimationLookup);
+    }
+
+    private static bool ShouldDeferOpacityWrite(UIElement element, ReactorState state)
+    {
+        if (state.OpacityKeyframe is not { ReplayedWithoutOpacity: false } playback) return false;
+        var current = ElementCompositionPreview.GetElementVisual(element).TryGetAnimationController("Opacity");
+        return Equals(current, playback.Controller)
+            || (current is null && Equals(state.Composition?.OpacityRestart?.Controller, playback.Controller));
+    }
+
     // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
     // flyout decorator or keyed memo layered over another element's control. Only the owner's
     // inline overlays are recorded (issue #965).
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
-        bool keepRemovedBackground = false, bool ownsControl = false)
+        bool keepRemovedBackground = false, bool ownsControl = false,
+        ForegroundModifier.UpdateAction foregroundUpdate = ForegroundModifier.UpdateAction.None)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -256,7 +279,7 @@ public sealed partial class Reconciler
         ApplyToolTipAndFlyoutModifiers(fe, oldM, m, requestRerender);
         ApplyIsEnabledModifier(fe, oldM, m);
         ApplyBorderModifiers(fe, oldM, m, ownsControl);
-        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground);
+        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate);
         ApplyAutomationAndFocusModifiers(fe, oldM, m);
 
         // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
@@ -442,15 +465,15 @@ public sealed partial class Reconciler
     private void ApplyOpacityTransformAndVisibilityModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
-            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
+            ApplyDeclaredOpacity(fe, (float)m.Opacity.Value, GetModifierAnimationSource(fe));
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
+                ApplyDeclaredOpacity(fe, (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
             else
             {
                 fe.ClearValue(UIElement.OpacityProperty);
-                AnimationHelper.ResetCompositionModifier(fe, "Opacity");
+                AnimationHelper.ResetCompositionModifier(fe, "Opacity", removeOpacityDeclaration: true);
                 StopPendingEnterFade(fe);
             }
         }
@@ -650,7 +673,8 @@ public sealed partial class Reconciler
     }
 
     /// <summary>Background and Foreground.</summary>
-    private static void ApplyBackgroundAndForegroundModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool keepRemovedBackground)
+    private static void ApplyBackgroundAndForegroundModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool keepRemovedBackground,
+        ForegroundModifier.UpdateAction foregroundUpdate)
     {
         // Background (Panel, Control, or Border)
         if (m.Background is not null && !ReferenceEquals(m.Background, oldM?.Background))
@@ -666,17 +690,7 @@ public sealed partial class Reconciler
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
         }
 
-        // Foreground (Control or TextBlock)
-        if (m.Foreground is not null && !ReferenceEquals(m.Foreground, oldM?.Foreground))
-        {
-            if (fe is WinUI.Control fgCtrl) fgCtrl.Foreground = m.Foreground;
-            else if (fe is TextBlock fgTb) fgTb.Foreground = m.Foreground;
-        }
-        else if (m.Foreground is null && oldM?.Foreground is not null)
-        {
-            if (fe is WinUI.Control fgCtrl) fgCtrl.ClearValue(WinUI.Control.ForegroundProperty);
-            else if (fe is TextBlock fgTb) fgTb.ClearValue(TextBlock.ForegroundProperty);
-        }
+        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate);
     }
 
     /// <summary>AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.</summary>

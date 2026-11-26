@@ -4,7 +4,7 @@ Hosted XAML content, web views and maps.
 
 Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.
 
-**Learn more:** [Reactor for XAML Developers](../../xaml-developers.md)
+**Learn more:** [Coming from XAML](../../xaml-developers.md)
 
 ## `MapControl`
 

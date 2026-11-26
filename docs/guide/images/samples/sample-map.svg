@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1130 400" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .heading { font-size: 13px; font-weight: 600; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .code { font-size: 10.5px; font-family: Cascadia Code, Consolas, monospace; fill: #0969da; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-aot { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .rule { stroke: #d0d7de; stroke-width: 1; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .code { fill: #79c0ff; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .box-aot { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .rule { stroke: #30363d; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Row 1: suggested order -->
+  <text class="heading" x="20" y="26">A suggested order</text>
+
+  <rect class="box-accent" x="20" y="40" width="330" height="140" rx="6"/>
+  <text class="label" x="36" y="64">1. Start here</text>
+  <text class="sub" x="36" y="82">Every control, a small app, and theming</text>
+  <text class="code" x="36" y="110">ReactorGallery</text>
+  <text class="code" x="36" y="128">TodoApp</text>
+  <text class="code" x="36" y="146">StylingGallery</text>
+
+  <path class="edge" d="M350 110 H398" marker-end="url(#arr)"/>
+
+  <rect class="box" x="400" y="40" width="330" height="140" rx="6"/>
+  <text class="label" x="416" y="64">2. Feature demos</text>
+  <text class="sub" x="416" y="82">One feature in depth, in a small app</text>
+  <text class="code" x="416" y="110">CommandingDemo, NavigationDemo</text>
+  <text class="code" x="416" y="128">validation-showcase, a11y-showcase</text>
+  <text class="code" x="416" y="146">animated-list-demo, source-map-explorer</text>
+
+  <path class="edge" d="M730 110 H778" marker-end="url(#arr)"/>
+
+  <rect class="box-out" x="780" y="40" width="330" height="140" rx="6"/>
+  <text class="label" x="796" y="64">3. Full apps</text>
+  <text class="sub" x="796" y="82">Real structure: many components, data, persistence</text>
+  <text class="code" x="796" y="110">chat, minesweeper, wordpuzzle</text>
+  <text class="code" x="796" y="128">headtrax, regedit, reactor-ide</text>
+  <text class="code" x="796" y="146">monaco-editor, demo-script-tool</text>
+  <text class="code" x="796" y="164">widget-creator</text>
+
+  <line class="rule" x1="20" y1="208" x2="1110" y2="208"/>
+
+  <!-- Row 2: pick by topic -->
+  <text class="heading" x="20" y="236">Or pick by topic</text>
+
+  <rect class="box" x="20" y="250" width="202" height="130" rx="6"/>
+  <text class="label" x="34" y="274">Windowing</text>
+  <text class="code" x="34" y="300">window-styles</text>
+  <text class="code" x="34" y="318">tool-palette</text>
+  <text class="code" x="34" y="336">command-palette-window</text>
+
+  <rect class="box" x="242" y="250" width="202" height="130" rx="6"/>
+  <text class="label" x="256" y="274">Interop</text>
+  <text class="code" x="256" y="300">InteropFirst</text>
+  <text class="code" x="256" y="318">ReactorHostControlDemo</text>
+  <text class="code" x="256" y="336">WinFormsInterop</text>
+  <text class="code" x="256" y="354">wct-controls</text>
+
+  <rect class="box" x="464" y="250" width="202" height="130" rx="6"/>
+  <text class="label" x="478" y="274">Charting</text>
+  <text class="code" x="478" y="300">ReactorCharting.Gallery</text>
+  <text class="code" x="478" y="318">ReactorCharting.Sample</text>
+
+  <rect class="box" x="686" y="250" width="202" height="130" rx="6"/>
+  <text class="label" x="700" y="274">Animation and performance</text>
+  <text class="code" x="700" y="300">TransitionComparison</text>
+  <text class="code" x="700" y="318">particle-storm</text>
+  <text class="code" x="700" y="336">netpulse</text>
+
+  <rect class="box-aot" x="908" y="250" width="202" height="130" rx="6"/>
+  <text class="label" x="922" y="274">Native AOT</text>
+  <text class="code" x="922" y="300">hello-world-aot</text>
+  <text class="code" x="922" y="318">hello-world-aot-devtools-on</text>
+</svg>

@@ -290,7 +290,7 @@ public sealed partial class Reconciler
 
         // Apply interaction states (.InteractionStates() modifier)
         if (control is not null && element.InteractionStates is not null)
-            ApplyInteractionStates(control, element.InteractionStates);
+            InteractionStateApplier.ApplyInteractionStates(control, element.InteractionStates);
 
         // Apply keyframe animations (.Keyframes() modifier)
         if (control is not null && element.KeyframeAnimations is not null)

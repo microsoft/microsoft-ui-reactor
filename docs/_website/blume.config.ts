@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "blume";
+import { script } from "blume/analytics";
 
 import { siteSettings } from "./scripts/site-env.mjs";
 
@@ -16,7 +17,7 @@ interface PublishedVersion {
 const readJson = <T>(file: string | undefined, fallback: T): T =>
   file && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as T) : fallback;
 
-const { site, base, banner, selectors } = siteSettings(
+const { site, base, version, siteRoot, banner, selectors } = siteSettings(
   process.env,
   readJson<PublishedVersion[]>(process.env.DOCS_VERSIONS_FILE, [])
 );
@@ -26,6 +27,15 @@ const redirects = readJson<{ from: string; to: string }[]>(
   fileURLToPath(new URL("./redirects.generated.json", import.meta.url)),
   []
 );
+
+// scripts/sync.mjs writes docs/changelog only when CHANGELOG.md has a dated
+// release. An old tag rebuilt with this config may have none, and then there
+// is no /changelog to link to.
+const changelogDir = fileURLToPath(new URL("./docs/changelog/", import.meta.url));
+const changelogLinks =
+  existsSync(changelogDir) && readdirSync(changelogDir).some((file) => file.endsWith(".md"))
+    ? [{ label: "Changelog", href: "/changelog" }]
+    : [];
 
 export default defineConfig({
   title: "Reactor",
@@ -42,16 +52,32 @@ export default defineConfig({
   },
   banner,
   redirects,
+  changelog: {
+    title: "Changelog",
+    description: "What changed in each Reactor release.",
+  },
+  // Not analytics: script() is Blume's hook for a site script on every page.
+  // It loads in production builds only, which is every published version.
+  // A module, so it can import version-paths.js; modules are deferred anyway.
+  analytics: version
+    ? [
+        script({
+          src: "/js/version-menu.js",
+          attributes: { type: "module", "data-root": siteRoot, "data-version": version },
+        }),
+      ]
+    : [],
   navigation: {
     tabs: [
       { label: "Home", path: "/" },
       { label: "Get started", path: "/get-started" },
       { label: "Guides", path: "/guides" },
       { label: "Controls", path: "/controls" },
-      { label: "Recipes", path: "/recipes" },
+      { label: "Tools", path: "/tools" },
       { label: "API reference", path: "/reference" },
       { label: "How it works", path: "/how-it-works" },
     ],
+    actions: changelogLinks,
     selectors,
   },
   footer: {
@@ -63,7 +89,7 @@ export default defineConfig({
         href: "https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/",
       },
       { label: "Samples", href: "https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples" },
-      { label: "Changelog", href: "https://github.com/microsoft/microsoft-ui-reactor/blob/main/CHANGELOG.md" },
+      ...changelogLinks,
     ],
   },
 });

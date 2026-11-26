@@ -1262,6 +1262,10 @@ public class ModifierUnsetClearValueTests
     private static readonly Dictionary<string, string> DelegatedBagConsumers =
         new(StringComparer.Ordinal)
         {
+            ["Apply"] =
+                "ForegroundModifier.Apply (issue #1674). Foreground writes go through the shared " +
+                "ForegroundModifier.GetProperty lookup and ClearValue on unset, outside the Reconciler.*.cs " +
+                "partials. ModifierTableIntegrityTests reads its gate from ForegroundModifier.cs directly.",
             ["ApplyEventHandlers"] =
                 "Declarative event handlers. Subscribes and unsubscribes trampolines, and toggles " +
                 "IsTapEnabled for .OnTapped, resetting it by assignment. Not a styled common modifier, " +

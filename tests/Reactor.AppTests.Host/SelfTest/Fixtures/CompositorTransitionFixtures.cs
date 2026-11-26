@@ -235,9 +235,9 @@ internal static class CompositorTransitionFixtures
                 if (order != "Mount") await Update(Full(Target()));
                 if (feature == "InteractionStates")
                 {
-                    Reconciler.SimulatePointerOverForTests(Control, isOver: true);
+                    InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: true);
                     await TransformsMatrixRecorder.Settle();
-                    Reconciler.SimulatePointerOverForTests(Control, isOver: false);
+                    InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: false);
                     await TransformsMatrixRecorder.Settle(400);
                 }
             }

@@ -9,7 +9,7 @@ goal: |
   whether something is a Debug.WriteLine or a ReactorEventSource
   event), the four ways to capture a trace (env vars, dotnet-trace,
   Visual Studio Profiler, ReactorTrace.Subscribe in process), and how
-  the reactor.logs MCP tool now surfaces ETW events alongside
+  the devtools logs MCP tool now surfaces ETW events alongside
   stdout/stderr/debug output for the in-process devtools agent. Spec
   044 — tracing and logging cleanup.
 tier: comprehensive
@@ -17,25 +17,32 @@ tier: comprehensive
 
 # Diagnostics
 
-This page is about reading Reactor's diagnostics from a real app — not about
-adding new events.
+This page shows how to read Reactor's diagnostics from a running app,
+including a Release build.
 
-When Microsoft.UI.Reactor (Reactor) swallows an exception, returns past an HRESULT, or
-otherwise chooses to continue rather than throw, the framework has
-historically dropped a `Debug.WriteLine` and moved on. That worked for
-the contributor — the message landed in Visual Studio's Output window
-during a Debug build — but it disappeared in Release, which is the
-configuration every shipped app runs. Spec 044 fixed that: error and
-HRESULT diagnostics now route through the `Microsoft-UI-Reactor`
-`EventSource` (release-visible, keyword-gated, zero-allocation when
-no consumer is listening), and the existing in-process devtools tool
-(`reactor.logs`) was extended so an MCP agent can read framework
-events in the same call that returns stdout / stderr / debug output.
+It is the debug-and-measure step of the
+[Developer tools](dev-tooling.md) loop. It is not about adding new events.
 
-The emission pipeline (keywords, IsEnabled gate, event-id allocation,
-EventPipe vs ETW transport split) lives in
-[perf-instrumentation.md](perf-instrumentation.md); start there if you are
-extending the provider.
+Sometimes Microsoft.UI.Reactor (Reactor) catches an exception or a failed
+HRESULT and keeps going instead of throwing. In the past, the framework only
+wrote a `Debug.WriteLine` message in that case. You saw it in the Visual Studio
+Output window during a Debug build, but it was gone in Release, which is the
+build every shipped app runs.
+
+Spec 044 changed this. Error and HRESULT diagnostics now go through the
+`Microsoft-UI-Reactor` `EventSource`. These events:
+
+- are visible in Release builds;
+- are grouped by keyword, so you turn on only the groups you need;
+- allocate nothing when no listener is attached.
+
+The devtools `logs` tool can also return these framework events, next to
+stdout, stderr, and debug output. An AI agent connected to the
+[devtools MCP server](devtools.md#mcp-server) gets all of them in one call.
+
+To add or change events, read [perf-instrumentation.md](perf-instrumentation.md)
+first. It covers keywords, the `IsEnabled` gate, event IDs, and the split
+between EventPipe and ETW.
 
 ![Reactor diagnostics flow — a framework catch site delegates to DiagnosticLog, which emits to ReactorEventSource for the Release path and mirrors to Debug.WriteLine in Debug builds; four consumers read the event surface: env-var / dotnet-trace capture, Visual Studio Profiler, the in-process ReactorTrace.Subscribe helper, and the reactor.logs MCP tool](images/diagnostics/flow.svg)
 
@@ -194,7 +201,7 @@ Values escape `%` as `%25` and `|` as `%7C`. Readers ignore fields they do not k
 
 **Gating.** Publishing needs both of these:
 
-- the `Reactor.DevtoolsSupport` build switch: on by default in Debug through `$(ReactorDiagnostics)`, and `-p:ReactorDiagnostics=true` for a Release / Native AOT build. An explicit `ReactorDiagnostics` value wins over the default and over a `Reactor.DevtoolsSupport` item the project declares itself;
+- the `Reactor.DevtoolsSupport` build switch: on by default in Debug through `$(ReactorDiagnostics)`, and `-p:ReactorDiagnostics=true` for a Release / [Native AOT](native-aot.md) build. An explicit `ReactorDiagnostics` value wins over the default and over a `Reactor.DevtoolsSupport` item the project declares itself;
 - `REACTOR_DIAGNOSTICS=1` in the environment at launch. It also turns source mapping on from startup, so elements built before the first host (a page's field initializers, say) carry their call sites.
 
 Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the [threat model](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/security/threat-model.md) §7.7.
@@ -507,6 +514,7 @@ log greps keep working.
 
 ## Next Steps
 
+- **[Developer tools](dev-tooling.md)** — Overview of the Tools section: hot reload, devtools, `mur`, analyzers, and AI agents.
 - **[Perf Instrumentation](perf-instrumentation.md)** — The emission pipeline, keyword design, and the IsEnabled gate. Read first if you're adding events.
 - **[DevTools Internals](devtools-internals.md)** — The MCP server and `logs` tool plumbing the diagnostic events flow through.
 - **[Persistence](persistence.md)** — Where `PersistenceRead` / `PersistenceWrite` / `PersistenceRejected` fire from.

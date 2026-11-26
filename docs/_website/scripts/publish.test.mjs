@@ -346,41 +346,50 @@ describe("release tags", () => {
 
 describe("site settings", () => {
   const published = [entry("main", [], "main (development)"), entry("0.1.0-preview.19", ["latest"]), entry("0.1.0-preview.18")];
+  const url = (id) => `https://microsoft.github.io${BASE}/${id}/`;
 
-  test("a local build has no version selector or banner", () => {
+  test("a local build has no banner and a menu that links to the published docs", () => {
     const s = siteSettings({}, published);
-    assert.equal(s.siteRoot, "/");
+    assert.equal(s.siteRoot, `${BASE}/`);
     assert.equal(s.base, undefined);
+    assert.equal(s.version, undefined);
     assert.equal(s.banner, undefined);
-    assert.deepEqual(s.selectors, []);
+    assert.deepEqual(s.selectors[0].items, [
+      { label: "Local", tag: "this build", path: "/" },
+      { label: "Latest release", tag: "latest", path: url("latest") },
+      { label: "main", tag: "unreleased", path: url("main") },
+    ]);
   });
 
-  test("main points the selector at its siblings and warns it is unreleased", () => {
+  test("main lists versions in versions.json order and warns it is unreleased", () => {
     const s = siteSettings({ DOCS_BASE: `${BASE}/main/`, DOCS_VERSION: "main" }, published);
     assert.equal(s.base, `${BASE}/main`);
     assert.equal(s.siteRoot, `${BASE}/`);
     assert.deepEqual(s.selectors[0].items, [
-      { label: "Latest release", path: `https://microsoft.github.io${BASE}/latest/` },
-      { label: "Development (main)", path: "/" },
-      { label: "0.1.0-preview.19", path: `https://microsoft.github.io${BASE}/0.1.0-preview.19/` },
-      { label: "0.1.0-preview.18", path: `https://microsoft.github.io${BASE}/0.1.0-preview.18/` },
+      { label: "main", tag: "unreleased", path: "/" },
+      { label: "0.1.0-preview.19", tag: "latest", path: url("latest") },
+      { label: "0.1.0-preview.18", tag: undefined, path: url("0.1.0-preview.18") },
     ]);
     assert.match(s.banner.content, /unreleased main/);
     assert.equal(s.banner.link.href, `https://microsoft.github.io${BASE}/`);
   });
 
-  test("the latest copy has no banner and selects itself as Latest", () => {
+  test("the latest copy has no banner and selects itself", () => {
     const s = siteSettings({ DOCS_BASE: `${BASE}/latest`, DOCS_VERSION: "0.1.0-preview.19", DOCS_ALIAS: "latest" }, published);
     assert.equal(s.banner, undefined);
-    const items = s.selectors[0].items;
-    assert.equal(items[0].path, "/");
-    assert.equal(items.find((i) => i.label === "0.1.0-preview.19").path, `https://microsoft.github.io${BASE}/0.1.0-preview.19/`);
+    assert.equal(s.selectors[0].items.find((i) => i.label === "0.1.0-preview.19").path, "/");
   });
 
   test("an older release selects itself and points readers to latest", () => {
     const s = siteSettings({ DOCS_BASE: `${BASE}/0.1.0-preview.18`, DOCS_VERSION: "0.1.0-preview.18" }, published);
-    assert.equal(s.selectors[0].items.find((i) => i.label === "0.1.0-preview.18").path, "/");
-    assert.equal(s.selectors[0].items[0].path, `https://microsoft.github.io${BASE}/latest/`);
+    const items = s.selectors[0].items;
+    assert.equal(items.find((i) => i.label === "0.1.0-preview.18").path, "/");
+    assert.equal(items.find((i) => i.label === "0.1.0-preview.19").path, url("latest"));
     assert.match(s.banner.content, /version 0\.1\.0-preview\.18/);
+  });
+
+  test("a version missing from versions.json is listed first", () => {
+    const s = siteSettings({ DOCS_BASE: `${BASE}/0.1.0-preview.20`, DOCS_VERSION: "0.1.0-preview.20" }, published);
+    assert.deepEqual(s.selectors[0].items[0], { label: "0.1.0-preview.20", tag: undefined, path: "/" });
   });
 });

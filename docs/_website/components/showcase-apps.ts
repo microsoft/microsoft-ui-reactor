@@ -37,7 +37,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     id: "gallery",
     name: "Reactor Gallery",
     summary:
-      "Every WinUI 3 control, rebuilt with the Reactor DSL. The Reactor version of WinUI 3 Gallery, with live samples and their source.",
+      "Every WinUI control, rebuilt with the Reactor DSL. The Reactor version of WinUI Gallery, with live samples and their source.",
     kind: "Controls",
     path: "samples/ReactorGallery",
     icon: "layout-grid",

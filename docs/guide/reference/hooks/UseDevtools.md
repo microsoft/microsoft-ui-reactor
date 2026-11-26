@@ -18,4 +18,4 @@ public static bool UseDevtools(this RenderContext ctx)
 
 An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseDevtoolsExtensions`.
 
-**Learn more:** [Hooks](../../hooks.md)
+**Learn more:** [Devtools](../../devtools.md), [Hooks](../../hooks.md)

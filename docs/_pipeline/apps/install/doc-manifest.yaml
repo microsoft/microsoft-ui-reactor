@@ -1,0 +1,6 @@
+app:
+  width: 600
+  height: 400
+  startup-delay: 1500
+
+screenshots: []

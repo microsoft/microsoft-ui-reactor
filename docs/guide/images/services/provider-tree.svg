@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 380" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-aot { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .box-aot { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Startup -->
+  <rect class="box" x="20" y="40" width="220" height="74" rx="6"/>
+  <text class="label" x="130" y="62" text-anchor="middle">Startup</text>
+  <text class="sub" x="130" y="80" text-anchor="middle">new ServiceCollection()</text>
+  <text class="sub" x="130" y="96" text-anchor="middle">BuildServiceProvider()</text>
+
+  <!-- Root element -->
+  <rect class="box-accent" x="300" y="40" width="300" height="74" rx="6"/>
+  <text class="label" x="450" y="62" text-anchor="middle">Root element</text>
+  <text class="sub" x="450" y="80" text-anchor="middle">.Provide(AppServices.Provider, provider)</text>
+  <text class="sub" x="450" y="96" text-anchor="middle">root provider: singletons</text>
+
+  <!-- TodoList -->
+  <rect class="box-out" x="180" y="180" width="240" height="74" rx="6"/>
+  <text class="label" x="300" y="202" text-anchor="middle">TodoList</text>
+  <text class="sub" x="300" y="220" text-anchor="middle">ctx.UseService&lt;ITodoStore&gt;()</text>
+  <text class="sub" x="300" y="236" text-anchor="middle">one store for the whole app</text>
+
+  <!-- EditorPanel -->
+  <rect class="box-aot" x="480" y="180" width="260" height="74" rx="6"/>
+  <text class="label" x="610" y="202" text-anchor="middle">EditorPanel</text>
+  <text class="sub" x="610" y="220" text-anchor="middle">ctx.UseServiceScope()</text>
+  <text class="sub" x="610" y="236" text-anchor="middle">.Provide(AppServices.Provider, scoped)</text>
+
+  <!-- EditorBody -->
+  <rect class="box-out" x="480" y="300" width="260" height="64" rx="6"/>
+  <text class="label" x="610" y="322" text-anchor="middle">EditorBody</text>
+  <text class="sub" x="610" y="340" text-anchor="middle">ctx.UseService&lt;IEditSession&gt;()</text>
+
+  <!-- Scope lifetime note -->
+  <rect class="box" x="790" y="180" width="190" height="74" rx="6"/>
+  <text class="label" x="885" y="202" text-anchor="middle">Scope lifetime</text>
+  <text class="sub" x="885" y="220" text-anchor="middle">created when EditorPanel mounts</text>
+  <text class="sub" x="885" y="236" text-anchor="middle">disposed when it unmounts</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M240 77 L300 77" marker-end="url(#arr)"/>
+  <text class="edge-label" x="270" y="70" text-anchor="middle">provider</text>
+
+  <path class="edge" d="M420 114 L320 180" marker-end="url(#arr)"/>
+  <path class="edge" d="M480 114 L590 180" marker-end="url(#arr)"/>
+  <text class="edge-label" x="450" y="150" text-anchor="middle">context</text>
+
+  <path class="edge" d="M610 254 L610 300" marker-end="url(#arr)"/>
+  <text class="edge-label" x="618" y="281">scoped provider</text>
+
+  <path class="edge-dashed" d="M740 217 L790 217" marker-end="url(#arr)"/>
+</svg>
