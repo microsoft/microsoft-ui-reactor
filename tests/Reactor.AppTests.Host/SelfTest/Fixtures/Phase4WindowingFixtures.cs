@@ -258,9 +258,8 @@ internal static class Phase4WindowingFixtures
         private static int CountWarnings(ReactorEvent[] events, string operation)
         {
             int count = 0;
-            foreach (var e in events)
+            foreach (var e in events.Where(e => string.Equals(e.EventName, "Warning", StringComparison.Ordinal)))
             {
-                if (!string.Equals(e.EventName, "Warning", StringComparison.Ordinal)) continue;
                 foreach (var p in e.Payload)
                 {
                     if (p is string s && string.Equals(s, operation, StringComparison.Ordinal))
@@ -354,17 +353,26 @@ internal static class Phase4WindowingFixtures
 
                 // A grant re-arms the warning even though the level never changed: demote the
                 // window natively, then refuse the next apply while Spec.Level stays AlwaysOnTop.
-                bool granted = TopmostBit(win);
-                Native.MakeNotTopmost(Hwnd(win));
-                win.RefuseTopmostForTests = 1;
-                win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Regranted" });
-                await win.Host.WaitForIdleAsync();
-                H.Check("WindowLevel_RefusedTopmost_WarningRearmsAfterGrant",
-                    granted && win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 2);
+                if (!TopmostBit(win))
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_WarningRearmsAfterGrant",
+                        "issue #927: Windows refused the reapply, so there is no grant to re-arm from");
+                }
+                else
+                {
+                    Native.MakeNotTopmost(Hwnd(win));
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Regranted" });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_WarningRearmsAfterGrant",
+                        win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 2);
+                }
 
-                // Leaving AlwaysOnTop re-arms it too.
+                // Leaving AlwaysOnTop re-arms it too, whatever state the latch was in.
+                int warningsBeforeLevelChange = Warnings;
                 bool refusedAgain = await RefuseAlwaysOnTop(win, spec);
-                H.Check("WindowLevel_RefusedTopmost_WarningRearmsOnLevelChange", refusedAgain && Warnings == warningsBefore + 3);
+                H.Check("WindowLevel_RefusedTopmost_WarningRearmsOnLevelChange",
+                    refusedAgain && Warnings == warningsBeforeLevelChange + 1);
 
                 // Another window activating reapplies the refused one, which stays inactive.
                 // win is still refused here, and opening `third` activates it.
