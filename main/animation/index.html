@@ -4047,11 +4047,14 @@ the old value to the new one automatically.</p>
 <p>Animation and transition configuration changes are also checked on each render,
 even when the element's other properties stay the same. For example, changing
 only <code>.LayoutAnimation()</code>'s duration updates the layout animation on the next render.</p>
-<p>Value-equivalent plain-data configurations such as <code>.Animate()</code> and
-<code>.LayoutAnimation()</code> can still skip updates. Native objects and arrays use
-reference equality: rebuilding <code>.OpacityTransition()</code>, <code>.WithTransitions()</code>,
-<code>.Keyframes()</code>, or <code>.ScrollLinked()</code> with fresh objects or arrays prevents
-skipping, even when the settings match.</p>
+<p>Unchanged declarations still skip updates, even though each render rebuilds
+them. <code>.Keyframes()</code> and <code>.ScrollLinked()</code> compare their keyframes and
+expressions, implicit transitions such as <code>.OpacityTransition()</code> compare their
+duration (and axes, for scale and translation), <code>.WithTransitions()</code> compares
+each theme transition's settings, and <code>.InteractionStates()</code> compares solid
+brushes by color and opacity. Other brushes, a <code>.ScrollLinked()</code> driven by a
+different <code>ScrollViewer</code>, a continuum navigation transition, and a transition
+type Reactor doesn't know still count as a change.</p>
 <h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
