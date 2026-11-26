@@ -346,6 +346,9 @@ point of return: stop and ship.
   helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
   gates scan it), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
+  Declare the field and its skip-gate comparison in `ModifierFieldContractTests.Fields`
+  (`tests/Reactor.Tests`), which checks `Merge` and both skip-equality modes for every field,
+  and update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067 layer 0).
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via
   `EnforceCodeStyleInBuild`), so an `object` gate fails the Release build. Keep `object` only
