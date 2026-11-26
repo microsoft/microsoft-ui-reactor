@@ -122,6 +122,39 @@ public class ModifierApplyOrderTests
         Assert.True(ReadAccessibilityApplyOrder().Count >= 12);
     }
 
+    [Fact]
+    public void A_Repeated_Helper_Call_Or_Handoff_Changes_The_Walk()
+    {
+        // Synthetic ApplyModifiers: a family helper and a handoff, each called twice. If the walk
+        // collapsed repeats, a second typography pass or handler wiring added after the lifecycle
+        // callbacks would leave the frozen list unchanged.
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText("""
+            class R
+            {
+                void ApplyModifiers(object fe, object oldM, object m)
+                {
+                    ApplyFontModifiers(fe, oldM, m);
+                    Events.ApplyEventHandlers(fe, oldM, m);
+                    var x = m.OnMountAction;
+                    ApplyFontModifiers(fe, oldM, m);
+                    Events.ApplyEventHandlers(fe, oldM, m);
+                }
+                void ApplyFontModifiers(object fe, object oldM, object m)
+                {
+                    if (m.FontSize != null && m.FontSize != oldM) { }
+                }
+            }
+            """, cancellationToken: TestContext.Current.CancellationToken);
+        var methods = tree.GetRoot(TestContext.Current.CancellationToken).DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .ToDictionary(method => method.Identifier.Text, StringComparer.Ordinal);
+
+        var order = ReadOrder(methods["ApplyModifiers"], "m", methods);
+
+        Assert.Equal(
+            ["FontSize", "→ApplyEventHandlers", "OnMountAction", "FontSize", "→ApplyEventHandlers"],
+            order);
+    }
+
     internal static List<string> ReadApplyOrder()
     {
         // ApplyModifiers has a mount overload without oldM that forwards to the main one.
@@ -129,8 +162,14 @@ public class ModifierApplyOrderTests
             .Where(m => m.ParameterList.Parameters.Any(p => p.Identifier.Text == "oldM"))
             .GroupBy(m => m.Identifier.Text)
             .ToDictionary(g => g.Key, g => g.Single(), StringComparer.Ordinal);
+        return ReadOrder(family[ReconcilerSource.ApplyModifiersName], "m", family);
+    }
+
+    /// <summary>The walk itself, over any entry method and family, for the synthetic-source tests.</summary>
+    internal static List<string> ReadOrder(MethodDeclarationSyntax entry, string bag, IReadOnlyDictionary<string, MethodDeclarationSyntax> family)
+    {
         var order = new List<string>();
-        Walk(family[ReconcilerSource.ApplyModifiersName], "m", family, order, new HashSet<string>(StringComparer.Ordinal));
+        Walk(entry, bag, family, order);
         return order;
     }
 
@@ -140,13 +179,17 @@ public class ModifierApplyOrderTests
     private static List<string> ReadFields(MethodDeclarationSyntax method, string bag)
     {
         var order = new List<string>();
-        Walk(method, bag, new Dictionary<string, MethodDeclarationSyntax>(), order, new HashSet<string>(StringComparer.Ordinal));
+        Walk(method, bag, new Dictionary<string, MethodDeclarationSyntax>(), order);
         return order.Where(o => !o.StartsWith('→')).ToList();
     }
 
+    // Field reads are deduplicated per walked method (an arm reads its field several times), but
+    // every helper call and every handoff is recorded each time it happens, so a second call to a
+    // helper or handler wiring, for example after the lifecycle callbacks, changes the list.
     private static void Walk(MethodDeclarationSyntax method, string bag, IReadOnlyDictionary<string, MethodDeclarationSyntax> family,
-        List<string> order, HashSet<string> seen)
+        List<string> order)
     {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         SyntaxNode body = (SyntaxNode?)method.Body ?? method.ExpressionBody!;
         bool ShouldDescend(SyntaxNode node) => !DeclaresParameter(node, bag);
 
@@ -171,10 +214,9 @@ public class ModifierApplyOrderTests
                     break;
                 case InvocationExpressionSyntax invocation when ReconcilerSource.InvokedName(invocation) is { } name:
                     if (family.TryGetValue(name, out var helper))
-                        Walk(helper, bag, family, order, seen);
+                        Walk(helper, bag, family, order);
                     else if ((ReconcilerSource.IsBagHandoff(invocation)
-                              || invocation.ArgumentList.Arguments.Any(a => a.Expression is IdentifierNameSyntax id && derived.Contains(id.Identifier.Text)))
-                             && seen.Add("→" + name))
+                              || invocation.ArgumentList.Arguments.Any(a => a.Expression is IdentifierNameSyntax id && derived.Contains(id.Identifier.Text))))
                         order.Add("→" + name);
                     break;
             }
