@@ -2,7 +2,7 @@
 
 The reconciler diffs old and new element trees and patches the real WinUI control tree.
 
-Split across partial classes: - Reconciler.cs — orchestration, children, unmount, helpers - Reconciler.Mount.cs — Mount() dispatch + per-control MountXxx methods - Reconciler.Update.cs — Update() dispatch + per-control UpdateXxx methods
+Split across partial classes, one file per concern, so unrelated changes don't collide: - Reconciler.cs — orchestration: Reconcile entry, components, children, CanUpdate - Reconciler.Mount.cs — Mount() dispatch + composition-primitive handlers - Reconciler.Update.cs — Update() dispatch + composition-primitive handlers - Reconciler.\*.cs — one topic each (Modifiers, Keyframes, Transitions, ThemeBindings, Events, Unmount, ReactorState, ...); add code to the matching file
 
 ```csharp
 public sealed class Reconciler : IDisposable
