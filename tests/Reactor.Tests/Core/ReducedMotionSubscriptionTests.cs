@@ -201,6 +201,24 @@ public sealed class ReducedMotionSubscriptionTests
             .Single(a => a.IsKind(SyntaxKind.AddAssignmentExpression));
 
     /// <summary>
+    /// Before 19041 the notification doesn't exist, and an unchanged element skips its update,
+    /// so the reconciler's root pass polls the setting instead (issue #1702). Structural for the
+    /// same reason as the rest of this class: this machine has the notification.
+    /// </summary>
+    [Fact]
+    public void RootPass_PollsTheSetting_WhenTheNotificationIsMissing()
+    {
+        var polls = Method("Core/Reconciler.cs", "BeginRootPass").DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(i => i.Expression.ToString().EndsWith("TransitionEngine.PollAnimationsEnabled", global::System.StringComparison.Ordinal))
+            .ToArray();
+
+        var poll = Assert.Single(polls);
+        var guard = poll.Ancestors().OfType<IfStatementSyntax>().First();
+        Assert.Equal("!UiSettingsCapabilities.HasAnimationsEnabledChanged", guard.Condition.ToString());
+    }
+
+    /// <summary>
     /// The polarity check above is the whole value of that test, so it needs a case it
     /// answers "no" to. A mention-only check (<c>Condition.ToString().Contains(...)</c>)
     /// passes all four of these.

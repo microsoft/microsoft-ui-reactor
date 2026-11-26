@@ -272,6 +272,18 @@ internal static class AnimateModifierTests
             Microsoft.UI.Reactor.Navigation.TransitionEngine.RefreshHostsForAnimationsChange();
             await Harness.Render();
             H.Check("RebuiltExtras_MotionOnRestoresKey", HasKey());
+
+            // Before Windows 10 2004 there's no notification, so each root pass polls the setting
+            // instead. This machine has the notification, so the fixture drives the poll itself.
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.PollAnimationsEnabled();
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(false);
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.PollAnimationsEnabled();
+            await Harness.Render();
+            H.Check("RebuiltExtras_MotionPollOffDropsKey", !HasKey());
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.PollAnimationsEnabled();
+            await Harness.Render();
+            H.Check("RebuiltExtras_MotionPollOnRestoresKey", HasKey());
         }
 
         private Element Wrap(Element element) => childSkip ? VStack(element) : element;

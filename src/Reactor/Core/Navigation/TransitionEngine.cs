@@ -279,6 +279,22 @@ internal static class TransitionEngine
     private static void OnAnimationsEnabledChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
         => RefreshHostsForAnimationsChange();
 
+    // The setting at the last poll: -1 before the first, then 0 or 1.
+    private static int _polledAnimationsEnabled = -1;
+
+    /// <summary>
+    /// Where the change notification doesn't exist (before Windows 10 2004), each host's root
+    /// pass calls this, and a setting that moved since the last poll refreshes every host. The
+    /// first poll only records the value. UI thread.
+    /// </summary>
+    internal static void PollAnimationsEnabled()
+    {
+        int now = AnimationsEnabled ? 1 : 0;
+        int before = global::System.Threading.Interlocked.Exchange(ref _polledAnimationsEnabled, now);
+        if (before >= 0 && before != now)
+            RefreshHostsForAnimationsChange();
+    }
+
     /// <summary>
     /// Asks every live host for a pass that skips no element, so implicit transitions are
     /// applied again under the current setting. Any thread. Internal so a selftest can drive
