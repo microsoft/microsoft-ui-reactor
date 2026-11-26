@@ -240,14 +240,64 @@ public sealed partial class Reconciler
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
         // unnecessary sets is critical for large element counts.
+        //
+        // Each family helper below owns a set/unset arm pair per modifier, and the calls keep
+        // the statement order of the pre-split body. Keep it unless you have a reason: at least
+        // RequestedTheme must come before anything theme-resolved, and the OnMount/OnUpdate
+        // callbacks must run after the property writes they may override. Add a new modifier's
+        // arms to the helper for its family, or add a new `Apply…Modifier(s)(fe, oldM, m, …)`
+        // helper at the point in the sequence where its writes belong. The source gates in
+        // Reactor.Tests scan every helper with that name and signature (ReconcilerSource.ApplyModifiersFamily).
+        ApplyRequestedThemeModifier(fe, oldM, m);
+        ApplyMarginModifiers(fe, oldM, m, ownsControl);
+        ApplyPaddingModifiers(fe, oldM, m, ownsControl);
+        ApplySizeAndAlignmentModifiers(fe, oldM, m);
+        ApplyOpacityTransformAndVisibilityModifiers(fe, oldM, m);
+        ApplyToolTipAndFlyoutModifiers(fe, oldM, m, requestRerender);
+        ApplyIsEnabledModifier(fe, oldM, m);
+        ApplyBorderModifiers(fe, oldM, m, ownsControl);
+        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground);
+        ApplyAutomationAndFocusModifiers(fe, oldM, m);
 
+        // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
+        var a11y = m.Accessibility;
+        var oldA11y = oldM?.Accessibility;
+        if (a11y is not null || oldA11y is not null)
+            ApplyAccessibilityModifiers(fe, oldA11y, a11y);
+
+        ApplyTypographyModifiers(fe, oldM, m);
+
+        // ── Declarative event handlers ────────────────────────────
+        // Detach previous handler (if any) before attaching new one.
+        // Handlers are stored in Tag via a wrapper so we can find them for detach.
+        ApplyEventHandlers(fe, oldM, m);
+
+        // Gesture recognizers (.OnPan / .OnPinch / .OnRotate)
+        ApplyGestureHandlers(fe, oldM, m);
+
+        // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
+        ApplyDragDropHandlers(fe, oldM, m);
+
+        ApplyLifecycleCallbackModifiers(fe, oldM, m);
+        ApplyRefModifier(fe, oldM, m);
+
+        ApplyModifierReferenceEdges(fe, oldM, m);
+    }
+
+    /// <summary>RequestedTheme.</summary>
+    private static void ApplyRequestedThemeModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         // RequestedTheme must be set BEFORE ApplyThemeBindings so that ThemeRef
         // bindings resolve against the correct theme variant.
         if (m.RequestedTheme.HasValue && m.RequestedTheme != oldM?.RequestedTheme)
             fe.RequestedTheme = m.RequestedTheme.Value;
         else if (!m.RequestedTheme.HasValue && oldM?.RequestedTheme.HasValue == true)
             fe.ClearValue(FrameworkElement.RequestedThemeProperty);
+    }
 
+    /// <summary>Margin with its BiDi-aware inline overlay (MarginInlineStart/End).</summary>
+    private static void ApplyMarginModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool ownsControl)
+    {
         // Apply physical margin, then overlay logical (BiDi-aware) inline margin.
         // The previous render's physical margin is only carried forward as the *base*
         // for that overlay — folding it into resolvedMargin unconditionally would make
@@ -273,7 +323,7 @@ public sealed partial class Reconciler
         // Unset goes through ClearValue, never through "write the DP default". A local
         // value outranks every Style setter in WinUI's precedence order, so assigning the
         // default would not restore the styled value — it would permanently override it
-        // (issue #952). Same rule for every reset arm below.
+        // (issue #952). Same rule for every reset arm in the helpers that follow.
         // The value guard compares against the previous *physical* margin, so dropping or
         // changing an inline edge while the physical margin stays put would resolve back to
         // the old value and skip the write, stranding the previous render's inline edge on
@@ -286,7 +336,11 @@ public sealed partial class Reconciler
         if (resolvedMargin.HasValue && (resolvedMargin != oldM?.Margin || marginInlineChanged)) fe.Margin = resolvedMargin.Value;
         else if (!resolvedMargin.HasValue && (oldM?.Margin.HasValue == true || oldM?.MarginInlineStart.HasValue == true || oldM?.MarginInlineEnd.HasValue == true))
             fe.ClearValue(FrameworkElement.MarginProperty);
+    }
 
+    /// <summary>Padding with its BiDi-aware inline overlay (PaddingInlineStart/End).</summary>
+    private static void ApplyPaddingModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool ownsControl)
+    {
         // Apply physical padding, then overlay logical (BiDi-aware) inline padding.
         //
         // `resolvedPadding` falls back to the OLD padding so the inline overlay has a base for
@@ -323,7 +377,7 @@ public sealed partial class Reconciler
             if (ownsControl && prevPadOverlay != padOverlay)
                 GetOrCreateInlineOverlays(fe).Padding = padOverlay;
         }
-        // Same inline-delta rule as Margin above.
+        // Same inline-delta rule as Margin (ApplyMarginModifiers).
         var paddingInlineChanged = m.PaddingInlineStart != oldM?.PaddingInlineStart
             || m.PaddingInlineEnd != oldM?.PaddingInlineEnd
             || (prevPadOverlay is { } pp && pp.Written != resolvedPadding);
@@ -341,7 +395,7 @@ public sealed partial class Reconciler
             // Clear rather than write a local `new Thickness(0)`: a zero local wins over the
             // control's style/template, so a Button that dropped `.Padding(...)` would flush to
             // nothing instead of returning to its themed padding. This is the `Padding` half of
-            // issue #952; the sizing/alignment arms below now follow the same rule.
+            // issue #952; the sizing/alignment arms (ApplySizeAndAlignmentModifiers) follow the same rule.
             if (fe is WinUI.Control padCtrl) padCtrl.ClearValue(WinUI.Control.PaddingProperty);
             else if (fe is WinUI.Border padBdr) padBdr.ClearValue(WinUI.Border.PaddingProperty);
             else if (fe is WinUI.StackPanel padSp) padSp.ClearValue(WinUI.StackPanel.PaddingProperty);
@@ -349,6 +403,11 @@ public sealed partial class Reconciler
             else if (fe is WinUI.RelativePanel padRelative) padRelative.ClearValue(WinUI.RelativePanel.PaddingProperty);
             else if (fe is WinUI.TextBlock padTb) padTb.ClearValue(WinUI.TextBlock.PaddingProperty);
         }
+    }
+
+    /// <summary>Width/Height, Min/Max sizes, and the (content) alignments.</summary>
+    private static void ApplySizeAndAlignmentModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         if (m.Width.HasValue && m.Width != oldM?.Width) fe.Width = m.Width.Value;
         else if (!m.Width.HasValue && oldM?.Width.HasValue == true) fe.ClearValue(FrameworkElement.WidthProperty);
         if (m.Height.HasValue && m.Height != oldM?.Height) fe.Height = m.Height.Value;
@@ -377,6 +436,11 @@ public sealed partial class Reconciler
             else if (!m.VerticalContentAlignment.HasValue && oldM?.VerticalContentAlignment.HasValue == true)
                 contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
+    }
+
+    /// <summary>Opacity, the facade transforms (Scale, Rotation, Translation, TransformOrigin, CenterPoint), and IsVisible.</summary>
+    private void ApplyOpacityTransformAndVisibilityModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
             AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
@@ -433,6 +497,11 @@ public sealed partial class Reconciler
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;
         else if (!m.IsVisible.HasValue && oldM?.IsVisible.HasValue == true)
             fe.ClearValue(UIElement.VisibilityProperty);
+    }
+
+    /// <summary>ToolTip/RichToolTip, ToolTipPlacement, AttachedFlyout, and ContextFlyout.</summary>
+    private void ApplyToolTipAndFlyoutModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
+    {
         if (m.RichToolTip is not null)
         {
             var oldTipEl = oldM?.RichToolTip;
@@ -471,13 +540,21 @@ public sealed partial class Reconciler
         }
         else if (oldM?.ContextFlyout is not null)
             fe.ClearValue(UIElement.ContextFlyoutProperty);
+    }
 
+    /// <summary>IsEnabled.</summary>
+    private static void ApplyIsEnabledModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         // IsEnabled (on Control)
         if (m.IsEnabled.HasValue && m.IsEnabled != oldM?.IsEnabled && fe is WinUI.Control enCtrl)
             enCtrl.IsEnabled = m.IsEnabled.Value;
         else if (!m.IsEnabled.HasValue && oldM?.IsEnabled.HasValue == true && fe is WinUI.Control enCtrl2)
             enCtrl2.ClearValue(WinUI.Control.IsEnabledProperty);
+    }
 
+    /// <summary>CornerRadius, BorderBrush, and BorderThickness with its BiDi-aware inline overlay (BorderInlineStart).</summary>
+    private void ApplyBorderModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool ownsControl)
+    {
         // CornerRadius (on Control, Border, Grid, StackPanel, and RelativePanel)
         if (m.CornerRadius.HasValue && m.CornerRadius != oldM?.CornerRadius)
         {
@@ -550,7 +627,7 @@ public sealed partial class Reconciler
             if (ownsControl && prevBorderOverlay != borderOverlay)
                 GetOrCreateInlineOverlays(fe).Border = borderOverlay;
         }
-        // Same inline-delta rule as Margin/Padding above; the reset arm likewise has to fire
+        // Same inline-delta rule as Margin/Padding; the reset arm likewise has to fire
         // when the old bag carried only an inline border, or that edge is never released.
         var borderInlineChanged = m.BorderInlineStart != oldM?.BorderInlineStart
             || (prevBorderOverlay is { } pb2 && pb2.Written != resolvedBorder);
@@ -570,7 +647,11 @@ public sealed partial class Reconciler
             else if (fe is WinUI.StackPanel btStack) btStack.ClearValue(WinUI.StackPanel.BorderThicknessProperty);
             else if (fe is WinUI.RelativePanel btRelative) btRelative.ClearValue(WinUI.RelativePanel.BorderThicknessProperty);
         }
+    }
 
+    /// <summary>Background and Foreground.</summary>
+    private static void ApplyBackgroundAndForegroundModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool keepRemovedBackground)
+    {
         // Background (Panel, Control, or Border)
         if (m.Background is not null && !ReferenceEquals(m.Background, oldM?.Background))
         {
@@ -596,7 +677,11 @@ public sealed partial class Reconciler
             if (fe is WinUI.Control fgCtrl) fgCtrl.ClearValue(WinUI.Control.ForegroundProperty);
             else if (fe is TextBlock fgTb) fgTb.ClearValue(TextBlock.ForegroundProperty);
         }
+    }
 
+    /// <summary>AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.</summary>
+    private static void ApplyAutomationAndFocusModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         // AutomationProperties.Name
         if (m.AutomationName is not null && m.AutomationName != oldM?.AutomationName)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, m.AutomationName);
@@ -620,7 +705,7 @@ public sealed partial class Reconciler
         // reusing `ctrl`: reaching the `else` only proves the whole set condition was false,
         // which a non-Control satisfies while still having the modifier set. Without the
         // re-test a Border that carries `.SoundMode(...)` would take the reset branch and
-        // clear a property it never had. Same shape as IsEnabled above (issue #986).
+        // clear a property it never had. Same shape as IsEnabled (ApplyIsEnabledModifier, issue #986).
         if (m.ElementSoundMode.HasValue && m.ElementSoundMode != oldM?.ElementSoundMode && fe is WinUI.Control ctrl)
             ctrl.ElementSoundMode = m.ElementSoundMode.Value;
         else if (!m.ElementSoundMode.HasValue && oldM?.ElementSoundMode.HasValue == true && fe is WinUI.Control ctrlSnd)
@@ -656,13 +741,11 @@ public sealed partial class Reconciler
             fe.XYFocusKeyboardNavigation = m.XYFocusKeyboardNavigation.Value;
         else if (!m.XYFocusKeyboardNavigation.HasValue && oldM?.XYFocusKeyboardNavigation.HasValue == true)
             fe.ClearValue(UIElement.XYFocusKeyboardNavigationProperty);
+    }
 
-        // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
-        var a11y = m.Accessibility;
-        var oldA11y = oldM?.Accessibility;
-        if (a11y is not null || oldA11y is not null)
-            ApplyAccessibilityModifiers(fe, oldA11y, a11y);
-
+    /// <summary>FontFamily, FontSize, and FontWeight.</summary>
+    private static void ApplyTypographyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         // ── Typography (FontFamily, FontSize, FontWeight) ──────────
         if (m.FontFamily is not null && !ReferenceEquals(m.FontFamily, oldM?.FontFamily))
         {
@@ -694,18 +777,11 @@ public sealed partial class Reconciler
             if (fe is WinUI.Control fwCtrl) fwCtrl.ClearValue(WinUI.Control.FontWeightProperty);
             else if (fe is TextBlock fwTb) fwTb.ClearValue(TextBlock.FontWeightProperty);
         }
+    }
 
-        // ── Declarative event handlers ────────────────────────────
-        // Detach previous handler (if any) before attaching new one.
-        // Handlers are stored in Tag via a wrapper so we can find them for detach.
-        ApplyEventHandlers(fe, oldM, m);
-
-        // Gesture recognizers (.OnPan / .OnPinch / .OnRotate)
-        ApplyGestureHandlers(fe, oldM, m);
-
-        // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
-        ApplyDragDropHandlers(fe, oldM, m);
-
+    /// <summary>OnMount, OnUpdate, and OnUnmount callbacks.</summary>
+    private void ApplyLifecycleCallbackModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         // OnMountAction — only run on initial mount (oldM is null). Spec 066 §9 row 1: name the
         // modifier when WinUI rejects a facade write the callback makes after the handoff; the
         // filter returns false, so the exception is unchanged.
@@ -753,7 +829,11 @@ public sealed partial class Reconciler
             unmountState.UnmountAction = null;
             unmountState.UnmountActionOwner = null;
         }
+    }
 
+    /// <summary>The element ref (.Ref).</summary>
+    private static void ApplyRefModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
         // Element ref — populate on mount/update so imperative APIs (FocusManager.Focus)
         // can target the mounted control. Writing on every update is cheap (single field
         // write) and keeps the ref fresh when the pool recycles elements. When the ref is
@@ -775,7 +855,5 @@ public sealed partial class Reconciler
             newRef.SetCurrent(fe);
             AssertTypedRefMatch(newRef, fe);
         }
-
-        ApplyModifierReferenceEdges(fe, oldM, m);
     }
 }
