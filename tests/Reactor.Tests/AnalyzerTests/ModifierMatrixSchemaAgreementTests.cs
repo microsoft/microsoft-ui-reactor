@@ -32,6 +32,30 @@ public class ModifierMatrixSchemaAgreementTests
         }
     }
 
+    [Theory]
+    [InlineData("gated in both", "declare its arm shape in exactly one of SharedGate or InlineGates")]
+    [InlineData("gated in neither", "declare its arm shape in exactly one of SharedGate or InlineGates")]
+    [InlineData("ungated but declared", "Width is ungated, so it cannot be in SharedGate or InlineGates")]
+    [InlineData("declared out of range", "'HorizontalContentAlignment' is declared as gated but is not in the helper's slot range")]
+    [InlineData("reference-compared", "FontFamily compares by reference")]
+    [InlineData("reversed range", "must name slots in ModifierSchema.Slots, in that order")]
+    public void Reconciler_Emitter_Rejects_Undeclared_Shapes(string scenario, string expected)
+    {
+        var inline = new Dictionary<string, (string Set, string Clear)> { ["ElementSoundMode"] = ("a", "b") };
+        ModifierEmitter.GeneratedHelper helper = scenario switch
+        {
+            "gated in both" => new("H", "s", "ElementSoundMode", "ElementSoundMode", SharedGate: ("c", ["ElementSoundMode"]), InlineGates: inline),
+            "gated in neither" => new("H", "s", "ElementSoundMode", "ElementSoundMode"),
+            "ungated but declared" => new("H", "s", "Width", "Width", InlineGates: new Dictionary<string, (string Set, string Clear)> { ["Width"] = ("a", "b") }),
+            "declared out of range" => new("H", "s", "Width", "Width", SharedGate: ("c", ["HorizontalContentAlignment"])),
+            "reference-compared" => new("H", "s", "FontFamily", "FontFamily"),
+            "reversed range" => new("H", "s", "Height", "Width"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
+        };
+        var ex = Assert.Throws<InvalidOperationException>(() => ModifierEmitter.EmitReconcilerModifiers([helper]));
+        Assert.Contains(expected, ex.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Matrix_Has_One_Case_Per_Generated_Probe()
     {
