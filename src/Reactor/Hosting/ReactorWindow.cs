@@ -1876,7 +1876,10 @@ public sealed partial class ReactorWindow : IDisposable
     {
         if (_disposed) return;
         var spec = Spec;
-        if (spec.Level == WindowLevel.AlwaysOnTop && IsTopLevelChromeAllowed(spec) && !IsTopmostBitSet())
+        if (spec.Level != WindowLevel.AlwaysOnTop || !IsTopLevelChromeAllowed(spec)) return;
+        if (IsTopmostBitSet())
+            _warnedTopmostRefused = false; // granted some other way; the next refusal warns again
+        else
             ApplyWindowLevel(WindowLevel.AlwaysOnTop);
     }
 

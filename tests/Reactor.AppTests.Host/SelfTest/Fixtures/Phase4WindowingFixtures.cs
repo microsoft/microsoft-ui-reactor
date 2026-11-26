@@ -374,6 +374,24 @@ internal static class Phase4WindowingFixtures
                 H.Check("WindowLevel_RefusedTopmost_WarningRearmsOnLevelChange",
                     refusedAgain && Warnings == warningsBeforeLevelChange + 1);
 
+                // A grant made outside Reactor, observed on activation, re-arms it as well.
+                if (!Native.MakeTopmost(Hwnd(win), out _) || !TopmostBit(win))
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_WarningRearmsAfterNativeGrant",
+                        "issue #927: Windows refused a direct HWND_TOPMOST, so there is no native grant to observe");
+                }
+                else
+                {
+                    _ = Native.SendMessage(Hwnd(win), Native.WM_ACTIVATEAPP, 1, 0);
+                    Native.MakeNotTopmost(Hwnd(win));
+                    int warningsBeforeNativeGrant = Warnings;
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Native Grant" });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_WarningRearmsAfterNativeGrant",
+                        win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBeforeNativeGrant + 1);
+                }
+
                 // Another window activating reapplies the refused one, which stays inactive.
                 // win is still refused here, and opening `third` activates it.
                 third = await OpenAndSettle(new WindowSpec { Title = "Refused Topmost Third", Width = 260, Height = 180 });
