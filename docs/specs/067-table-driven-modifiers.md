@@ -844,6 +844,15 @@ merge, two-way skip equality, NaN per bucket), `ModifierApplyOrderTests` (frozen
 `ApplyModifiers` and `ApplyAccessibilityModifiers`, plus the §5 constraints) and the
 `ModifierFieldContract_BrushAndFont` selftest for the fields that can't run headless.
 
+Layer 1 is split in two PRs. The first adds `ModifierSchema` (`src/Reactor.Analyzers/Modifiers/`),
+moves the analyzer's common-modifier gates, `GateOnlyInReconciler` and poolable mirror onto it
+(`ModifierTableParitySnapshotTests` pins every `ModifierInfo` from before the move), points
+`ModifierFieldContractTests` and the `ControlGate` drift test at it, and adds
+`ModifierSchemaTests` (receivers and DPs exist and match `ApplyModifiers` and the `ThemeRef`
+path, slot order matches the frozen apply order, composition flags, fluent names).
+`ModifierGateSource` reads gate arguments from both files. The second adds
+`tools/Reactor.ModifierGen`, the typed probe table and the §10.2 matrix selftest.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

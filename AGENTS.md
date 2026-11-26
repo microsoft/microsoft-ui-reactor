@@ -346,12 +346,14 @@ point of return: stop and ship.
   helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
   gates scan it), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
-  Declare the field and its skip-gate comparison in `ModifierFieldContractTests.Fields`
-  (`tests/Reactor.Tests`), which checks `Merge` and both skip-equality modes for every headless
-  field. A `Brush` or `FontFamily` field runs in the `ModifierFieldContract_BrushAndFont` selftest
-  instead: add it to `ModifierFieldContractSelfTestFields` and a `CheckField` line in
-  `ModifierFieldContractFixture`. Update `ModifierApplyOrderTests.FrozenOrder` where its arm
-  lands (spec 067 layer 0).
+  Declare the field in `ModifierSchema.Slots` (`src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`)
+  at its apply position, with its bucket, receivers, skip-gate comparison and analyzer gates.
+  `ModifierFieldContractTests` checks `Merge` and both skip-equality modes against it for every
+  headless field, and `ModifierSchemaTests` checks its receivers, order and fluent names against
+  the reconciler; the analyzer's `ModifierTable` reads its gates from it. A `Brush` or
+  `FontFamily` field runs in the `ModifierFieldContract_BrushAndFont` selftest instead: add it to
+  `ModifierFieldContractSelfTestFields` and a `CheckField` line in `ModifierFieldContractFixture`.
+  Update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067).
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via
   `EnforceCodeStyleInBuild`), so an `object` gate fails the Release build. Keep `object` only

@@ -631,19 +631,23 @@ public class ModifierTableIntegrityTests
         // WIDE makes the analyzer suggest a modifier the reconciler never writes (the rewrite
         // compiles and does nothing — the ValueList/CellComponent regression), while one that
         // is too NARROW just drops diagnostics. Nothing else notices either, so pin the copy
-        // to its source.
+        // to its source. Since spec 067 layer 1 the gate is declared on the ModifierSchema slot
+        // (AnalyzerControlGate) and ModifierTable reads it from there.
         var actualGates = ReadApplyModifierControlGates();
         var problems = new List<string>();
+        var compared = 0;
 
-        foreach (var (prop, info) in ModifierTable.Properties)
+        foreach (var slot in Microsoft.UI.Reactor.Analyzers.Modifiers.ModifierSchema.Slots)
         {
-            if (info.ControlGate is not { } declared)
+            if (slot.AnalyzerControlGate is not { } declared)
                 continue;
+            var prop = slot.Name;
+            compared++;
 
             if (!actualGates.TryGetValue(prop, out var actual))
             {
                 problems.Add(
-                    $"{prop}: ModifierTable declares a control gate [{string.Join("|", declared)}], " +
+                    $"{prop}: ModifierSchema declares an analyzer control gate [{string.Join("|", declared)}], " +
                     "but ApplyModifiers has no 'fe is <Type>' test guarded by 'm." + prop + "'");
                 continue;
             }
@@ -651,14 +655,15 @@ public class ModifierTableIntegrityTests
             if (!actual.SetEquals(declared))
             {
                 problems.Add(
-                    $"{prop}: ModifierTable says [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
+                    $"{prop}: ModifierSchema says [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
                     $"but ApplyModifiers writes to [{string.Join("|", actual.OrderBy(t => t, StringComparer.Ordinal))}]");
             }
         }
 
+        Assert.True(compared >= 8, $"Only {compared} slots declare an analyzer control gate.");
         Assert.True(
             problems.Count == 0,
-            "ModifierTable.ControlGate has drifted from Reconciler.ApplyModifiers, which is the " +
+            "ModifierSchema's AnalyzerControlGate has drifted from Reconciler.ApplyModifiers, which is the " +
             "runtime authority for which controls a modifier is actually written to:\n  " +
             string.Join("\n  ", problems));
     }
@@ -847,7 +852,7 @@ public class ModifierTableIntegrityTests
     /// branch's string comparison names the property. The type tests or the shared foreground
     /// lookup supply its receiver gate.
     /// </summary>
-    private static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
+    internal static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
     {
         var method = ReconcilerSource.Methods("GetDependencyPropertyName").FirstOrDefault();
 
@@ -1193,7 +1198,7 @@ public class ModifierTableIntegrityTests
     /// the containment relationship exact, so this test fails on real drift instead of on
     /// reformatting.
     /// </remarks>
-    private static Dictionary<string, HashSet<string>> ReadApplyModifierControlGates()
+    internal static Dictionary<string, HashSet<string>> ReadApplyModifierControlGates()
     {
         // ApplyModifiers itself is an ordered sequence of per-family helper calls; the arms
         // live in those helpers, so read the whole family.
