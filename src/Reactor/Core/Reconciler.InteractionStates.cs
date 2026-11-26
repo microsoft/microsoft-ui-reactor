@@ -79,7 +79,7 @@ public sealed partial class Reconciler
 
     internal static void RestoreInteractionForeground(FrameworkElement element)
     {
-        if (_interactionTrackers.TryGetValue(element, out var tracker)
+        if (InteractionTrackerOf(element) is { } tracker
             && ForegroundModifier.GetProperty(element) is { } property)
             ApplyInteractionBrush(element, property, stateBrush: null,
                 ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
@@ -88,7 +88,7 @@ public sealed partial class Reconciler
     internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement)
     {
         // Leave the visible state brush in place while it still owns the local value.
-        if (!_interactionTrackers.TryGetValue(element, out var tracker)
+        if (InteractionTrackerOf(element) is not { } tracker
             || !tracker.ForegroundOverrideApplied
             || !ReferenceEquals(tracker.NormalForeground, previous)
             || ForegroundModifier.GetProperty(element) is not { } property
