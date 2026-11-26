@@ -373,7 +373,8 @@ internal static class ChildReconciler
                         || Reconciler.IsFlyoutDecorator(newEl)
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && (existingControl ??= children.Get(i)) is FrameworkElement fe)
                 {
                     reconciler.RefreshSkippedChildState(fe, oldEl, newEl);
@@ -660,7 +661,8 @@ internal static class ChildReconciler
                         || Reconciler.IsFlyoutDecorator(newEl)
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && map.At(prefixLen) < childCount
                     && (existingControl ??= map.ControlAt(prefixLen)) is FrameworkElement fe)
                 {
@@ -714,7 +716,8 @@ internal static class ChildReconciler
                         || Reconciler.IsFlyoutDecorator(newEl)
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && map.At(oldIdx) >= 0
                     && map.At(oldIdx) < childCount
                     && (existingControl ??= map.ControlAt(oldIdx)) is FrameworkElement fe)

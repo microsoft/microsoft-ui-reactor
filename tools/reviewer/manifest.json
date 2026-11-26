@@ -112,6 +112,20 @@
       "description": "Yoga value types, enums, and layout results \u2014 data integrity"
     },
     {
+      "id": "safety-batch-6",
+      "agent": "safety",
+      "files": [
+        "src/Reactor/Core/Reconciler.ReactorState.cs",
+        "src/Reactor/Core/Reconciler.Pooling.cs",
+        "src/Reactor/Core/Reconciler.Unmount.cs",
+        "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
+        "src/Reactor/Core/Reconciler.Context.cs",
+        "src/Reactor/Core/Reconciler.Keyframes.cs",
+        "src/Reactor/Core/Reconciler.InteractionStates.cs"
+      ],
+      "description": "Reconciler partials \u2014 per-control state, pooling, teardown, context replay, process-wide animation state"
+    },
+    {
       "id": "lifecycle-batch-1",
       "agent": "lifecycle",
       "files": [
@@ -274,6 +288,21 @@
         "src/Reactor/Core/Localization/NumberFormatOptions.cs"
       ],
       "description": "Localization format option types"
+    },
+    {
+      "id": "lifecycle-batch-13",
+      "agent": "lifecycle",
+      "files": [
+        "src/Reactor/Core/Reconciler.Unmount.cs",
+        "src/Reactor/Core/Reconciler.ExitTransitions.cs",
+        "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
+        "src/Reactor/Core/Reconciler.Pooling.cs",
+        "src/Reactor/Core/Reconciler.Registration.cs",
+        "src/Reactor/Core/Reconciler.Navigation.cs",
+        "src/Reactor/Core/Reconciler.Flyouts.cs",
+        "src/Reactor/Core/Reconciler.ReactorState.cs"
+      ],
+      "description": "Reconciler partials \u2014 unmount, exit transitions, error-boundary rollback, registration, navigation, flyouts"
     },
     {
       "id": "interop-batch-1",
@@ -1311,6 +1340,59 @@
         "tests/cmd_perf/CmdPerf.XamlCmd/CmdPerf.XamlCmd.csproj"
       ],
       "description": "Remaining perf bench and cmd perf project files"
+    },
+    {
+      "id": "general-batch-33",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/Reconciler.Modifiers.cs",
+        "src/Reactor/Core/Reconciler.Events.cs",
+        "src/Reactor/Core/Reconciler.ThemeBindings.cs",
+        "src/Reactor/Core/Reconciler.Accessibility.cs",
+        "src/Reactor/Core/Reconciler.ReferenceEdges.cs",
+        "src/Reactor/Core/Reconciler.Flyouts.cs",
+        "src/Reactor/Core/Reconciler.Registration.cs"
+      ],
+      "description": "Reconciler partials \u2014 modifiers, event trampolines, theme bindings, accessibility, reference edges"
+    },
+    {
+      "id": "general-batch-34",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/Reconciler.Keyframes.cs",
+        "src/Reactor/Core/Reconciler.Transitions.cs",
+        "src/Reactor/Core/Reconciler.InteractionStates.cs",
+        "src/Reactor/Core/Reconciler.ConnectedAnimations.cs",
+        "src/Reactor/Core/Reconciler.ExitTransitions.cs"
+      ],
+      "description": "Reconciler partials \u2014 animations, transitions, interaction states"
+    },
+    {
+      "id": "general-batch-35",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/Reconciler.ReactorState.cs",
+        "src/Reactor/Core/Reconciler.Pooling.cs",
+        "src/Reactor/Core/Reconciler.Unmount.cs",
+        "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
+        "src/Reactor/Core/Reconciler.Context.cs",
+        "src/Reactor/Core/Reconciler.SourcePublishing.cs",
+        "src/Reactor/Core/Reconciler.Navigation.cs"
+      ],
+      "description": "Reconciler partials \u2014 per-control state, pooling, unmount, context, diagnostics source publishing"
+    },
+    {
+      "id": "general-batch-36",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/Reconciler.Gestures.cs",
+        "src/Reactor/Core/Reconciler.DragDrop.cs",
+        "src/Reactor/Core/Reconciler.KeyedItemsBinding.cs",
+        "src/Reactor/Core/Reconciler.RichTextScrollAnchor.cs",
+        "src/Reactor/Core/Reconciler.Diagnostics.cs",
+        "src/Reactor/Core/V1Protocol/Reconciler.TemplatedTree.cs"
+      ],
+      "description": "Reconciler partials \u2014 gestures, drag and drop, keyed items binding, rich text scroll anchor, diagnostics"
     }
   ]
 }

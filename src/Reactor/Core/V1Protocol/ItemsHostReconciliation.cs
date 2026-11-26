@@ -108,7 +108,8 @@ internal static class ItemsHostReconciliation
                                 || Reconciler.IsFlyoutDecorator(child)
                                 || Reconciler.HasGestureOrDragSlots(oldChild.Modifiers)
                                 || Reconciler.HasGestureOrDragSlots(child.Modifiers)
-                                || Reconciler.CallSiteChangedOnSkip(oldChild, child))
+                                || Reconciler.CallSiteChangedOnSkip(oldChild, child)
+                                || Reconciler.KeyframesRebuiltOnSkip(oldChild, child))
                             && existing is FrameworkElement fe)
                         {
                             reconciler.RefreshSkippedChildState(fe, oldChild, child);

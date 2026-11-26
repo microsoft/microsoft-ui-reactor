@@ -294,6 +294,42 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         H.Check("TransformKeyframes_ScaleResetAfterEqualRender", loopingVisual.Scale == Vector3.One
             && loopingVisual.TryGetAnimationController("Scale") is null, $"scale={loopingVisual.Scale}");
 
+        // The same through a parent's child diff, which skips the child without calling Update.
+        using (var childReconciler = new Reconciler())
+        {
+            Element current = VStack(animated);
+            var stack = (StackPanel)childReconciler.Mount(current, () => { })!;
+            H.SetContent(stack);
+            await Harness.Render();
+            var childVisual = ElementCompositionPreview.GetElementVisual(stack.Children[0]);
+            void Step(Element next)
+            {
+                var wrapped = VStack(next);
+                childReconciler.Update(current, wrapped, stack, () => { });
+                current = wrapped;
+            }
+            Step(initialScale);
+            Step(animated.Keyframes("pulse", 1, Pulse).Scale(2));
+            await Harness.Render();
+            var childController = childVisual.TryGetAnimationController("Scale");
+            H.Check("TransformKeyframes_ChildEqualRenderLoopStarted", childController is not null);
+            if (childController is not null)
+            {
+                childController.Pause();
+                childController.Progress = 0.5f;
+            }
+            int childSkippedBefore = childReconciler.DebugElementsSkipped;
+            Step(animated.Keyframes("pulse", 1, Pulse).Scale(2));
+            H.Check("TransformKeyframes_ChildEqualRenderSkipped", childReconciler.DebugElementsSkipped == childSkippedBefore + 1);
+            Step(animated.Keyframes("pulse", 1, Pulse));
+            Step(plainTarget);
+            H.Check("TransformKeyframes_ChildScaleResetAfterEqualRender", childVisual.Scale == Vector3.One
+                && childVisual.TryGetAnimationController("Scale") is null, $"scale={childVisual.Scale}");
+            childReconciler.UnmountChild(stack);
+        }
+        H.SetContent(loopingTarget);
+        await Harness.Render();
+
         loopingReconciler.Update(plainTarget, scaled, loopingTarget, () => { });
         var restarted = loopingVisual.TryGetAnimationController("Scale");
         if (restarted is not null)

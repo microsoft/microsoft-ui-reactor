@@ -180,6 +180,7 @@ public sealed partial class Reconciler
             // (no-op for every other control or a decorator sharing it, and
             // allocation-free when nothing changed).
             RefreshContextCaptureOnSkip(control, newEl, effectiveTheme);
+            RetargetKeyframeOwnersOnSkip(control, oldEl, newEl);
             // No validation refresh here, deliberately (issue #1262). A `.Validate()`
             // verdict is republished only by a component that re-rendered, and that
             // component's output is on the dirty ancestor path, which this arm declines
