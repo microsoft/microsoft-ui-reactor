@@ -178,7 +178,7 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
         "Use the Reactor modifier instead of .Set";
 
     private static readonly LocalizableString ModifierAvailableMessageFormat =
-        "A '{1}' modifier exists for '{0}'. Prefer it over '.Set(...)', which re-runs every render, is never unwound, and keeps the element on the reconciler's update path.";
+        "A '{1}' modifier exists for '{0}'. Prefer it over '.Set(...)', which re-runs every render and keeps the element on the reconciler's update path. Removing the callback alone leaves its previous writes in place.";
 
     private static readonly LocalizableString ModifierAvailableDescription =
         "Reactor exposes a fluent modifier for this property. Modifier values are stored on " +

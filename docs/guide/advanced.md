@@ -387,11 +387,10 @@ update, so set properties idempotently — don't accumulate event
 handlers. Use `.OnMount(...)` instead when you need a one-shot
 attachment.
 
-`.Set` bypasses the property-diff path in reconciliation — the
-reconciler doesn't know about state you write through the callback, so
-the next render that touches a real modifier will not unwind it. Treat
-`.Set` as one-way: you're driving the control, not letting Reactor
-manage it.
+`.Set(...)` writes directly to the control, outside Reactor's property
+diff. Removing the callback leaves its previous writes in place. A
+declarative modifier can still overwrite or clear the same property
+during reconciliation.
 
 ## `Optional<T>` and authority
 
@@ -924,11 +923,11 @@ Button("Save", onSave).Set(c => c.RequestedTheme = ElementTheme.Dark);
 
 The modifier participates in property diffing — the next render that
 removes the modifier clears the local value, handing the property back
-to whatever the style (or inheritance) supplies. `.Set` is
-imperative and one-way; the next render won't undo it. Prefer the
-modifier when one exists; reserve `.Set` for properties Reactor
-genuinely doesn't expose. The `REACTOR_THEME_003` analyzer catches this
-specific case for `RequestedTheme`; the same shape applies broadly.
+to whatever the style (or inheritance) supplies. Dropping a `.Set(...)`
+callback alone leaves its write in place. A declarative modifier can
+still overwrite or clear the same property. Reserve `.Set(...)` for
+properties without a modifier. The `REACTOR_THEME_003` analyzer catches
+this specific case for `RequestedTheme`.
 
 ## Tips
 
