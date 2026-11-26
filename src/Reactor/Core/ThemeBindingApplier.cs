@@ -22,7 +22,7 @@ using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 namespace Microsoft.UI.Reactor.Core;
 
 // Theme bindings (synthesized {ThemeResource} Styles), the style cache, and resource overrides.
-internal static class ThemeBindingApplier
+internal static partial class ThemeBindingApplier
 {
     // ── Style cache: avoids redundant XamlReader.Load() for identical theme binding sets ──
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Style> _styleCache = new();
@@ -546,15 +546,13 @@ internal static class ThemeBindingApplier
         _ => fe.GetType().Name,
     };
 
+    // The common-modifier rows (Background, Foreground, BorderBrush) are generated from the
+    // schema's Theme-role receivers (ThemeBindingApplier.Generated.cs, spec 067 layer 2); the
+    // element-specific rows stay here.
     private static string? GetDependencyPropertyName(FrameworkElement fe, string property)
     {
-        if (property == "Background" && (fe is WinUI.Panel || fe is WinUI.Control || fe is WinUI.Border))
-            return "Background";
-        if (property == "Foreground" && ForegroundModifier.GetProperty(fe) is not null)
-            return "Foreground";
-        if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
-            || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
-            return "BorderBrush";
+        if (GetModifierDependencyPropertyName(fe, property) is { } modifierProperty)
+            return modifierProperty;
         if (property == "PaneBackground" && fe is WinUI.SplitView)
             return "PaneBackground";
         return null;

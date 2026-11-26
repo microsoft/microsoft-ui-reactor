@@ -349,8 +349,12 @@ point of return: stop and ship.
   Declare the field in `ModifierSchema.Slots` (`src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`)
   at its apply position, with its bucket, receivers, skip-gate comparison and analyzer gates.
   Skip equality (`ModifierEquality`) and the four `Merge` bodies are generated from the slot into
-  `Element.Modifiers.Generated.cs`: run `dotnet run --project tools/Reactor.ModifierGen` and add
-  its `ModifierSkipPolicySnapshotTests.Frozen` row (never hand-edit the generated file).
+  `Element.Modifiers.Generated.cs`, and so are `AppliedModifierMap.Entries` and the ThemeRef rows of
+  `GetDependencyPropertyName`: run `dotnet run --project tools/Reactor.ModifierGen` and add its
+  `ModifierSkipPolicySnapshotTests.Frozen` row (never hand-edit a generated file). A field that
+  writes a property also goes in `ModifierSchema.AppliedReportOrder` (the generator throws without
+  it) and gets an `AppliedModifierMapSnapshotTests.Frozen` row; a non-DP target is declared with
+  `.Report(target: …)`.
   `ModifierFieldContractTests` checks `Merge` and both skip-equality modes against it for every
   headless field, and `ModifierSchemaTests` checks its receivers, order, types and write
   equality against the reconciler and its fluent names against the public extensions. A simple,

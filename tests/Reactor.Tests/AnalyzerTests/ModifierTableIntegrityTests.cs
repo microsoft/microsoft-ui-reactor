@@ -877,9 +877,14 @@ public class ModifierTableIntegrityTests
 
         Assert.NotNull(method);
 
+        // Spec 067 layer 2: the common-modifier rows moved into the generated
+        // GetModifierDependencyPropertyName, which GetDependencyPropertyName calls first.
+        var generated = ReconcilerSource.Methods("GetModifierDependencyPropertyName").FirstOrDefault();
+        Assert.NotNull(generated);
+
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        foreach (var ifStatement in method!.DescendantNodes()
+        foreach (var ifStatement in new[] { method!, generated! }.SelectMany(m => m.DescendantNodes())
             .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.IfStatementSyntax>())
         {
             var property = ifStatement.Condition
@@ -941,7 +946,9 @@ public class ModifierTableIntegrityTests
         Assert.NotNull(root);
         var runtimeReceivers = ReadForegroundPropertyGate(ReadForegroundModifierSource(root!));
 
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.cs");
+        // Spec 067 layer 2: the owner helpers are generated from the schema; the runtime side,
+        // ForegroundModifier.GetProperty, stays hand-written, so this still compares two sources.
+        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.Generated.cs");
         var cancellationToken = TestContext.Current.CancellationToken;
         var source = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree
             .ParseText(File.ReadAllText(file), cancellationToken: cancellationToken)

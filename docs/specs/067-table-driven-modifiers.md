@@ -883,8 +883,17 @@ through `ModifierCallbacksEqual`. The emitter throws on a declaration that shape
 (for example a Layout slot that is not `Value`) instead of emitting different code. Because
 `ModifierFieldContractTests` reads the skip policy from the same schema, a frozen literal
 (`ModifierSkipPolicySnapshotTests`), captured while that test still checked the hand-written
-comparison, is the independent oracle. The second PR generates `AppliedModifierMap` and
-`GetDependencyPropertyName`'s modifier rows.
+comparison, is the independent oracle. The second PR generates `AppliedModifierMap.Entries` and
+its owner helpers (`AppliedModifierMap.Generated.cs`) and the common-modifier rows of
+`GetDependencyPropertyName` (`ThemeBindingApplier.Generated.cs`, read by the gate reader through
+`ReconcilerSource.HelperFiles`). Slots gained `ReportTarget` (the transform facades),
+`ReportSuppressedBy` (ToolTip under RichToolTip) and `ReportHandWritten` (AttachedFlyout's
+flyout-slot owner stays hand-written). A gated receiver reports as `<Receiver>.<Property>`, not
+`<DpOwner>.<Property>` as §4.2 sketched, because `TabIndex` reports `Control.TabIndex` today. The
+report order is pinned by `ModifierSchema.AppliedReportOrder`, so the diagnostics output kept its
+order, and `AppliedModifierMapSnapshotTests` freezes the map captured from the hand-written code.
+`GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` is kept, not deleted as §9
+planned: the brush apply arms stay hand-coded, so it still compares two independent sources.
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

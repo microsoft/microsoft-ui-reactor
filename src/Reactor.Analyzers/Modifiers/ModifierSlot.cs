@@ -179,6 +179,18 @@ internal sealed class ModifierSlot
     /// <summary>With <see cref="TakesVisualAtMount"/>: the value that does not take the visual.</summary>
     public string? IdentityValue { get; private set; }
 
+    /// <summary>
+    /// <c>AppliedModifierMap</c> target for a write that is not a DP on a receiver, e.g.
+    /// <c>Visual.RotationAngle</c> for <c>Rotation</c>. Null reports each Apply receiver.
+    /// </summary>
+    public string? ReportTarget { get; private set; }
+
+    /// <summary><c>AppliedModifierMap</c> reports nothing for this slot while the named slot is set (ToolTip under RichToolTip).</summary>
+    public string? ReportSuppressedBy { get; private set; }
+
+    /// <summary>The <c>AppliedModifierMap</c> owner is the hand-written <c>&lt;Name&gt;Owner</c> (AttachedFlyout's flyout-slot mirror).</summary>
+    public bool ReportHandWritten { get; private set; }
+
     /// <summary>Receivers that carry <paramref name="role"/>.</summary>
     public IEnumerable<ModifierReceiver> ReceiversWith(ReceiverRole role) =>
         _receivers.Where(receiver => (receiver.Roles & role) != 0);
@@ -232,6 +244,14 @@ internal sealed class ModifierSlot
         RestorableOwner = true;
         TakesVisualAtMount = takesVisualAtMount;
         IdentityValue = identity;
+        return this;
+    }
+
+    internal ModifierSlot Report(string? target = null, string? suppressedBy = null, bool handWritten = false)
+    {
+        ReportTarget = target;
+        ReportSuppressedBy = suppressedBy;
+        ReportHandWritten = handWritten;
         return this;
     }
 }
