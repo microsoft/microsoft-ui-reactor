@@ -2,7 +2,7 @@
 
 The DSL factory methods that create element records.
 
-Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`. A few factories live on other classes, such as `ValidationRuleDsl`; their sections name the `using static` they need.
+Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`. A few factories live on other classes, such as `ValidationRuleDsl`; their sections name the `using static` they need. The Data grid, Markdown and Win2D canvas factories come from the `Microsoft.UI.Reactor.Advanced` package and are on `Microsoft.UI.Reactor.Advanced.Factories`.
 
 **Learn more:** [Controls](../../controls.md), [Layout](../../layout.md), [Cheat Sheet](../../cheat-sheet.md)
 
@@ -24,3 +24,6 @@ Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to bui
 | [Forms](forms.md) | Form fields, validation rules, validation visualizers and the property grid. |
 | [Composition](composition.md) | Components, memoization, error boundaries, conditionals and other structural elements. |
 | [Interop](interop.md) | Hosted XAML content, web views and maps. |
+| [Data grid](data-grid.md) | The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package. |
+| [Markdown](markdown.md) | Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package. |
+| [Win2D canvas](win2d.md) | Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package. |

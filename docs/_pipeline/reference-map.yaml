@@ -1,7 +1,9 @@
 # Reference map for spec 041 §10.4: how the API reference is laid out.
 #
 # Phase 5.7 of `compile` reads Microsoft.UI.Reactor.dll and
-# Microsoft.UI.Reactor.xml and writes the pages under docs/guide/reference/.
+# Microsoft.UI.Reactor.xml, plus Microsoft.UI.Reactor.Advanced.dll and its XML,
+# and writes one merged reference under docs/guide/reference/. Advanced pages
+# say which package they come from.
 # This file decides where each public type and member goes.
 #
 #   categories    One folder per category, each with a generated index.md.
@@ -85,6 +87,14 @@ categories:
         title: Developer tools
         summary: "Hooks for the Reactor developer tools."
         hooks: ["UseDevtools"]
+      - id: docking
+        title: Docking
+        summary: "Hooks that read the dock layout and the enclosing pane. From the Microsoft.UI.Reactor.Advanced package."
+        hooks: ["UseDock*", "UsePane", "UseActivePaneKey", "UseIsActivePane"]
+      - id: win2d
+        title: Win2D drawing
+        summary: "Hooks that keep Win2D draw state and device resources. From the Microsoft.UI.Reactor.Advanced package."
+        hooks: ["UseDraw*", "UseCanvasResources"]
       - id: hook-types
         title: Hook results and options
         summary: "Small types that hooks return or take as options."
@@ -129,7 +139,9 @@ categories:
       Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to
       build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`.
       A few factories live on other classes, such as `ValidationRuleDsl`; their sections
-      name the `using static` they need.
+      name the `using static` they need. The Data grid, Markdown and Win2D canvas factories
+      come from the `Microsoft.UI.Reactor.Advanced` package and are on
+      `Microsoft.UI.Reactor.Advanced.Factories`.
     guide-pages: [controls, layout, cheat-sheet]
 
   - id: modifiers
@@ -352,6 +364,10 @@ categories:
         title: Virtual list
         summary: "Support types for the virtual list."
         match: ["VirtualList*", "SearchManager", "SearchState"]
+      - id: data-grid
+        title: Data grid
+        summary: "The data grid component, its state, column builders and cell contexts. From the Microsoft.UI.Reactor.Advanced package."
+        match: ["DataGrid*", "CellContext", "ColumnBuilder", "HeaderContext", "RowContext", "TypedColumns", "EditMode", "SelectionMode"]
 
   - id: validation
     title: Validation
@@ -398,6 +414,107 @@ categories:
         title: Descriptor callbacks
         summary: "Delegates and attributes used by control descriptors."
         match: ["*Callback", "OneWayBridgedSetter", "NoClearValueAttribute"]
+
+  # ── Microsoft.UI.Reactor.Advanced package ──────────────────────────────
+  # Element records, factories, modifiers and hooks from Advanced join the
+  # categories above (see the Advanced areas and hook groups). These categories
+  # hold its other types.
+  - id: charting
+    title: Charting
+    summary: "Charts, the D3 scales, shapes and layouts behind them, and chart accessibility. From the Microsoft.UI.Reactor.Advanced package."
+    intro: >-
+      These types ship in the `Microsoft.UI.Reactor.Advanced` package. `Charts` and
+      `D3Charts` build charts; the D3 types are a C# port of the d3 scales, shape
+      generators and layouts you can use to draw your own.
+    guide-pages: [charting]
+    groups:
+      - id: chart-accessibility
+        title: Chart accessibility
+        summary: "Descriptors, palettes and the contrast checks that make charts accessible."
+        match: ["Microsoft.UI.Reactor.Charting.Accessibility.*"]
+      - id: d3-data
+        title: "D3: arrays and statistics"
+        summary: "Binning, bisection, extents, grouping, ranges, ticks, statistics and random numbers."
+        match: ["Microsoft.UI.Reactor.Charting.D3.Bin*", "Microsoft.UI.Reactor.Charting.D3.D3Bisect", "Microsoft.UI.Reactor.Charting.D3.D3Extent",
+                "Microsoft.UI.Reactor.Charting.D3.D3Group", "Microsoft.UI.Reactor.Charting.D3.D3Range", "Microsoft.UI.Reactor.Charting.D3.D3Statistics",
+                "Microsoft.UI.Reactor.Charting.D3.D3Ticks", "Microsoft.UI.Reactor.Charting.D3.D3Random"]
+      - id: d3-color-and-format
+        title: "D3: color, format and interpolation"
+        summary: "Colors, number formatting, easing and interpolators."
+        match: ["Microsoft.UI.Reactor.Charting.D3.D3Color", "Microsoft.UI.Reactor.Charting.D3.D3Format", "Microsoft.UI.Reactor.Charting.D3.D3Ease",
+                "Microsoft.UI.Reactor.Charting.D3.D3Interpolate*"]
+      - id: d3-scales
+        title: "D3: scales"
+        summary: "Scales that map data values to positions, sizes and colors."
+        match: ["Microsoft.UI.Reactor.Charting.D3.*Scale*"]
+      - id: d3-geometry
+        title: "D3: contours, Delaunay and polygons"
+        summary: "Contour generators, Delaunay triangulation, Voronoi diagrams and polygon helpers."
+        match: ["Microsoft.UI.Reactor.Charting.D3.*Contour*", "Microsoft.UI.Reactor.Charting.D3.Delaunay", "Microsoft.UI.Reactor.Charting.D3.Voronoi",
+                "Microsoft.UI.Reactor.Charting.D3.D3Polygon"]
+      - id: d3-layouts
+        title: "D3: layouts"
+        summary: "Hierarchy, treemap, pack, partition, chord, Sankey and force layouts."
+        match: ["Microsoft.UI.Reactor.Charting.D3.*Layout*", "Microsoft.UI.Reactor.Charting.D3.*Node*", "Microsoft.UI.Reactor.Charting.D3.Stratify*",
+                "Microsoft.UI.Reactor.Charting.D3.TreemapTiling", "Microsoft.UI.Reactor.Charting.D3.Sankey*", "Microsoft.UI.Reactor.Charting.D3.Chord*",
+                "Microsoft.UI.Reactor.Charting.D3.RibbonGenerator", "Microsoft.UI.Reactor.Charting.D3.Force*"]
+      - id: d3-shapes
+        title: "D3: shapes"
+        summary: "Line, area, arc, pie, stack, link and symbol generators, curves and the path builder."
+        match: ["Microsoft.UI.Reactor.Charting.D3.*"]
+
+  - id: docking
+    title: Docking
+    summary: "The dock layout model, its events, persistence and the native window interop. From the Microsoft.UI.Reactor.Advanced package."
+    intro: >-
+      These types ship in the `Microsoft.UI.Reactor.Advanced` package. The `DockManager`
+      element and its modifiers are in the elements and modifiers categories.
+    guide-pages: [docking]
+    groups:
+      - id: events
+        title: Dock events
+        summary: "Event arguments the dock manager raises."
+        match: ["Dock*EventArgs", "DockFloatingCloseReason"]
+      - id: layout-model
+        title: Layout model
+        summary: "The nodes, panes and targets that make up a dock layout."
+        match: ["DockNode", "DockSplit", "DockTabGroup", "DockTabGroupContext", "DockableContent", "Document", "ToolWindow", "FloatingDockWindow",
+                "DockLayoutSnapshot", "DockPaneInfo", "DockPaneState", "DockGroupRole", "DockSide*", "DockTarget", "DockRoutingFallback",
+                "TabChrome", "TabPosition"]
+      - id: strings
+        title: Docking strings
+        summary: "Resource keys and default strings for the docking UI."
+        match: ["DockingString*"]
+      - id: persistence
+        title: Layout persistence
+        summary: "Save, load and migrate dock layouts."
+        match: ["Microsoft.UI.Reactor.Docking.Persistence.*"]
+      - id: diagnostics
+        title: Docking diagnostics
+        summary: "A log of the operations the dock manager performed."
+        match: ["Microsoft.UI.Reactor.Docking.Diagnostics.*"]
+      - id: native
+        title: Native window interop
+        summary: "Floating windows, display bounds and the layout snapshots exchanged with native code."
+        match: ["Microsoft.UI.Reactor.Docking.Native.*"]
+
+  - id: markdown
+    title: Markdown
+    summary: "Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package."
+    intro: >-
+      These types ship in the `Microsoft.UI.Reactor.Advanced` package. Call the
+      `Markdown` factory to render a Markdown string.
+    guide-pages: [text-and-media]
+    groups:
+      - id: parser-details
+        title: Parser block and span details
+        summary: "Details the Markdown parser passes for each block and span."
+        match: ["MarkdownBlock*Detail", "MarkdownSpan*Detail", "MarkdownAttribute"]
+
+  - id: win2d
+    title: Win2D canvas
+    summary: "Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package."
+    guide-pages: [win2d-canvas]
 
   - id: excluded
     title: Excluded
@@ -485,6 +602,29 @@ areas:
     summary: "Hosted XAML content, web views and maps."
     elements: ["XamlHost", "XamlPage", "WebView2", "MapControl"]
     guide-pages: [xaml-developers]
+  # ── Microsoft.UI.Reactor.Advanced package ──────────────────────────────
+  - id: data-grid
+    title: Data grid
+    summary: "The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package."
+    elements: ["DataGrid"]
+    factories: ["DataGrid", "Column", "AutoColumns"]
+    guide-pages: [collections]
+  - id: docking
+    title: Docking
+    summary: "The dock manager and its events, from the Microsoft.UI.Reactor.Advanced package."
+    elements: ["DockManager"]
+    guide-pages: [docking]
+  - id: markdown
+    title: Markdown
+    summary: "Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package."
+    factories: ["Markdown"]
+    guide-pages: [text-and-media]
+  - id: win2d
+    title: Win2D canvas
+    summary: "Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package."
+    elements: ["Win2D*"]
+    factories: ["Win2D*"]
+    guide-pages: [win2d-canvas]
 
 modifier-areas:
   - id: layout-and-spacing
@@ -888,6 +1028,23 @@ defaults:
     category: extensibility
   - match: "Microsoft.UI.Reactor.Core.PathDataParser"
     category: extensibility
+
+  # ── Microsoft.UI.Reactor.Advanced package ──────────────────────────────
+  - match: "Microsoft.UI.Reactor.Charting.*"
+    category: charting
+    guide-pages: [charting]
+  - match: "Microsoft.UI.Reactor.Docking.*"
+    category: docking
+    guide-pages: [docking]
+  - match: "Microsoft.UI.Reactor.Markdown.*"
+    category: markdown
+    guide-pages: [text-and-media]
+  - match: "Microsoft.UI.Reactor.Advanced.Win2D.*"
+    category: win2d
+    guide-pages: [win2d-canvas]
+  - match: "Microsoft.UI.Reactor.Controls.DataGrid*"
+    category: controls
+    guide-pages: [collections]
 
   # ── Not part of the reference ──────────────────────────────────────────
   - match: "Microsoft.UI.Reactor.Core.Internal.*"

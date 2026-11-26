@@ -266,6 +266,15 @@ Conventions for contributors:
   issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
   the app's own repository. The cards use soft color gradients drawn in CSS, so they need no image files.
 
+- **The API reference now covers `Microsoft.UI.Reactor.Advanced`.** Charting (with the D3
+  scales, shapes and layouts, and chart accessibility), the data grid, docking, Markdown and the
+  Win2D canvas have reference pages. Their elements, factories, modifiers and hooks are listed
+  next to the core ones, and their other types get new Charting, Docking, Markdown and Win2D
+  canvas sections. Every Advanced page says which package it comes from. Links between the two
+  packages work, for example from an Advanced element to the core `Element`. The docs compile
+  now reads `Microsoft.UI.Reactor.Advanced.xml` and its DLL beside the core ones, and a
+  `--ci` compile fails if either build is missing (issue #1721).
+
 ### Deprecated
 
 ### Removed
@@ -298,6 +307,21 @@ Conventions for contributors:
   render-error panel. The preview host reports the first render error since the
   last component switch on `/status` (`renderError`), and capture fails with
   `REACTOR_DOC_SHOT_003`, leaving the existing image untouched.
+
+- **A pooled control no longer keeps the previous renter's `.RequestedTheme(...)` (issue #1717).**
+  The pool never cleared `RequestedTheme` when a control returned to it, and a mount doesn't clear
+  modifiers the new element doesn't declare. So a control that had rendered with
+  `.RequestedTheme(ElementTheme.Dark)` and was then reused by an element without that modifier kept
+  rendering its whole subtree in the dark theme. The pool now clears it, like every other modifier
+  value.
+
+- **`mur devtools` traffic to `127.0.0.1` no longer goes through the system proxy (issue #1718).**
+  The CLI's devtools client and its session liveness probe used a default `HttpClient`. With
+  Windows "Automatically detect settings" on, every request first asked WinHTTP for a proxy, so
+  slow WPAD discovery could use up the probe's 500 ms budget, and a PAC script that doesn't exempt
+  loopback sent the request to a proxy that can't reach the app. When that happened, a live session
+  read as stale and the CLI deleted its lockfile. These clients now connect directly, and only to
+  loopback.
 
 - `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
   support common `.Foreground(brush)` modifiers and interaction-state foreground

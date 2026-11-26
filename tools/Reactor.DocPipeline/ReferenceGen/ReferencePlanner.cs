@@ -184,6 +184,10 @@ internal static class ReferencePlanner
             if (factoriesCategory is not null && m.Kind == ApiMemberKind.Method)
             {
                 if (owner.DocId == FactoriesDocId) return Role.Factory;
+                // Other packages add their own `Factories` class (for example
+                // Microsoft.UI.Reactor.Advanced.Factories, issue #1721).
+                if (owner.Kind == ApiTypeKind.StaticClass && owner.Name is "Factories" && m.IsStatic && !m.IsExtension)
+                    return Role.Factory;
                 if (owner.Kind == ApiTypeKind.StaticClass && owner.Name.EndsWith("Dsl", StringComparison.Ordinal) && m.IsStatic && !m.IsExtension)
                     return Role.Factory;
             }
