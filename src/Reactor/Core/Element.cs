@@ -1348,6 +1348,7 @@ public abstract record Element
             && a.IsHitTestVisible == b.IsHitTestVisible
             && a.TabIndex == b.TabIndex
             && a.AccessKey == b.AccessKey
+            && a.XYFocusKeyboardNavigation == b.XYFocusKeyboardNavigation
             && ReferenceEquals(a.XYFocusUpRef, b.XYFocusUpRef)
             && ReferenceEquals(a.XYFocusDownRef, b.XYFocusDownRef)
             && ReferenceEquals(a.XYFocusLeftRef, b.XYFocusLeftRef)
