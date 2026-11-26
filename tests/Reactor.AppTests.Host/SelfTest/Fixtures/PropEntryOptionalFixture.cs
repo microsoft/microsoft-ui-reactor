@@ -54,7 +54,7 @@ internal static partial class PropEntryOptionalFixture
         {
             var ctrl = new TestControl { RawValue = 9 };
             var entry = CreateControlledEntry();
-            var payload = Reconciler.GetOrCreateControlEventPayload<DescriptorControlledPayload<TestElement, TestControl, int, EventArgs>>(ctrl);
+            var payload = ModifierEvents.GetOrCreateControlEventPayload<DescriptorControlledPayload<TestElement, TestControl, int, EventArgs>>(ctrl);
             payload.HasExpectedEcho = true;
             payload.ExpectedEcho = 123;
 
@@ -105,7 +105,7 @@ internal static partial class PropEntryOptionalFixture
 
             entry.Update(ctrl, el, new TestElement(Value: 2, OnValueChanged: _ => { }));
 
-            var payload = Reconciler.TryGetControlEventPayload<DescriptorControlledPayload<TestElement, TestControl, int, EventArgs>>(ctrl);
+            var payload = ModifierEvents.TryGetControlEventPayload<DescriptorControlledPayload<TestElement, TestControl, int, EventArgs>>(ctrl);
             H.Check("PropEntryOptional_Controlled_Update_HasValueChange_Writes", ctrl.RawValue == 2 && ctrl.WriteCount == 1);
             H.Check("PropEntryOptional_Controlled_Update_HasValueChange_ArmsEcho", payload is { HasExpectedEcho: true, ExpectedEcho: 2 } && ReferenceEquals(payload.EchoComparer, EqualityComparer<int>.Default));
         }
@@ -119,7 +119,7 @@ internal static partial class PropEntryOptionalFixture
 
             entry.Update(ctrl, el, new TestElement(Value: 2, OnValueChanged: _ => { }));
 
-            var payload = Reconciler.TryGetControlEventPayload<DescriptorControlledPayload<TestElement, TestControl, int, EventArgs>>(ctrl);
+            var payload = ModifierEvents.TryGetControlEventPayload<DescriptorControlledPayload<TestElement, TestControl, int, EventArgs>>(ctrl);
             H.Check("PropEntryOptional_Controlled_Update_HasValueSame_NoOp_NoArm", ctrl.WriteCount == 0 && payload is { HasExpectedEcho: false });
         }
 

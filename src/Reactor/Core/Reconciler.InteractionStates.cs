@@ -29,29 +29,33 @@ public sealed partial class Reconciler
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// State tracking for elements with InteractionStates — stores current state and cached animations.
-    /// Uses a static dictionary keyed by UIElement.
+    /// The live tracker count, for the test seam below. The trackers themselves live on each
+    /// control's <see cref="CompositionState.InteractionTracker"/>; hosts on different UI threads
+    /// update this concurrently, hence the interlocked writes.
     /// </summary>
-    private static readonly Dictionary<UIElement, InteractionStateTracker> _interactionTrackers = new();
+    private static int s_interactionTrackerCount;
 
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
-    internal static int InteractionTrackerCountForTests => _interactionTrackers.Count;
+    internal static int InteractionTrackerCountForTests => Volatile.Read(ref s_interactionTrackerCount);
+
+    private static InteractionStateTracker? InteractionTrackerOf(object sender)
+        => sender is UIElement uie ? GetCompositionState(uie)?.InteractionTracker : null;
 
     // Test-only: drives a hover-in / hover-out transition without synthesizing pointer input.
     internal static void SimulatePointerOverForTests(UIElement uie, bool isOver)
     {
-        if (_interactionTrackers.TryGetValue(uie, out var tracker))
+        if (InteractionTrackerOf(uie) is { } tracker)
             TransitionToState(uie, tracker, isOver ? InteractionState.PointerOver : InteractionState.Normal);
     }
 
     // Test-only: drives a press / release (back to PointerOver) without synthesizing pointer input.
     internal static void SimulatePressedForTests(UIElement uie, bool isPressed)
     {
-        if (_interactionTrackers.TryGetValue(uie, out var tracker))
+        if (InteractionTrackerOf(uie) is { } tracker)
             TransitionToState(uie, tracker, isPressed ? InteractionState.Pressed : InteractionState.PointerOver);
     }
 
-    private sealed class InteractionStateTracker
+    internal sealed class InteractionStateTracker
     {
         public InteractionState CurrentState;
         public InteractionStatesConfig Config = null!;
@@ -71,7 +75,7 @@ public sealed partial class Reconciler
         public bool BorderBrushOverrideApplied;
     }
 
-    private enum InteractionState { Normal, PointerOver, Pressed, Focused }
+    internal enum InteractionState { Normal, PointerOver, Pressed, Focused }
 
     /// <summary>
     /// Sets up or updates InteractionStates on an element. Registers pointer event handlers
@@ -80,10 +84,12 @@ public sealed partial class Reconciler
     internal static void ApplyInteractionStates(UIElement uie, InteractionStatesConfig config)
     {
         ElementPool.MarkVisualTaken(uie);
-        if (!_interactionTrackers.TryGetValue(uie, out var tracker))
+        var composition = GetOrCreateCompositionState(uie);
+        if (composition.InteractionTracker is not { } tracker)
         {
             tracker = new InteractionStateTracker();
-            _interactionTrackers[uie] = tracker;
+            composition.InteractionTracker = tracker;
+            Interlocked.Increment(ref s_interactionTrackerCount);
 
             // Register handlers
             uie.PointerEntered += OnInteractionPointerEntered;
@@ -103,7 +109,9 @@ public sealed partial class Reconciler
     /// </summary>
     internal static void ClearInteractionStates(UIElement uie, bool restoreBrushes = false)
     {
-        if (!_interactionTrackers.Remove(uie, out var tracker)) return;
+        if (GetCompositionState(uie) is not { InteractionTracker: { } tracker } composition) return;
+        composition.InteractionTracker = null;
+        Interlocked.Decrement(ref s_interactionTrackerCount);
 
         // A control unmounted mid-hover still carries the state's brushes. Put the normal ones back,
         // so a pooled control does not hand a hover color to its next renter. Not on an update that
@@ -122,25 +130,25 @@ public sealed partial class Reconciler
 
     private static void OnInteractionPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (sender is UIElement uie && _interactionTrackers.TryGetValue(uie, out var tracker))
+        if (sender is UIElement uie && InteractionTrackerOf(uie) is { } tracker)
             TransitionToState(uie, tracker, InteractionState.PointerOver);
     }
 
     private static void OnInteractionPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (sender is UIElement uie && _interactionTrackers.TryGetValue(uie, out var tracker))
+        if (sender is UIElement uie && InteractionTrackerOf(uie) is { } tracker)
             TransitionToState(uie, tracker, InteractionState.Normal);
     }
 
     private static void OnInteractionPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (sender is UIElement uie && _interactionTrackers.TryGetValue(uie, out var tracker))
+        if (sender is UIElement uie && InteractionTrackerOf(uie) is { } tracker)
             TransitionToState(uie, tracker, InteractionState.Pressed);
     }
 
     private static void OnInteractionPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (sender is UIElement uie && _interactionTrackers.TryGetValue(uie, out var tracker))
+        if (sender is UIElement uie && InteractionTrackerOf(uie) is { } tracker)
         {
             // Released goes back to PointerOver (pointer is still over the element)
             TransitionToState(uie, tracker, InteractionState.PointerOver);
@@ -149,20 +157,20 @@ public sealed partial class Reconciler
 
     private static void OnInteractionPointerCaptureLost(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (sender is UIElement uie && _interactionTrackers.TryGetValue(uie, out var tracker))
+        if (sender is UIElement uie && InteractionTrackerOf(uie) is { } tracker)
             TransitionToState(uie, tracker, InteractionState.Normal);
     }
 
     private static void OnInteractionGotFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is UIElement uie && _interactionTrackers.TryGetValue(uie, out var tracker)
+        if (sender is UIElement uie && InteractionTrackerOf(uie) is { } tracker
             && tracker.Config.Focused is not null)
             TransitionToState(uie, tracker, InteractionState.Focused);
     }
 
     private static void OnInteractionLostFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is UIElement uie && _interactionTrackers.TryGetValue(uie, out var tracker))
+        if (sender is UIElement uie && InteractionTrackerOf(uie) is { } tracker)
             TransitionToState(uie, tracker, InteractionState.Normal);
     }
 
@@ -359,7 +367,7 @@ public sealed partial class Reconciler
     }
 
     private static TransformRest RestTransformOf(UIElement uie)
-        => (uie.GetValue(ReactorAttached.StateProperty) as ReactorState)?.TransformRest ?? IdentityRest;
+        => GetCompositionState(uie)?.TransformRest ?? IdentityRest;
 
     private static readonly TransformRest IdentityRest = new();
 
@@ -369,8 +377,8 @@ public sealed partial class Reconciler
     /// (a local value or a style's).
     /// </summary>
     internal static float RestOpacityOf(UIElement uie)
-        => uie.GetValue(ReactorAttached.StateProperty) is ReactorState { TransformRest.Opacity: { } opacity } state
-            && (state.CompositionModifierProperties & AnimateProperty.Opacity) != 0
+        => GetCompositionState(uie) is { TransformRest.Opacity: { } opacity } composition
+            && (composition.ModifierProperties & AnimateProperty.Opacity) != 0
                 ? opacity : (float)uie.Opacity;
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)

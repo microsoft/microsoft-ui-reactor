@@ -48,26 +48,26 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     // ── Pointer family ────────────────────────────────────────────────
 
     public void OnPointerPressed(Action<TElement, PointerRoutedEventArgs> handler) =>
-        Reconciler.BindOnPointerPressed(_control, WrapPointer(handler));
+        ModifierEvents.BindOnPointerPressed(_control, WrapPointer(handler));
     public void OnPointerMoved(Action<TElement, PointerRoutedEventArgs> handler) =>
-        Reconciler.BindOnPointerMoved(_control, WrapPointer(handler));
+        ModifierEvents.BindOnPointerMoved(_control, WrapPointer(handler));
     public void OnPointerReleased(Action<TElement, PointerRoutedEventArgs> handler) =>
-        Reconciler.BindOnPointerReleased(_control, WrapPointer(handler));
+        ModifierEvents.BindOnPointerReleased(_control, WrapPointer(handler));
     public void OnPointerEntered(Action<TElement, PointerRoutedEventArgs> handler) =>
-        Reconciler.BindOnPointerEntered(_control, WrapPointer(handler));
+        ModifierEvents.BindOnPointerEntered(_control, WrapPointer(handler));
     public void OnPointerExited(Action<TElement, PointerRoutedEventArgs> handler) =>
-        Reconciler.BindOnPointerExited(_control, WrapPointer(handler));
+        ModifierEvents.BindOnPointerExited(_control, WrapPointer(handler));
     public void OnPointerCaptureLost(Action<TElement, PointerRoutedEventArgs> handler) =>
-        Reconciler.BindOnPointerCaptureLost(_control, WrapPointer(handler));
+        ModifierEvents.BindOnPointerCaptureLost(_control, WrapPointer(handler));
     public void OnPointerWheelChanged(Action<TElement, PointerRoutedEventArgs> handler) =>
-        Reconciler.BindOnPointerWheelChanged(_control, WrapPointer(handler));
+        ModifierEvents.BindOnPointerWheelChanged(_control, WrapPointer(handler));
 
     // ── Tap family ────────────────────────────────────────────────────
 
     public void OnTapped(Action<TElement, TappedRoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnTapped(fe, (s, e) =>
+        ModifierEvents.BindOnTapped(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -77,7 +77,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     public void OnDoubleTapped(Action<TElement, DoubleTappedRoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnDoubleTapped(fe, (s, e) =>
+        ModifierEvents.BindOnDoubleTapped(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -87,7 +87,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     public void OnRightTapped(Action<TElement, RightTappedRoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnRightTapped(fe, (s, e) =>
+        ModifierEvents.BindOnRightTapped(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -97,7 +97,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     public void OnHolding(Action<TElement, HoldingRoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnHolding(fe, (s, e) =>
+        ModifierEvents.BindOnHolding(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -109,7 +109,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     public void OnKeyDown(Action<TElement, KeyRoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnKeyDown(fe, (s, e) =>
+        ModifierEvents.BindOnKeyDown(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -119,7 +119,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     public void OnKeyUp(Action<TElement, KeyRoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnKeyUp(fe, (s, e) =>
+        ModifierEvents.BindOnKeyUp(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -131,7 +131,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     public void OnGotFocus(Action<TElement, RoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnGotFocus(fe, (s, e) =>
+        ModifierEvents.BindOnGotFocus(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -141,7 +141,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
     public void OnLostFocus(Action<TElement, RoutedEventArgs> handler)
     {
         var fe = _control;
-        Reconciler.BindOnLostFocus(fe, (s, e) =>
+        ModifierEvents.BindOnLostFocus(fe, (s, e) =>
         {
             if (Reconciler.GetElementTag(fe) is TElement el)
                 handler(el, e);
@@ -191,7 +191,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
         // GC doesn't collect the captured closure while WinUI still holds
         // the subscription on the native event source. Stash it in the
         // per-control event state box.
-        Reconciler.AnchorCustomEventTrampoline(fe, trampoline);
+        ModifierEvents.AnchorCustomEventTrampoline(fe, trampoline);
     }
 
     /// <summary>
@@ -210,7 +210,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
 
         var slot = ReferenceSlotBase + s_referenceSlotCount++;
         var cell = get(_element)?.Inner;
-        Reconciler.WireReferenceEdge(
+        ReferenceEdgeWiring.WireReferenceEdge(
             _control,
             slot,
             cell,
@@ -241,7 +241,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
                     cells.Add(r.Inner);
         }
 
-        Reconciler.WireReferenceListEdge(
+        ReferenceEdgeWiring.WireReferenceListEdge(
             _control,
             slot,
             cells,

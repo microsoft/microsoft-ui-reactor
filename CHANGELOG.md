@@ -251,6 +251,23 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Elements using `.Keyframes()`, `.ScrollLinked()`, an implicit transition such as
+  `.OpacityTransition()`, `.WithTransitions()` or `.InteractionStates()` skip unchanged renders
+  again (issue #1702; follow-up to #1536, spec 014).** Each render rebuilds these declarations with
+  new arrays and WinUI objects, and the skip check compared those by reference, so such an element
+  always ran a full update. `.ScrollLinked()` also restarted its expressions on every parent render.
+  The declarations now compare by value: keyframes, scroll expressions with the same `ScrollViewer`,
+  transition durations and settings, and solid brushes by color and opacity. A changed or removed
+  declaration still updates. Turning Windows' "Animation effects" setting on or off now refreshes
+  every element in every Reactor host, so implicit transitions on unchanged elements follow it too.
+
+- **`WindowLevel.AlwaysOnTop` refused by Windows is now reapplied (spec 054, issue #1707).** Windows
+  can decline a runtime topmost request from an app that doesn't own the foreground, for example
+  while the workstation is locked. The call reports success but the window never becomes topmost, and
+  Reactor never retried, so `Spec.Level` said `AlwaysOnTop` while the window wasn't. Reactor now checks
+  the result, logs a `DiagnosticLog` warning once, and reapplies the level the next time the app is
+  activated, either by gaining the foreground or by one of its windows activating.
+
 - `.LayoutAnimation()` uses linear easing for position and optional size changes in
   non-spring mode (#1652).
 

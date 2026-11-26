@@ -212,17 +212,17 @@ public class PerfDiffSkipPathTests
         // cheap predicate so a leaf with no gesture/drag slot (every grid cell) never
         // probes the gesture/drag CWTs or fetches its control. Lock that it sees every
         // slot and stays false for the common no-gesture leaf + null modifiers.
-        Assert.False(Reconciler.HasGestureOrDragSlots(null));
-        Assert.False(Reconciler.HasGestureOrDragSlots(new ElementModifiers()));
+        Assert.False(GestureDispatch.HasGestureOrDragSlots(null));
+        Assert.False(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers()));
         // A modifier set carrying only routed handlers / layout is NOT a gesture/drag carrier.
-        Assert.False(Reconciler.HasGestureOrDragSlots(new ElementModifiers { OnTapped = (_, _) => { } }));
+        Assert.False(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers { OnTapped = (_, _) => { } }));
 
-        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { Pan = new(_ => { }) }));
-        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { Pinch = new(_ => { }) }));
-        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { Rotate = new(_ => { }) }));
-        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { LongPress = new(_ => { }) }));
-        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { DragSource = new(() => default!) }));
-        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { DropTarget = new() }));
+        Assert.True(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers { Pan = new(_ => { }) }));
+        Assert.True(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers { Pinch = new(_ => { }) }));
+        Assert.True(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers { Rotate = new(_ => { }) }));
+        Assert.True(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers { LongPress = new(_ => { }) }));
+        Assert.True(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers { DragSource = new(() => default!) }));
+        Assert.True(GestureDispatch.HasGestureOrDragSlots(new ElementModifiers { DropTarget = new() }));
     }
 
     [Fact]

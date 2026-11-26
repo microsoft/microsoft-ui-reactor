@@ -24,10 +24,10 @@ public sealed class ElementPool : IDisposable
     /// native control, so every managed wrapper sees it, and it is never cleared.
     /// </summary>
     internal static void MarkVisualTaken(UIElement element)
-        => Reconciler.GetOrCreateReactorState(element).VisualTaken = true;
+        => Reconciler.GetOrCreateCompositionState(element).VisualTaken = true;
 
     internal static bool IsVisualTaken(UIElement element)
-        => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { VisualTaken: true };
+        => Reconciler.GetCompositionState(element) is { VisualTaken: true };
 
     /// <summary>
     /// Keeps the control out of the pool for good. A pending navigation completion may still reach it.
@@ -179,7 +179,7 @@ public sealed class ElementPool : IDisposable
         // The lane follows the native control's marker, whichever wrapper reached it (#1643).
         var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
         // A renter returned before it loaded must not stay on the window's layout list.
-        if (state is not null) StopOpacitySync(element, state);
+        if (state?.Composition is { } composition) StopOpacitySync(element, composition);
         if (state?.PoolExcluded == true)
         {
             if (state.ReleaseWhenExcluded)
@@ -189,7 +189,7 @@ public sealed class ElementPool : IDisposable
             }
             return;
         }
-        var lanes = state?.VisualTaken == true ? _visualPools : _pools;
+        var lanes = state?.Composition?.VisualTaken == true ? _visualPools : _pools;
 
         if (!lanes.TryGetValue(type, out var stack))
         {
@@ -286,13 +286,13 @@ public sealed class ElementPool : IDisposable
         // pool return so a pooled control can't fire the previous component's
         // captured rerender closure into the next mount. The underlying
         // trampoline subscription stays attached — that's intentional, see
-        // the comment block in Reconciler.Events.cs above ModifierEventHandlerState.
+        // the comment block in ModifierEvents.cs above ModifierEventHandlerState.
         Reconciler.ClearCurrentEventHandlers(fe);
         fe.Tag = null;
         // Resources keys the previous renter's .Resources(...) overrides wrote. Mount applies
         // overrides only for an element that declares some, so without this a renter that
         // declares none would inherit them. Keys set outside Reactor are left alone.
-        Reconciler.RemoveManagedResourceKeys(fe);
+        ThemeBindingApplier.RemoveManagedResourceKeys(fe);
         // Reset via ClearValue, not by assigning the DP default: a local value outranks
         // every Style setter, so writing e.g. HorizontalAlignment.Stretch would hand the
         // next renter a control that can never show its default style's alignment
@@ -359,7 +359,7 @@ public sealed class ElementPool : IDisposable
         // pooled control holds no reference to the previous renter's themed
         // Style. Gated on Style being non-null so non-themed controls (the
         // common case) skip the redundant COM call.
-        Reconciler.ClearThemeBindings(fe);
+        ThemeBindingApplier.ClearThemeBindings(fe);
         if (fe.Style is not null)
             fe.ClearValue(FrameworkElement.StyleProperty);
 
@@ -706,7 +706,7 @@ public sealed class ElementPool : IDisposable
         // once it is laid out (SyncOpacityWhenLoaded). Size is left alone, because a fresh handoff
         // visual doesn't reliably carry ActualSize.
         visual.Offset = fe.ActualOffset;
-        Reconciler.GetOrCreateReactorState(fe).PoolResetOffset = fe.ActualOffset;
+        Reconciler.GetOrCreateCompositionState(fe).PoolResetOffset = fe.ActualOffset;
 
         // XAML's own opacity comes back when the renter loads (SyncOpacityWhenLoaded).
         visual.Opacity = 1;
@@ -752,7 +752,7 @@ public sealed class ElementPool : IDisposable
     /// </remarks>
     internal static void SyncOpacityWhenLoaded(FrameworkElement fe)
     {
-        var state = Reconciler.GetOrCreateReactorState(fe);
+        var state = Reconciler.GetOrCreateCompositionState(fe);
         if (state.OpacitySyncLayoutHandler is not null) return;
         EventHandler<object> onLayout = (_, _) =>
         {
@@ -774,15 +774,15 @@ public sealed class ElementPool : IDisposable
     internal static void CancelOpacitySync(FrameworkElement fe)
     {
         if (Volatile.Read(ref s_pendingOpacitySyncs) == 0) return;
-        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state)
+        if (Reconciler.GetCompositionState(fe) is { } state)
             StopOpacitySync(fe, state);
     }
 
     /// <summary>Whether the renter still waits for <see cref="SyncOpacityWhenLoaded"/>.</summary>
     internal static bool IsOpacitySyncPending(FrameworkElement fe)
-        => fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { OpacitySyncLayoutHandler: not null };
+        => Reconciler.GetCompositionState(fe) is { OpacitySyncLayoutHandler: not null };
 
-    private static void StopOpacitySync(FrameworkElement fe, Reconciler.ReactorState state)
+    private static void StopOpacitySync(FrameworkElement fe, Reconciler.CompositionState state)
     {
         if (state.OpacitySyncLayoutHandler is not { } onLayout) return;
         state.OpacitySyncLayoutHandler = null;
@@ -803,9 +803,9 @@ public sealed class ElementPool : IDisposable
 
     private static void SyncRenterOpacity(FrameworkElement fe)
     {
-        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState state) return;
+        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState { Composition: { } state } reactorState) return;
         StopOpacitySync(fe, state);
-        if (state.PoolExcluded) return;
+        if (reactorState.PoolExcluded) return;
         var visual = ElementCompositionPreview.GetElementVisual(fe);
         // The reset ran after the control left the tree, where ActualOffset reads zero, and layout
         // writes Offset only when the position changes. A renter at the previous renter's non-zero
@@ -822,7 +822,7 @@ public sealed class ElementPool : IDisposable
         }
         state.PoolResetOffset = null;
 
-        if ((state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0) return;
+        if ((state.ModifierProperties & Animation.AnimateProperty.Opacity) != 0) return;
         // Something wrote the visual since the reset (navigation hiding a page, user code), or
         // animates it now, and owns it.
         if (visual.Opacity != 1f || visual.TryGetAnimationController("Opacity") is not null) return;

@@ -271,6 +271,65 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         H.Check("TransformKeyframes_ScaleResetAfterLoopRemoval", loopingVisual.Scale == Vector3.One
             && loopingVisual.TryGetAnimationController("Scale") is null, $"scale={loopingVisual.Scale}");
 
+        // Issue #1702: a render that rebuilds equal keyframes skips its update, so the channel's
+        // owner keeps the earlier render's array. Removing the loop must still reset the scale.
+        var firstScaled = animated.Keyframes("pulse", 1, Pulse).Scale(2);
+        var equalScaled = animated.Keyframes("pulse", 1, Pulse).Scale(2);
+        var equalLooping = animated.Keyframes("pulse", 1, Pulse);
+        loopingReconciler.Update(plainTarget, initialScale, loopingTarget, () => { });
+        loopingReconciler.Update(initialScale, firstScaled, loopingTarget, () => { });
+        await Harness.Render();
+        var equalController = loopingVisual.TryGetAnimationController("Scale");
+        H.Check("TransformKeyframes_EqualRenderLoopStarted", equalController is not null);
+        if (equalController is not null)
+        {
+            equalController.Pause();
+            equalController.Progress = 0.5f;
+        }
+        int skippedBefore = loopingReconciler.DebugElementsSkipped;
+        loopingReconciler.Update(firstScaled, equalScaled, loopingTarget, () => { });
+        H.Check("TransformKeyframes_EqualRenderSkipped", loopingReconciler.DebugElementsSkipped == skippedBefore + 1);
+        loopingReconciler.Update(equalScaled, equalLooping, loopingTarget, () => { });
+        loopingReconciler.Update(equalLooping, plainTarget, loopingTarget, () => { });
+        H.Check("TransformKeyframes_ScaleResetAfterEqualRender", loopingVisual.Scale == Vector3.One
+            && loopingVisual.TryGetAnimationController("Scale") is null, $"scale={loopingVisual.Scale}");
+
+        // The same through a parent's child diff, which skips the child without calling Update.
+        using (var childReconciler = new Reconciler())
+        {
+            Element current = VStack(animated);
+            var stack = (StackPanel)childReconciler.Mount(current, () => { })!;
+            H.SetContent(stack);
+            await Harness.Render();
+            var childVisual = ElementCompositionPreview.GetElementVisual(stack.Children[0]);
+            void Step(Element next)
+            {
+                var wrapped = VStack(next);
+                childReconciler.Update(current, wrapped, stack, () => { });
+                current = wrapped;
+            }
+            Step(initialScale);
+            Step(animated.Keyframes("pulse", 1, Pulse).Scale(2));
+            await Harness.Render();
+            var childController = childVisual.TryGetAnimationController("Scale");
+            H.Check("TransformKeyframes_ChildEqualRenderLoopStarted", childController is not null);
+            if (childController is not null)
+            {
+                childController.Pause();
+                childController.Progress = 0.5f;
+            }
+            int childSkippedBefore = childReconciler.DebugElementsSkipped;
+            Step(animated.Keyframes("pulse", 1, Pulse).Scale(2));
+            H.Check("TransformKeyframes_ChildEqualRenderSkipped", childReconciler.DebugElementsSkipped == childSkippedBefore + 1);
+            Step(animated.Keyframes("pulse", 1, Pulse));
+            Step(plainTarget);
+            H.Check("TransformKeyframes_ChildScaleResetAfterEqualRender", childVisual.Scale == Vector3.One
+                && childVisual.TryGetAnimationController("Scale") is null, $"scale={childVisual.Scale}");
+            childReconciler.UnmountChild(stack);
+        }
+        H.SetContent(loopingTarget);
+        await Harness.Render();
+
         loopingReconciler.Update(plainTarget, scaled, loopingTarget, () => { });
         var restarted = loopingVisual.TryGetAnimationController("Scale");
         if (restarted is not null)
@@ -860,7 +919,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 && Reconciler.OpacityRestartsForTests(control) - deferRestartsBefore == 1;
             // Only a decorator's shared target (KeyframeReleaseStage.BeforePlayback) compares the
             // deferred controller with the running one, so check the bookkeeping it reads directly.
-            bool deferredFollows = control.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState
+            bool deferredFollows = Reconciler.GetCompositionState(control) is
                 { KeyframeChannelOwners: { } owners } && owners.TryGetValue(AnimateProperty.Opacity, out var owner)
                 && owner.DeferredController is { } deferred && Equals(deferred, visual.TryGetAnimationController("Opacity"));
             reconciler.Update(loop, scaleOnly, control, () => { });
@@ -1400,7 +1459,8 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
                 var flag = property == "Opacity" ? AnimateProperty.Opacity : AnimateProperty.Offset;
                 var state = target.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
                 H.Check(name + "_NativeOwnershipSurvives", state is not null
-                    && ReferenceEquals(state, tracked.State) && (state.CompositionModifierProperties & flag) != 0);
+                    && ReferenceEquals(state, tracked.State) && state.Composition is { } composition
+                    && (composition.ModifierProperties & flag) != 0);
                 var visual = ElementCompositionPreview.GetElementVisual(target);
                 H.Check(name + "_AnimationStillRunning", visual.TryGetAnimationController(property) is not null);
 
@@ -1415,7 +1475,7 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
 
                 reconciler.Update(direct, plain, target, () => { });
                 H.Check(name + "_OwnershipReleasedButTaintRemains", state is not null
-                    && (state.CompositionModifierProperties & flag) == 0
+                    && (state.Composition?.ModifierProperties & flag) == 0
                     && ElementPool.IsVisualTaken(target));
             }
             finally { H.SetContent(null); }

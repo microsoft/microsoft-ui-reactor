@@ -139,7 +139,7 @@ internal static class Issue522TextBlockStyleResetFixture
     /// The <c>.Foreground(ThemeRef(...))</c> path applies a cached Style; when
     /// the next render drops the theme binding the recycler must clear that
     /// Style on the same recycled control (in-place — no full remount so
-    /// subtree state is preserved). See <c>Reconciler.ClearThemeBindings</c>.
+    /// subtree state is preserved). See <c>ThemeBindingApplier.ClearThemeBindings</c>.
     /// </summary>
     internal class ThemeForegroundClearedOnRemoval(Harness h) : SelfTestFixtureBase(h)
     {
@@ -412,7 +412,7 @@ internal static class Issue522TextBlockStyleResetFixture
 
     /// <summary>
     /// A theme change (<c>ActualThemeChanged</c>) historically called
-    /// <c>Reconciler.ClearStyleCache</c>, but that breaks <c>ClearThemeBindings</c>
+    /// <c>ThemeBindingApplier.ClearStyleCache</c>, but that breaks <c>ClearThemeBindings</c>
     /// when a coincident ThemeBindings removal happens in the same render frame
     /// (the post-clear cache returns a different Style instance from the one
     /// currently on the control). This fixture simulates the sequence
@@ -443,7 +443,7 @@ internal static class Issue522TextBlockStyleResetFixture
             // next ApplyThemeBindings (if any) would create a NEW Style
             // instance for the same key. We're testing that the clear path
             // doesn't depend on the cache surviving across the transition.
-            Microsoft.UI.Reactor.Core.Reconciler.ClearStyleCache();
+            Microsoft.UI.Reactor.Core.ThemeBindingApplier.ClearStyleCache();
 
             setThemed!(false);
             await Harness.Render();

@@ -34,7 +34,7 @@ internal static class TransformOriginBinding
     private static readonly Vector2 Centre = new(0.5f, 0.5f);
 
     /// <summary>Whether the element's pivot is the origin expression (its <c>CenterPoint</c> writes go to the offset).</summary>
-    internal static bool IsActive(Reconciler.ReactorState? state) => state?.TransformRest?.Origin is not null;
+    internal static bool IsActive(Reconciler.CompositionState? state) => state?.TransformRest?.Origin is not null;
 
     /// <summary>Declares the element's size-relative origin.</summary>
     internal static void Apply(UIElement element, Vector2 origin)
@@ -63,7 +63,7 @@ internal static class TransformOriginBinding
     /// <summary>The unset arm: puts the origin into the inactive state, restoring the static pivot.</summary>
     internal static void Deactivate(UIElement element)
     {
-        if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState
+        if (Reconciler.GetCompositionState(element) is not
             { TransformRest: { Origin: not null } rest, HandedOutVisual: { } visual } state)
             return;
         rest.Origin = null;
@@ -83,7 +83,7 @@ internal static class TransformOriginBinding
     internal static void Restore(UIElement element, Visual visual)
     {
         if (!IsBound(visual)) return;
-        var state = Reconciler.GetOrCreateReactorState(element);
+        var state = Reconciler.GetOrCreateCompositionState(element);
         if (state.TransformRest is not { Origin: { } origin } rest)
         {
             Release(visual, state, state.TransformRest?.CenterPoint ?? Vector3.Zero);
@@ -102,7 +102,7 @@ internal static class TransformOriginBinding
     /// </summary>
     internal static void BindCentre(UIElement page, Visual visual)
     {
-        var state = Reconciler.GetOrCreateReactorState(page);
+        var state = Reconciler.GetOrCreateCompositionState(page);
         var properties = visual.Properties;
         properties.InsertVector2(OriginProperty, Centre);
         properties.InsertVector3(OffsetProperty, Vector3.Zero);
@@ -116,7 +116,7 @@ internal static class TransformOriginBinding
     /// A write or animation on the visual's own <c>CenterPoint</c> (a <c>.CenterPoint()</c> with no
     /// origin, during DrillIn) replaced the pivot expression, so the next origin must start it again.
     /// </summary>
-    internal static void Displaced(Reconciler.ReactorState? state)
+    internal static void Displaced(Reconciler.CompositionState? state)
     {
         if (state is not null) state.OriginExpressionRunning = false;
     }
@@ -138,7 +138,7 @@ internal static class TransformOriginBinding
     private static bool IsBound(Visual visual)
         => visual.Properties.TryGetVector2(OriginProperty, out _) == CompositionGetValueStatus.Succeeded;
 
-    private static void Start(Visual visual, Reconciler.ReactorState state)
+    private static void Start(Visual visual, Reconciler.CompositionState state)
     {
         // StartAnimation replaces whatever animates CenterPoint. A StopAnimation first, in the same
         // commit, also stopped the new expression on a hosted runner when an animation was running,
@@ -149,7 +149,7 @@ internal static class TransformOriginBinding
         state.OriginExpressionRunning = true;
     }
 
-    private static void Release(Visual visual, Reconciler.ReactorState state, Vector3 center)
+    private static void Release(Visual visual, Reconciler.CompositionState state, Vector3 center)
     {
         state.OriginExpressionRunning = false;
         var properties = visual.Properties;

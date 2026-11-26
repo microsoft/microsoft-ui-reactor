@@ -10,7 +10,21 @@ public record ScrollExpression(string Property, string Expression);
 /// <summary>
 /// Configuration for scroll-linked expression animations.
 /// </summary>
-public record ScrollAnimationConfig(ScrollViewer ScrollViewer, ScrollExpression[] Expressions);
+public record ScrollAnimationConfig(ScrollViewer ScrollViewer, ScrollExpression[] Expressions)
+{
+    /// <summary>
+    /// Compares the same <see cref="ScrollViewer"/> and the expressions by value, so a
+    /// configuration rebuilt on every render compares equal (issue #1702).
+    /// </summary>
+    public virtual bool Equals(ScrollAnimationConfig? other)
+        => ReferenceEquals(this, other)
+            || (other is not null && EqualityContract == other.EqualityContract
+                && ReferenceEquals(ScrollViewer, other.ScrollViewer)
+                && AnimationEquality.SequenceEqual(Expressions, other.Expressions));
+
+    public override int GetHashCode()
+        => HashCode.Combine(EqualityContract, AnimationEquality.IdentityHash(ScrollViewer), AnimationEquality.SequenceHash(Expressions));
+}
 
 /// <summary>
 /// Fluent builder for constructing scroll-linked expression animations.

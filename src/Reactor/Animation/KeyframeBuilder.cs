@@ -10,6 +10,19 @@ public record KeyframeAnimationDef
     public TimeSpan Duration { get; init; } = TimeSpan.FromMilliseconds(300);
     public bool Loop { get; init; }
     public KeyframeDef[] Keyframes { get; init; } = [];
+
+    /// <summary>
+    /// Compares the keyframes by value, so a definition rebuilt on every render compares equal
+    /// (issue #1702).
+    /// </summary>
+    public virtual bool Equals(KeyframeAnimationDef? other)
+        => ReferenceEquals(this, other)
+            || (other is not null && EqualityContract == other.EqualityContract
+                && Duration == other.Duration && Loop == other.Loop
+                && AnimationEquality.SequenceEqual(Keyframes, other.Keyframes));
+
+    public override int GetHashCode()
+        => HashCode.Combine(EqualityContract, Duration, Loop, AnimationEquality.SequenceHash(Keyframes));
 }
 
 /// <summary>

@@ -19,8 +19,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
 /// Targeted coverage fixtures aimed at the largest uncovered ranges in
-/// Reconciler.cs / Reconciler.Mount.cs / Reconciler.Update.cs / Reconciler.Gestures.cs /
-/// Reconciler.DragDrop.cs. Designed to be exhaustive rather than narrative —
+/// Reconciler.cs / Reconciler.Mount.cs / Reconciler.Update.cs / GestureDispatch.cs /
+/// DragDropDispatch.cs. Designed to be exhaustive rather than narrative —
 /// each fixture exercises a specific cluster of branches in one mount-and-rerender pass.
 /// </summary>
 internal static class ReconcilerBigCoverageFixtures
@@ -645,7 +645,7 @@ internal static class ReconcilerBigCoverageFixtures
                 "NVFooter_Phase0_SelectsFooterItem",
                 nv is not null && ReferenceEquals(nv.SelectedItem, nv.FooterMenuItems[0]));
 
-            var wired = nv is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
+            var wired = nv is null ? null : ModifierEvents.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
             H.Check("NVEvents_PayloadCreated", wired is not null);
             H.Check("NVEvents_SelectionChanged", wired?.SelectionChangedTrampoline is not null);
             H.Check("NVEvents_BackRequested", wired?.BackRequestedTrampoline is not null);
@@ -656,7 +656,7 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("NVEvents_IsPaneOpenObserved", wired?.IsPaneOpenObserver is not null);
 
             // Negative control — no callbacks declared, so nothing may be subscribed.
-            var bareBox = bare is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(bare);
+            var bareBox = bare is null ? null : ModifierEvents.TryGetControlEventPayload<NavigationViewEventPayload>(bare);
             H.Check(
                 "NVEvents_BareNavViewUnsubscribed",
                 bareBox is null
@@ -685,7 +685,7 @@ internal static class ReconcilerBigCoverageFixtures
             // comparison would be vacuous. The genuine re-subscription oracle is the
             // double-fire counters below (verified: forcing slotIsNull => true fails
             // NVEvents_SettingsSelectedFiredOnce, and leaves this check passing).
-            var afterUpdate = nv is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
+            var afterUpdate = nv is null ? null : ModifierEvents.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
             H.Check(
                 "NVEvents_PayloadSurvivesUpdate",
                 wired is not null && afterUpdate is not null && ReferenceEquals(afterUpdate, wired));

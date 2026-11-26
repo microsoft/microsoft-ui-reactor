@@ -12,12 +12,29 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 /// <summary>
 /// The source of the <c>Reconciler</c> partial class (every <c>Reconciler.cs</c> /
-/// <c>Reconciler.*.cs</c> under <c>src/Reactor/Core</c>, subfolders included), parsed once per
-/// test run. Gates that read a reconciler method's body look it up across all the partial files,
-/// so moving a method between them doesn't break the gate.
+/// <c>Reconciler.*.cs</c> under <c>src/Reactor/Core</c>, subfolders included) plus the internal
+/// static helper classes the reconciler delegates to (<see cref="HelperFiles"/>), parsed once per
+/// test run. Gates that read a reconciler method's body look it up across all of these files, so
+/// moving a method between them doesn't break the gate.
 /// </summary>
 internal static class ReconcilerSource
 {
+    /// <summary>
+    /// Static helper classes split out of the reconciler's partials (theme bindings, accessibility
+    /// modifiers, modifier events, reference edges, gestures, drag-and-drop). Listed by name so a
+    /// rename fails the existence assertion below instead of silently hiding methods from the gates.
+    /// <c>ReviewerManifestTests</c> reads the same list, so a new helper also has to join a reviewer batch.
+    /// </summary>
+    internal static readonly string[] HelperFiles =
+    [
+        "AccessibilityApplier.cs",
+        "DragDropDispatch.cs",
+        "GestureDispatch.cs",
+        "ModifierEvents.cs",
+        "ReferenceEdgeWiring.cs",
+        "ThemeBindingApplier.cs",
+    ];
+
     private static readonly Lazy<IReadOnlyList<SyntaxNode>> s_roots = new(() =>
     {
         var root = RepoRootFinder.FindRepoRoot();
@@ -25,14 +42,17 @@ internal static class ReconcilerSource
         var dir = Path.Join(root!, "src", "Reactor", "Core");
         var files = Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
             .Where(file => Path.GetFileName(file) is var name
-                && (name == "Reconciler.cs" || name.StartsWith("Reconciler.", StringComparison.Ordinal)))
+                && (name == "Reconciler.cs" || name.StartsWith("Reconciler.", StringComparison.Ordinal)
+                    || HelperFiles.Contains(name, StringComparer.Ordinal)))
             .OrderBy(file => file, StringComparer.Ordinal)
             .ToList();
         Assert.True(files.Any(file => Path.GetFileName(file) == "Reconciler.cs"), $"Reconciler.cs not found in {dir}");
+        foreach (var helper in HelperFiles)
+            Assert.True(files.Any(file => Path.GetFileName(file) == helper), $"{helper} not found in {dir}");
         return files.Select(file => CSharpSyntaxTree.ParseText(File.ReadAllText(file)).GetRoot()).ToList();
     });
 
-    /// <summary>Every method named <paramref name="name"/> declared in the reconciler's partial files.</summary>
+    /// <summary>Every method named <paramref name="name"/> declared in the reconciler's source files.</summary>
     public static List<MethodDeclarationSyntax> Methods(string name) =>
         s_roots.Value
             .SelectMany(root => root.DescendantNodes())

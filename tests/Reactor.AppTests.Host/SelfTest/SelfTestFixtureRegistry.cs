@@ -979,6 +979,8 @@ internal static class SelfTestFixtureRegistry
         ("Animate_ConfigurationChildSkip", static harness => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: true)),
         ("Animate_ExtrasAcrossUpdates", static harness => new AnimateModifierTests.ExtrasAcrossUpdates(harness, childSkip: false)),
         ("Animate_ExtrasChildSkip", static harness => new AnimateModifierTests.ExtrasAcrossUpdates(harness, childSkip: true)),
+        ("Animate_RebuiltExtrasSkip", static harness => new AnimateModifierTests.RebuiltExtrasSkip(harness, childSkip: false)),
+        ("Animate_RebuiltExtrasChildSkip", static harness => new AnimateModifierTests.RebuiltExtrasSkip(harness, childSkip: true)),
         // Animation system — InteractionStates
         ("InterState_StateMachineTransitions", static harness => new InteractionStatesTests.StateMachineTransitions(harness)),
         ("InterState_PressedInheritsPointerOver", static harness => new InteractionStatesTests.PressedInheritsFromPointerOver(harness)),
@@ -1845,6 +1847,7 @@ internal static class SelfTestFixtureRegistry
         ("WindowLevel_Floating_AboveSiblings", static harness => new Phase4WindowingFixtures.WindowLevelFloatingAboveSiblings(harness)),
         ("WindowLevel_Floating_AboveOwner", static harness => new Phase4WindowingFixtures.WindowLevelFloatingAboveOwner(harness)),
         ("WindowLevel_RuntimeFlip", static harness => new Phase4WindowingFixtures.WindowLevelRuntimeFlip(harness)),
+        ("WindowLevel_RefusedTopmost_Reapplied", static harness => new Phase4WindowingFixtures.WindowLevelRefusedTopmostReapplied(harness)),
         ("WindowLevel_VerdictBranches", static harness => new Phase4WindowingFixtures.WindowLevelVerdictBranches(harness)),
         // Spec 054 Phase 5 — SizeToContent.
         ("SizeToContent_Width_Tracks", static harness => new Phase5WindowingFixtures.SizeToContentWidthTracks(harness)),
@@ -2357,6 +2360,7 @@ internal static class SelfTestFixtureRegistry
         ("ElementPoolLanes_TranslationRenter", static harness => new PoolLaneFixtures.TranslationRenter(harness)),
         ("ElementPoolLanes_ConnectedSource", static harness => new PoolLaneFixtures.ConnectedSource(harness)),
         ("ElementPoolLanes_KeyframeNames", static harness => new PoolLaneFixtures.KeyframeNames(harness)),
+        ("ElementPoolLanes_CompositionStateReset", static harness => new PoolLaneFixtures.CompositionStateReset(harness)),
         ("ElementPoolLanes_MemoAppHandler", static harness => new PoolLaneFixtures.MemoAppHandler(harness)),
         ("ElementPoolLanes_WrapperRefs", static harness => new PoolLaneFixtures.WrapperRefs(harness)),
         ("ElementPoolLanes_RenterLocals", static harness => new PoolLaneFixtures.RenterLocals(harness)),
