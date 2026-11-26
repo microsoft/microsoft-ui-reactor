@@ -76,6 +76,12 @@ public sealed partial class Reconciler
         // Composition and animation bookkeeping, allocated by the first composition feature the
         // control uses and never replaced (see CompositionState).
         internal CompositionState? Composition;
+        // A replay can drop the opacity track and leave the previous loop playing. Keep its
+        // controller for removal, while letting new opacity writes go through.
+        internal (AnimationController Controller, bool Loops, bool ReplayedWithoutOpacity)? OpacityKeyframe;
+        // The latest .Opacity() declaration. Deferred marks a value held until release. Kept here
+        // rather than on Composition so declaring opacity doesn't allocate composition state.
+        internal (float? Value, bool Deferred) DeclaredOpacity;
         // A navigation transition's completion can still reach the control after it leaves the tree.
         internal bool PoolExcluded;
         // A connected-animation source: an excluded return still drops the element it hosted.
@@ -717,17 +723,16 @@ public sealed partial class Reconciler
             state.MemoWrapsDecorator = false;
             if (state.Composition?.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         }
-        ClearPublishedSource(fe);
+        ClearDetachedProperties(fe);
     }
 
     /// <summary>
-    /// A control that leaves Reactor's ownership (pool return, recycle, detach) stops
-    /// describing the element it no longer hosts: the published <c>ReactorSource</c> goes with
-    /// the element pointer, so neither an inspector nor <c>GetSource</c>'s published-value
-    /// fallback reports stale attribution. Applies to controls without a ReactorState too.
+    /// Drops the published source and modifier ownership attached to a native control when it
+    /// leaves Reactor's ownership (pool return, recycle, detach), even without a ReactorState.
     /// </summary>
-    private static void ClearPublishedSource(FrameworkElement fe)
+    private static void ClearDetachedProperties(FrameworkElement fe)
     {
+        ForegroundModifier.ClearApplied(fe);
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
             fe.ClearValue(Diagnostics.ReactorDiagnostics.SourceProperty);
     }
@@ -790,7 +795,7 @@ public sealed partial class Reconciler
     /// </summary>
     public static void DetachReactorState(FrameworkElement fe)
     {
-        ClearPublishedSource(fe);
+        ClearDetachedProperties(fe);
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
@@ -805,9 +810,12 @@ public sealed partial class Reconciler
         state.ModifierTargets = null;
         state.MemoTransition = null;
         state.MemoWrapsDecorator = false;
+        state.OpacityKeyframe = null;
+        state.DeclaredOpacity = default;
         if (state.Composition is { } composition)
         {
             if (composition.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
+            composition.DeferredModifierResets &= ~AnimateProperty.Opacity;
             // A pending opacity restart holds a layout handler and its reconciler (#1669).
             CancelOpacityRestart(composition);
         }

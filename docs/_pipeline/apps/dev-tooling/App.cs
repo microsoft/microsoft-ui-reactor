@@ -101,11 +101,11 @@ static class DevGate
     // UseDevtools() is a RenderContext extension, so it is reached from a
     // function component's ctx (or any helper you hand the ctx to) — there is
     // no Component-level forwarder. It returns true only when BOTH the
-    // Reactor.DevtoolsSupport build switch and `--devtools app` are present.
+    // Reactor.DevtoolsSupport build switch and `--devtools app` (or `run`) are set.
     //
-    // The helper is named Use* because it consumes a hook slot: REACTOR_HOOKS_005
-    // only permits hook calls from Render() or a Use*-named method, so a helper
-    // called `Shell` here would warn in any project that copies this.
+    // UseDevtools() uses no hook slot, but it is still a Use* call:
+    // REACTOR_HOOKS_005 only permits Use* calls from Render() or a Use*-named
+    // method, so a helper called `Shell` here would warn.
     public static Element UseShell(RenderContext ctx)
     {
         var dev = ctx.UseDevtools();
@@ -130,19 +130,18 @@ static class DevMenu
 {
     public static Element UseTitleBar(RenderContext ctx)
     {
-        // Subscribe during render — not inside the menu builder. The builder
-        // lambda runs when the flyout opens, which is not a render pass, so a
-        // hook call in there would break hook ordering.
+        // Subscribe in the render body, not inside the menu builder. The builder
+        // runs only when devtools are on, so a hook call in there would be a
+        // conditional hook and break hook ordering.
         //
-        // Named Use* for the same reason as DevGate.UseShell: it consumes a
-        // hook slot, which REACTOR_HOOKS_005 requires be done from Render() or
-        // a Use*-named helper.
+        // Named Use* because UseObservable is a hook, and REACTOR_HOOKS_005
+        // only permits hook calls from Render() or a Use*-named helper.
         var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
 
         return HStack(8,
             TextBlock("My App"),
-            // DevtoolsMenu renders itself as a titlebar item only when
-            // UseDevtools() is true, so the same cost model carries over.
+            // DevtoolsMenu renders nothing unless UseDevtools() is true,
+            // so the same cost model carries over.
             DevtoolsMenu(() => new MenuFlyoutItemBase[]
             {
                 ToggleMenuItem("Debug UI", debugUI,

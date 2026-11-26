@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 40 1100 360" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .code { font-size: 10.5px; font-family: Cascadia Code, Consolas, monospace; fill: #0969da; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-aot { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .code { fill: #79c0ff; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .box-aot { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- The app -->
+  <rect class="box-accent" x="20" y="175" width="200" height="80" rx="6"/>
+  <text class="label" x="120" y="205" text-anchor="middle">Your Reactor app</text>
+  <text class="sub" x="120" y="223" text-anchor="middle">components and hooks,</text>
+  <text class="sub" x="120" y="239" text-anchor="middle">ReactorApp, ReactorWindow</text>
+
+  <!-- Fan-out to the shell surfaces -->
+  <path class="edge" d="M220 215 H270 V95 H318" marker-end="url(#arr)"/>
+  <path class="edge" d="M220 215 H270 V180 H318" marker-end="url(#arr)"/>
+  <path class="edge" d="M220 215 H270 V265 H318" marker-end="url(#arr)"/>
+  <path class="edge" d="M220 215 H270 V350 H318" marker-end="url(#arr)"/>
+
+  <!-- Tray -->
+  <rect class="box" x="320" y="62" width="440" height="66" rx="6"/>
+  <text class="label" x="336" y="86">Notification area (tray icon)</text>
+  <text class="code" x="336" y="104">UseTrayIcon, ReactorApp.OpenTrayIcon</text>
+  <text class="sub" x="336" y="119">Click, double-click and right-click events, and a flyout menu</text>
+
+  <!-- Taskbar button -->
+  <rect class="box" x="320" y="147" width="440" height="66" rx="6"/>
+  <text class="label" x="336" y="171">Taskbar button</text>
+  <text class="code" x="336" y="189">ReactorWindow.TaskbarItem</text>
+  <text class="sub" x="336" y="204">Progress bar, overlay icon, thumbnail tooltip and toolbar (per window)</text>
+
+  <!-- Jump list -->
+  <rect class="box-aot" x="320" y="232" width="440" height="66" rx="6"/>
+  <text class="label" x="336" y="256">Jump list</text>
+  <text class="code" x="336" y="274">JumpList.UpdateAsync, JumpListItem.ForUri</text>
+  <text class="sub" x="336" y="289">One list per app, not per window</text>
+
+  <!-- Pickers -->
+  <rect class="box" x="320" y="317" width="440" height="66" rx="6"/>
+  <text class="label" x="336" y="341">File and folder dialogs</text>
+  <text class="code" x="336" y="359">PickFileAsync, PickFolderAsync, PickSaveFileAsync</text>
+  <text class="sub" x="336" y="374">Modal to the window that rendered the component</text>
+
+  <!-- Outside launches -->
+  <rect class="box" x="860" y="62" width="220" height="66" rx="6"/>
+  <text class="label" x="970" y="88" text-anchor="middle">Windows opens a file</text>
+  <text class="label" x="970" y="105" text-anchor="middle">or a link for your app</text>
+  <text class="sub" x="970" y="121" text-anchor="middle">file type or protocol registration</text>
+
+  <line class="edge-dashed" x1="970" y1="128" x2="970" y2="203" marker-end="url(#arr)"/>
+
+  <!-- Jump list entry click re-launches the process -->
+  <path class="edge-dashed" d="M760 265 H810 V250 H858" marker-end="url(#arr)"/>
+  <text class="edge-label" x="810" y="286" text-anchor="middle">user picks</text>
+  <text class="edge-label" x="810" y="300" text-anchor="middle">an entry</text>
+
+  <!-- Next launch -->
+  <rect class="box-out" x="860" y="205" width="220" height="90" rx="6"/>
+  <text class="label" x="970" y="231" text-anchor="middle">A new process starts</text>
+  <text class="code" x="970" y="250" text-anchor="middle">ctx.LaunchActivation</text>
+  <text class="sub" x="970" y="267" text-anchor="middle">Kind: JumpList, File, Protocol,</text>
+  <text class="sub" x="970" y="282" text-anchor="middle">Toast or Normal</text>
+</svg>

@@ -1008,7 +1008,7 @@ internal static class FlyoutTargetCallbacksFixtures
             foreach (bool pooled in new[] { false, true })
             {
                 var name = pooled ? "FlyoutMiddleCleanup_Pool" : "FlyoutMiddleCleanup_Ordinary";
-                int trackersBefore = Reconciler.InteractionTrackerCountForTests;
+                int trackersBefore = InteractionStateApplier.InteractionTrackerCountForTests;
                 var targetRef = new ElementRef();
                 var middleRef = new ElementRef();
                 var outerRef = new ElementRef();
@@ -1034,7 +1034,7 @@ internal static class FlyoutTargetCallbacksFixtures
                         && ReferenceEquals(middleRef.Current, button) && ReferenceEquals(outerRef.Current, button));
                     if (!pooled)
                     {
-                        H.Check(name + "_InteractionRegistered", Reconciler.InteractionTrackerCountForTests == trackersBefore + 1);
+                        H.Check(name + "_InteractionRegistered", InteractionStateApplier.InteractionTrackerCountForTests == trackersBefore + 1);
                         H.Check(name + "_KeyframesStarted", visual!.TryGetAnimationController("Translation") is not null);
                     }
 
@@ -1046,7 +1046,7 @@ internal static class FlyoutTargetCallbacksFixtures
                     H.Check(name + "_EndpointRefsCleared", targetRef.Current is null && outerRef.Current is null);
                     if (!pooled)
                     {
-                        H.Check(name + "_InteractionCleared", Reconciler.InteractionTrackerCountForTests == trackersBefore);
+                        H.Check(name + "_InteractionCleared", InteractionStateApplier.InteractionTrackerCountForTests == trackersBefore);
                         H.Check(name + "_KeyframesStopped", visual!.TryGetAnimationController("Translation") is null);
                     }
                     else
@@ -1059,7 +1059,7 @@ internal static class FlyoutTargetCallbacksFixtures
                 }
                 finally
                 {
-                    Reconciler.ClearInteractionStates(button);
+                    InteractionStateApplier.ClearInteractionStates(button);
                     visual?.StopAnimation("Translation");
                     reconciler.UnmountChild(panel);
                     H.SetContent(null);
@@ -1078,7 +1078,7 @@ internal static class FlyoutTargetCallbacksFixtures
                 int targetUnmounts = 0, contentCleanups = 0;
                 var unmountOrder = new List<string>();
                 Action onTargetUnmount = () => { targetUnmounts++; unmountOrder.Add("target"); };
-                int trackersBefore = Reconciler.InteractionTrackerCountForTests;
+                int trackersBefore = InteractionStateApplier.InteractionTrackerCountForTests;
                 var targetRef = new ElementRef();
                 var decoratorRef = new ElementRef();
                 Action? remove = null;
@@ -1121,7 +1121,7 @@ internal static class FlyoutTargetCallbacksFixtures
                 var visual = !pooled ? ElementCompositionPreview.GetElementVisual(first) : null;
                 if (!pooled)
                 {
-                    H.Check(name + "_InteractionRegistered", Reconciler.InteractionTrackerCountForTests == trackersBefore + 1);
+                    H.Check(name + "_InteractionRegistered", InteractionStateApplier.InteractionTrackerCountForTests == trackersBefore + 1);
                     H.Check(name + "_KeyframesStarted", visual!.TryGetAnimationController("Translation") is not null);
                 }
                 if (pooled) remove!();
@@ -1136,7 +1136,7 @@ internal static class FlyoutTargetCallbacksFixtures
                     $"order: {string.Join(", ", unmountOrder)}");
                 if (!pooled)
                 {
-                    H.Check(name + "_InteractionCleared", Reconciler.InteractionTrackerCountForTests == trackersBefore);
+                    H.Check(name + "_InteractionCleared", InteractionStateApplier.InteractionTrackerCountForTests == trackersBefore);
                     H.Check(name + "_KeyframesStopped", visual!.TryGetAnimationController("Translation") is null);
                     // Stop the loop even if the cleanup assertion failed.
                     visual.StopAnimation("Translation");

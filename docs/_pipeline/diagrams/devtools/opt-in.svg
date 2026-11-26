@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-aot { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .diamond { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .box-aot { fill: #341a00; stroke: #d29922; }
+      .diamond { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Build-time inputs -->
+  <rect class="box-accent" x="20" y="50" width="260" height="74" rx="6"/>
+  <text class="label" x="150" y="74" text-anchor="middle">Build switch</text>
+  <text class="sub" x="150" y="92" text-anchor="middle">Reactor.DevtoolsSupport = true</text>
+  <text class="sub" x="150" y="108" text-anchor="middle">on by default in Debug builds</text>
+
+  <rect class="box-accent" x="20" y="180" width="260" height="74" rx="6"/>
+  <text class="label" x="150" y="204" text-anchor="middle">Devtools package</text>
+  <text class="sub" x="150" y="222" text-anchor="middle">Microsoft.UI.Reactor.Devtools</text>
+  <text class="sub" x="150" y="238" text-anchor="middle">PackageReference</text>
+
+  <!-- Launch flag diamond -->
+  <polygon class="diamond" points="380,152 480,112 580,152 480,192"/>
+  <text class="label" x="480" y="148" text-anchor="middle">Launch flag</text>
+  <text class="sub" x="480" y="164" text-anchor="middle">--devtools ...</text>
+
+  <!-- Outcomes -->
+  <rect class="box-out" x="660" y="20" width="320" height="74" rx="6"/>
+  <text class="label" x="820" y="44" text-anchor="middle">--devtools app</text>
+  <text class="sub" x="820" y="62" text-anchor="middle">In-app dev menu and overlays</text>
+  <text class="sub" x="820" y="78" text-anchor="middle">UseDevtools() returns true</text>
+
+  <rect class="box-out" x="660" y="115" width="320" height="74" rx="6"/>
+  <text class="label" x="820" y="139" text-anchor="middle">--devtools run (the default verb)</text>
+  <text class="sub" x="820" y="157" text-anchor="middle">MCP server on 127.0.0.1, plus the dev menu</text>
+  <text class="sub" x="820" y="173" text-anchor="middle">mur devtools and agents can attach</text>
+
+  <rect class="box" x="660" y="210" width="320" height="74" rx="6"/>
+  <text class="label" x="820" y="234" text-anchor="middle">No flag</text>
+  <text class="sub" x="820" y="252" text-anchor="middle">Normal run: devtools stay off</text>
+  <text class="sub" x="820" y="268" text-anchor="middle">UseDevtools() returns false</text>
+
+  <!-- Release / AOT -->
+  <rect class="box-aot" x="20" y="320" width="560" height="80" rx="6"/>
+  <text class="label" x="300" y="344" text-anchor="middle">Release or Native AOT build</text>
+  <text class="sub" x="300" y="362" text-anchor="middle">The switch defaults to false (Trim="true"), so the trimmer removes the devtools code.</text>
+  <text class="sub" x="300" y="378" text-anchor="middle">Only -p:ReactorDiagnostics=true turns it back on. Do not ship that build.</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M280 87 Q 340 90 382 148" marker-end="url(#arr)"/>
+  <path class="edge" d="M280 217 Q 340 214 382 156" marker-end="url(#arr)"/>
+  <text class="edge-label" x="300" y="156" text-anchor="start">both needed</text>
+
+  <path class="edge" d="M560 144 Q 600 60 658 57" marker-end="url(#arr)"/>
+  <path class="edge" d="M580 152 L658 152" marker-end="url(#arr)"/>
+  <path class="edge" d="M560 160 Q 600 244 658 247" marker-end="url(#arr)"/>
+
+  <path class="edge-dashed" d="M150 254 L150 318" marker-end="url(#arr)"/>
+  <text class="edge-label" x="160" y="292" text-anchor="start">same project, Release build</text>
+</svg>

@@ -258,15 +258,44 @@ export function planPlacement(nav, guideFiles, { lenient = false } = {}) {
   return { placements, groups, errors, warnings };
 }
 
-/** One redirect per page whose MkDocs URL differs from its new one. */
-export function redirectsFor(placements) {
-  const redirects = [];
+/**
+ * One redirect per page whose MkDocs URL differs from its new one, plus the
+ * redirects nav.json lists by hand for pages that were removed or merged.
+ */
+export function redirectsFor(placements, extra = []) {
+  const redirects = new Map();
   for (const [file, { dest }] of placements) {
     const from = mkdocsRoute(file);
     const to = routeFor(dest);
-    if (from !== to && from !== "/") redirects.push({ from, to });
+    if (from !== to && from !== "/") redirects.set(from, { from, to });
   }
-  return redirects.sort((a, b) => a.from.localeCompare(b.from));
+  for (const { from, to } of extra) redirects.set(from, { from, to });
+  return [...redirects.values()].sort((a, b) => a.from.localeCompare(b.from));
+}
+
+/**
+ * Problems with nav.json's hand-written redirects: each must leave a dead URL
+ * for a live page. A `to` may end in `#anchor`; when `idsAt(route)` is given,
+ * the anchor must be a heading id on that page.
+ */
+export function checkRedirects(extra, placements, idsAt) {
+  const live = new Set([...placements.values()].map(({ dest }) => routeFor(dest)));
+  const errors = [];
+  for (const { from, to } of extra) {
+    if (typeof from !== "string" || !from.startsWith("/") || typeof to !== "string" || !to.startsWith("/")) {
+      errors.push(`nav.json redirect ${JSON.stringify({ from, to })} needs a "from" and a "to" that start with /.`);
+      continue;
+    }
+    const [, page, anchor] = /^([^?#]*)(?:\?[^#]*)?(?:#(.*))?$/.exec(to);
+    if (live.has(from)) {
+      errors.push(`nav.json redirects ${from}, but a page still lives there.`);
+    } else if (!live.has(page)) {
+      errors.push(`nav.json redirects ${from} to ${to}, which no page lives at.`);
+    } else if (anchor && idsAt && !idsAt(page).has(anchor)) {
+      errors.push(`nav.json redirects ${from} to ${to}, but ${page} has no #${anchor} heading.`);
+    }
+  }
+  return errors;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,9 +422,175 @@ const NOT_PROSE = /^\s*([|#>!<\-*+]|\d+[.)]|```|~~~|\[[^\]]+\]:)/;
 // text to `seo.description`, which feeds the <head>, social cards and llms.txt.
 const hasLink = (paragraph) => /\]\(|\]\[|<https?:/.test(paragraph.replace(/(`+)[\s\S]*?[^`]\1(?!`)/g, ""));
 
+// ---------------------------------------------------------------------------
+// Components. A guide page asks for Blume's Tabs, Steps and Prompt with HTML
+// comments, so it still reads well on GitHub:
+//
+//   <!-- tabs -->      each heading at the block's first heading level is a tab
+//   <!-- /tabs -->
+//   <!-- steps -->     an ordered list; `1. **Title.** Text` gives a step title
+//   <!-- /steps -->
+//   <!-- prompt -->    the fenced block after it becomes a prompt with a copy button
+//
+// Blume runs components only in `.mdx` pages, so a page that uses one is
+// written as `.mdx` and made safe for MDX's stricter parser.
+
+const MARKER = /^[ \t]*<!--[ \t]*(\/?)(tabs|steps|prompt)[ \t]*-->[ \t]*$/;
+const ITEM = /^(\d{1,9}[.)])( {1,4})(?! )(.*)$/;
+const STEP_TITLE = /^\*\*(.+?)\*\*[.:]?(?:[ \t]+(.*))?$/;
+const COMPONENT_TAG = /^<\/?(Tabs|Tab|Steps|Step|Prompt)\b/;
+
+/** True when the page asks for a component, so it must be written as `.mdx`. */
+export function usesComponents(source) {
+  const lines = source.replace(/\r\n?/g, "\n").split("\n");
+  const mask = fenceMask(lines);
+  return lines.some((line, i) => !mask[i] && MARKER.test(line));
+}
+
+const attr = (value) => `{${JSON.stringify(value)}}`;
+const indentOf = (line) => /^ */.exec(line)[0].length;
+const dedent = (line, width) => line.slice(Math.min(width, indentOf(line)));
+
+/**
+ * Turns the component markers into Blume components. `out` holds each source
+ * line's converted text, indexed like `lines`; entries are replaced in place,
+ * and may become several lines or null (dropped).
+ */
+function expandComponents(lines, mask, ids, out, file) {
+  const fail = (i, message) => {
+    throw new Error(`docs/guide/${file}:${i + 1}: ${message}`);
+  };
+  const stack = [];
+  for (let i = 0; i < lines.length; i++) {
+    const top = stack.at(-1);
+    const marker = mask[i] ? null : MARKER.exec(lines[i]);
+    if (marker) {
+      const [, closing, kind] = marker;
+      if (closing) {
+        if (kind === "prompt" || top?.kind !== kind) fail(i, `<!-- /${kind} --> closes nothing.`);
+        if (!top.open) fail(i, `the ${kind} block is empty.`);
+        const child = kind === "tabs" ? "Tab" : "Step";
+        out[i] = `\n</${child}>\n\n</${kind === "tabs" ? "Tabs" : "Steps"}>\n`;
+        stack.pop();
+      } else if (kind === "prompt") {
+        i = expandPrompt(lines, mask, out, i, fail);
+      } else {
+        if (top?.kind === "steps") fail(i, `a ${kind} block can't sit inside a step.`);
+        stack.push({ kind, line: i, open: false, level: null, width: 0 });
+        out[i] = kind === "tabs" ? "\n<Tabs>\n" : "\n<Steps>\n";
+      }
+      continue;
+    }
+
+    if (top?.kind === "tabs") {
+      const heading = mask[i] ? null : ids.get(i);
+      if (heading && (top.level === null || heading.level <= top.level)) {
+        if (top.level !== null && heading.level < top.level) fail(i, "a heading above the tab level ends the tabs too early.");
+        top.level = heading.level;
+        const open = `<Tab title=${attr(plainText(heading.text))} id=${attr(heading.id)}>\n`;
+        out[i] = (top.open ? "\n</Tab>\n\n" : "\n") + open;
+        top.open = true;
+      } else if (!top.open && !blank(lines[i])) {
+        fail(i, "a tabs block must start with the heading of its first tab.");
+      }
+    } else if (top?.kind === "steps") {
+      const item = mask[i] ? null : ITEM.exec(lines[i]);
+      if (item) {
+        top.width = item[1].length + item[2].length;
+        const text = out[i].slice(top.width);
+        const titled = STEP_TITLE.exec(text);
+        const title = titled ? plainText(titled[1]).replace(/[.:]$/, "") : null;
+        const rest = titled ? titled[2] ?? "" : text;
+        const open = [title ? `<Step title=${attr(title)}>` : "<Step>", ""];
+        if (rest) open.push(rest);
+        out[i] = (top.open ? "\n</Step>\n\n" : "\n") + open.join("\n");
+        top.open = true;
+      } else if (blank(lines[i])) {
+        out[i] = "";
+      } else if (!top.open) {
+        fail(i, "a steps block must start with an ordered list.");
+      } else if (mask[i] || indentOf(lines[i]) >= top.width || !blank(lines[i - 1])) {
+        // Indented continuation, code, or a lazy continuation line of the paragraph above.
+        out[i] = dedent(out[i], top.width);
+      } else {
+        fail(i, "only an ordered list can sit inside a steps block.");
+      }
+    }
+  }
+  if (stack.length) fail(stack.at(-1).line, `<!-- ${stack.at(-1).kind} --> is never closed.`);
+}
+
+/** Replaces `<!-- prompt -->` and the fence after it; returns the fence's last line. */
+function expandPrompt(lines, mask, out, at, fail) {
+  let start = at + 1;
+  while (start < lines.length && blank(lines[start])) start++;
+  const fence = FENCE.exec(lines[start] ?? "");
+  if (!fence || !mask[start]) fail(at, "<!-- prompt --> must come right before a fenced block.");
+  const closing = new RegExp(`^ {0,3}\\${fence[1][0]}{${fence[1].length},}[ \\t]*$`);
+  let end = start + 1;
+  while (end < lines.length && mask[end] && !closing.test(lines[end])) end++;
+  if (end >= lines.length || !mask[end]) fail(at, "the prompt's fenced block is never closed.");
+
+  // The fence's text, as paragraphs: the copy button reads the rendered body back as Markdown.
+  const indent = indentOf(lines[start]);
+  const text = lines.slice(start + 1, end).map((line) => dedent(line, indent).trimEnd());
+  const description = text.join(" ").split(/\s+/).filter(Boolean).join(" ");
+  if (!description) fail(at, "the prompt is empty.");
+  out[at] = `\n<Prompt description=${attr(description)}>`;
+  for (let i = at + 1; i <= end; i++) out[i] = null;
+  out[start] = ["", ...text, "", "</Prompt>", ""].join("\n");
+  return end;
+}
+
+const MDX_TAGS = new Set(["a", "b", "br", "code", "details", "div", "em", "i", "img", "kbd", "p", "span", "strong", "sub", "summary", "sup"]);
+
+/**
+ * Makes Markdown prose safe for MDX, which reads `{`, `<` and HTML comments as
+ * code. Fenced code, inline code and component tags are left alone.
+ */
+export function mdxSafe(text) {
+  const lines = text.split("\n");
+  const mask = fenceMask(lines);
+  let inComment = false;
+  const out = [];
+  lines.forEach((line, i) => {
+    if (mask[i] || COMPONENT_TAG.test(line)) {
+      out.push(line);
+      return;
+    }
+    let rest = line;
+    if (inComment) {
+      const close = rest.indexOf("-->");
+      if (close === -1) return;
+      rest = rest.slice(close + 3);
+      inComment = false;
+      if (!rest.trim()) return;
+    }
+    const safe = outsideCode(rest, (prose) => {
+      let s = prose.replace(/<!--[\s\S]*?-->/g, "");
+      const open = s.indexOf("<!--");
+      if (open !== -1) {
+        inComment = true;
+        s = s.slice(0, open);
+      }
+      return s
+        .replace(/[{}]/g, (brace) => `\\${brace}`)
+        .replace(/<((?:https?|mailto):[^\s<>]+)>/gi, (_, url) => `[${url}](${url})`)
+        .replace(/<(br|img)\b([^>]*?)\s*\/?>/gi, (_, tag, attrs) => `<${tag}${attrs} />`)
+        .replace(/<(\/?)([a-z][a-z0-9]*)?/gi, (match, slash, name) =>
+          name && MDX_TAGS.has(name.toLowerCase()) ? match : `\\<${slash}${name ?? ""}`
+        );
+    });
+    // Expanding components leaves runs of blank lines; one is enough outside code.
+    if (safe.trim() || (!line.trim() && out.at(-1)?.trim())) out.push(safe);
+  });
+  return out.join("\n");
+}
+
 /**
  * Converts one guide page: the H1 becomes the title, the opening paragraph the
- * description, headings get their MkDocs ids pinned, and links are rewritten.
+ * description, headings get their MkDocs ids pinned, links are rewritten, and
+ * component markers become Blume components.
  */
 export function convertPage(source, { file, label, context }) {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
@@ -405,22 +600,26 @@ export function convertPage(source, { file, label, context }) {
   const rewritten = rewriteBody(lines, mask, ids, pageDir, context);
 
   let title = null;
-  let titleAt = null;
-  const body = [];
-  lines.forEach((line, i) => {
-    if (mask[i]) {
-      body.push(line);
-      return;
-    }
+  let titleLine = null;
+  const out = lines.map((line, i) => {
+    if (mask[i]) return line;
     const heading = ids.get(i);
     if (heading && heading.level === 1 && title === null) {
       title = plainText(heading.text);
-      titleAt = body.length;
-      return;
+      titleLine = i;
+      return null;
     }
-    let out = rewritten[i];
-    if (heading && heading.level > 1) out = `${out.replace(/[ \t]+#+[ \t]*$/, "").trimEnd()} [#${heading.id}]`;
-    body.push(out);
+    if (heading && heading.level > 1) return `${rewritten[i].replace(/[ \t]+#+[ \t]*$/, "").trimEnd()} [#${heading.id}]`;
+    return rewritten[i];
+  });
+  const mdx = usesComponents(source);
+  if (mdx) expandComponents(lines, mask, ids, out, file);
+
+  let titleAt = null;
+  const body = [];
+  out.forEach((entry, i) => {
+    if (i === titleLine) titleAt = body.length;
+    if (entry !== null) body.push(...entry.split("\n"));
   });
 
   let description = null;
@@ -461,8 +660,129 @@ export function convertPage(source, { file, label, context }) {
   if (label && label !== title) frontMatter.push("sidebar:", `  label: ${JSON.stringify(label)}`);
   frontMatter.push("---");
 
-  const text = body.join("\n").replace(/^\n+|\n+$/g, "");
+  let text = body.join("\n").replace(/^\n+|\n+$/g, "");
+  if (mdx) text = mdxSafe(text);
   return `${frontMatter.join("\n")}\n\n${text}\n`;
+}
+
+// ---------------------------------------------------------------------------
+// Changelog: one Blume `type: changelog` entry per released version in the
+// repository's CHANGELOG.md, so the site gets a /changelog timeline and feed.
+
+export const CHANGELOG_DIR = "changelog";
+const RELEASE_HEADING = /^## \[([^\]]+)\](?:\([^)]*\))?\s*[-–—]\s*(\d{4}-\d{2}-\d{2})\s*$/;
+const BUCKET_WORDS = {
+  added: ["added", "added"],
+  changed: ["changed", "changed"],
+  deprecated: ["deprecated", "deprecated"],
+  removed: ["removed", "removed"],
+  fixed: ["fixed", "fixed"],
+  security: ["security fix", "security fixes"],
+};
+
+/**
+ * The released versions in a Keep-a-Changelog file, newest first as written.
+ * `## [Unreleased]` has no date and is left out. Each bucket (`### Added`, ...)
+ * keeps its lines; a bucket with nothing in it is dropped. Any other `## `
+ * heading would drop a release from the site, so it goes into `problems`.
+ */
+export function parseChangelog(source, problems = []) {
+  const lines = source.replace(/\r\n?/g, "\n").split("\n");
+  const mask = fenceMask(lines);
+  const releases = [];
+  let release = null;
+  let bucket = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!mask[i] && /^## /.test(line)) {
+      const m = RELEASE_HEADING.exec(line);
+      release = m ? { version: m[1], date: m[2], intro: [], buckets: [] } : null;
+      if (release) releases.push(release);
+      else if (!/^## \[Unreleased\]\s*$/i.test(line)) {
+        problems.push(`line ${i + 1}: "${line.trim()}" is not a release heading like "## [1.2.0] — 2026-01-31", so the site leaves it out.`);
+      }
+      bucket = null;
+    } else if (release && !mask[i] && /^### /.test(line)) {
+      bucket = { title: line.slice(4).trim(), lines: [] };
+      release.buckets.push(bucket);
+    } else if (release) {
+      (bucket ? bucket.lines : release.intro).push(line);
+    }
+  }
+  for (const r of releases) r.buckets = r.buckets.filter((b) => b.lines.some((line) => !blank(line)));
+  return releases;
+}
+
+/**
+ * `0.1.0-preview.18` → `v0-1-0-preview-18`, the entry's file name and URL. The
+ * `v` keeps Blume from reading the leading `0-` as a sidebar ordering prefix.
+ */
+export const changelogSlug = (version) =>
+  `v${version.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+/**
+ * "12 added, 4 changed and 9 fixed." from the top-level bullets of each bucket.
+ * A bucket is known by its first word, so `### Changed (breaking)` counts too.
+ */
+export function changelogSummary(buckets) {
+  const parts = [];
+  for (const { title, lines } of buckets) {
+    const words = BUCKET_WORDS[/^[a-z]+/i.exec(title)?.[0].toLowerCase()];
+    const count = lines.filter((line) => /^[-*+] /.test(line)).length;
+    if (words && count) parts.push(`${count} ${words[count === 1 ? 0 : 1]}`);
+  }
+  if (!parts.length) return null;
+  const last = parts.pop();
+  return `${parts.length ? `${parts.join(", ")} and ${last}` : last}.`;
+}
+
+const ISSUE_REF = /(^|[^\w/&#[`])#(\d{2,6})\b/g;
+
+/** Links bare `#1234` references to GitHub, leaving code and existing links alone. */
+export function linkIssues(text) {
+  return outsideCode(text, (prose) => {
+    const links = [];
+    const masked = prose.replace(LINK, (link) => {
+      links.push(link);
+      return `\u0001${links.length - 1}\u0001`;
+    });
+    return masked
+      .replace(ISSUE_REF, (_, before, n) => `${before}[#${n}](${REPO_URL}/issues/${n})`)
+      .replace(/\u0001(\d+)\u0001/g, (_, i) => links[Number(i)]);
+  });
+}
+
+/** One release as a Blume changelog page. CHANGELOG.md sits at the repo root, two levels above the guide. */
+export function changelogEntry(release, context) {
+  const lines = [...release.intro];
+  for (const { title, lines: body } of release.buckets) lines.push(`## ${title}`, ...body);
+  const mask = fenceMask(lines);
+  const rewritten = rewriteBody(lines, mask, headingIds(lines, mask), "../..", context);
+  const out = rewritten.slice();
+  for (let i = 0; i < out.length; ) {
+    if (mask[i] || blank(out[i])) {
+      i++;
+      continue;
+    }
+    let end = i;
+    while (end < out.length && !mask[end] && !blank(out[end])) end++;
+    out.splice(i, end - i, ...linkIssues(out.slice(i, end).join("\n")).split("\n"));
+    i = end;
+  }
+  const body = out.join("\n").replace(/^\n+|\n+$/g, "");
+
+  const frontMatter = [
+    "---",
+    `title: ${JSON.stringify(release.version)}`,
+    "type: changelog",
+    `date: ${release.date}`,
+    "changelog:",
+    `  version: ${JSON.stringify(release.version)}`,
+  ];
+  const summary = changelogSummary(release.buckets);
+  if (summary) frontMatter.push(`description: ${JSON.stringify(summary)}`);
+  frontMatter.push("---");
+  return `${frontMatter.join("\n")}\n\n${body}\n`;
 }
 
 export function metaFile(group) {
@@ -505,6 +825,26 @@ export function sync({ lenient, ref, guide, out }) {
   const nav = JSON.parse(fs.readFileSync(path.join(out, "nav.json"), "utf8"));
   const files = listMarkdown(guide).filter((file) => !file.startsWith("images/"));
   const { placements, groups, errors, warnings } = planPlacement(nav, files, { lenient });
+  const fileAt = new Map([...placements].map(([file, { dest }]) => [routeFor(dest), file]));
+  const idCache = new Map();
+  const idsAt = (route) => {
+    if (!idCache.has(route)) {
+      const lines = fs.readFileSync(path.join(guide, fileAt.get(route)), "utf8").replace(/\r\n?/g, "\n").split("\n");
+      idCache.set(route, new Set([...headingIds(lines).values()].map(({ id }) => id)));
+    }
+    return idCache.get(route);
+  };
+  let extraRedirects = nav.redirects ?? [];
+  if (lenient) {
+    // An old tag can predate a hand-written redirect: the page it retires may
+    // still be there, or the page it points to may not exist yet.
+    extraRedirects = extraRedirects.filter((redirect) => {
+      const problems = checkRedirects([redirect], placements, idsAt);
+      warnings.push(...problems.map((problem) => `${problem} Skipped.`));
+      return !problems.length;
+    });
+  }
+  errors.push(...checkRedirects(extraRedirects, placements, idsAt));
   if (errors.length) return { errors, warnings };
 
   const routes = new Map([...placements].map(([file, { dest }]) => [file, routeFor(dest)]));
@@ -518,8 +858,17 @@ export function sync({ lenient, ref, guide, out }) {
 
   for (const [file, { dest, label }] of placements) {
     context.page = file;
-    const page = convertPage(sources.get(file), { file, label, context });
-    const target = path.join(docs, ...dest.split("/"));
+    const source = sources.get(file);
+    let page;
+    try {
+      page = convertPage(source, { file, label, context });
+    } catch (error) {
+      errors.push(error.message);
+      continue;
+    }
+    // Blume runs components only in MDX pages.
+    const written = usesComponents(source) ? dest.replace(/\.md$/, ".mdx") : dest;
+    const target = path.join(docs, ...written.split("/"));
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, page);
     if (!file.startsWith("reference/") && !/^description: /m.test(page.slice(0, page.indexOf("\n---", 3)))) {
@@ -540,14 +889,38 @@ export function sync({ lenient, ref, guide, out }) {
     fs.writeFileSync(path.join(dir, "meta.ts"), metaFile(group));
   }
 
+  let releases = 0;
+  const changelog = path.join(repoRoot, "CHANGELOG.md");
+  if (fs.existsSync(changelog)) {
+    context.page = null;
+    const problems = [];
+    const found = parseChangelog(fs.readFileSync(changelog, "utf8"), problems);
+    for (const problem of problems) (lenient ? warnings : errors).push(`CHANGELOG.md ${problem}`);
+    // No dated release (an old tag, say) means no /changelog: blume.config.ts
+    // drops its links when this folder is missing.
+    const dir = path.join(docs, CHANGELOG_DIR);
+    if (found.length) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "meta.ts"), metaFile({ title: "Changelog", pages: [] }));
+    }
+    for (const release of found) {
+      fs.writeFileSync(path.join(dir, `${changelogSlug(release.version)}.md`), changelogEntry(release, context));
+      for (const miss of context.unresolved.splice(0)) {
+        const message = `CHANGELOG.md [${release.version}]: link ${miss.target} ${miss.reason}.`;
+        (miss.inGuide && !lenient ? errors : warnings).push(message);
+      }
+      releases++;
+    }
+  }
+
   const images = path.join(out, "public", "images");
   fs.rmSync(images, { recursive: true, force: true });
   if (fs.existsSync(path.join(guide, "images"))) fs.cpSync(path.join(guide, "images"), images, { recursive: true });
 
-  const redirects = redirectsFor(placements);
+  const redirects = redirectsFor(placements, extraRedirects);
   fs.writeFileSync(path.join(out, REDIRECTS_FILE), `${JSON.stringify(redirects, null, 2)}\n`);
 
-  return { errors, warnings, pages: placements.size, groups: groups.length, redirects: redirects.length };
+  return { errors, warnings, pages: placements.size, groups: groups.length, releases, redirects: redirects.length };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -555,5 +928,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   for (const warning of result.warnings) console.warn(`warning: ${warning}`);
   for (const error of result.errors) console.error(`error: ${error}`);
   if (result.errors.length) process.exit(1);
-  console.log(`Synced ${result.pages} pages in ${result.groups} groups, ${result.redirects} redirects.`);
+  console.log(
+    `Synced ${result.pages} pages in ${result.groups} groups, ${result.releases} changelog entries, ${result.redirects} redirects.`
+  );
 }

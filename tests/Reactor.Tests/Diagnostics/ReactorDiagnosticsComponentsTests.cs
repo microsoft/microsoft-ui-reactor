@@ -733,6 +733,15 @@ public class ReactorDiagnosticsComponentsTests
         Assert.Contains(new AppliedModifier("BorderInlineStart", owner + ".BorderThickness", inline), applied);
     }
 
+    [Theory]
+    [InlineData(typeof(WinUI.RichTextBlock), "RichTextBlock.Foreground")]
+    [InlineData(typeof(WinUI.AnimatedIcon), "IconElement.Foreground")]
+    public void AppliedModifierMap_ResolvesForegroundOwners(Type controlType, string property)
+    {
+        var foreground = Assert.Single(AppliedModifierMap.Entries, entry => entry.Modifier == "Foreground");
+        Assert.Equal(property, foreground.Target(controlType));
+    }
+
     [Fact]
     public void AppliedProperty_ValuesAreText()
     {

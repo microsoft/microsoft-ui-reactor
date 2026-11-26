@@ -1,0 +1,686 @@
+---
+title: "Analyzers"
+app: rules-of-reactor
+order: 2.5
+audience: beginner
+goal: |
+  Explain what the Reactor analyzers are, where they show up, how to change
+  their severity, and list every REACTOR_* rule with a stable anchor so a
+  diagnostic can link straight to its entry.
+tier: solid
+---
+
+# Analyzers
+
+Reactor ships a set of Roslyn analyzers that catch common mistakes while
+you write code: a hook inside an `if`, a list item with no key, a hard-coded
+color, an icon button with no name for screen readers. Each rule has an ID
+that starts with `REACTOR`. Many rules also have a code fix that rewrites
+the code for you.
+
+You don't install anything extra. The analyzers are inside the
+`Microsoft.UI.Reactor` NuGet package, in its `analyzers/dotnet/cs` folder,
+so every project that references the package runs them.
+
+## Where the warnings show up
+
+![Your code is checked by the REACTOR analyzers. The results show up in three places: the editor, the dotnet build output, and mur check.](images/analyzers/two-surfaces.svg)
+
+- **In the editor.** Visual Studio and VS Code with the C# extension show
+  a squiggle while you type. Press `Ctrl+.` on the squiggle to see the code
+  fix, if the rule has one.
+- **In the build.** `dotnet build` and CI print the same warnings and
+  errors.
+- **In `mur check`.** It runs the build and prints each diagnostic on one
+  line, with a hint on how to fix it. See [`mur check`](#mur-check).
+
+## All rules
+
+The table lists every rule in the analyzer package. The **Fix** column shows
+which rules have a code fix. Select an ID to read more about it.
+
+| ID | Category | Severity | Fix | What it catches |
+|---|---|---|---|---|
+| [REACTOR0050](#reactor0050) | Reactor.Descriptor | Warning | | An `Optional<T>` OneWay descriptor entry has no `dp:`, so `Unset` can't clear the value. |
+| [REACTOR_A11Y_001](#reactor_a11y_001) | Microsoft.UI.Reactor.Accessibility | Warning | | An icon-only button has no accessible name. |
+| [REACTOR_A11Y_002](#reactor_a11y_002) | Microsoft.UI.Reactor.Accessibility | Warning | | An image has no alt text and is not marked as decorative. |
+| [REACTOR_A11Y_003](#reactor_a11y_003) | Microsoft.UI.Reactor.Accessibility | Warning | | A form field has no label. |
+| [REACTOR_A11Y_004](#reactor_a11y_004) | Microsoft.UI.Reactor.Accessibility | Warning | Yes | A container you can click can't be reached with the keyboard. |
+| [REACTOR_ANIM_002](#reactor_anim_002) | Reactor.Animation | Info | | A `.Keyframes` trigger changes on every render, so the animation restarts. |
+| [REACTOR_ANIM_003](#reactor_anim_003) | Reactor.Animation | Warning | | An async lambda passed to `WithAnimation` stops animating after the first `await`. |
+| [REACTOR_ANIM_004](#reactor_anim_004) | Reactor.Animation | Warning | Yes | `.Set` writes a transform property on an element whose modifiers own its composition visual, so WinUI rejects it. |
+| [REACTOR_CMD_001](#reactor_cmd_001) | Reactor.Commanding | Info | Yes | An element sets both `Command` and its own callback. The callback wins. |
+| [REACTOR_CTRL_001](#reactor_ctrl_001) | Reactor.Controls | Warning | Yes | `.Set` writes `SelectedItem` on a control whose selection is controlled by `SelectedIndex`. |
+| [REACTOR_CTX_001](#reactor_ctx_001) | Reactor.Context | Info | Yes | A context value is a new object on every render. |
+| [REACTOR_DESC_001](#reactor_desc_001) | Reactor.Descriptor | Warning | Yes | A `ControlRegistry` registration lambda is not `static`. |
+| [REACTOR_DIALOG_001](#reactor_dialog_001) | Reactor.Lifecycle | Warning | | `ContentDialog.ShowAsync()` opens a dialog outside the Reactor tree. |
+| [REACTOR_DOCK_001](#reactor_dock_001) | Reactor.Docking | Warning | | `OnLiveLayoutChanged` writes the live dock layout back into state. |
+| [REACTOR_DSL_001](#reactor_dsl_001) | Reactor.Dsl | Warning | Yes | An item in a dynamic list has no `.WithKey`. |
+| [REACTOR_DSL_002](#reactor_dsl_002) | Reactor.Dsl | Info | | A `.WithKey` uses the list index or a value that changes on every render. |
+| [REACTOR_DSL_003](#reactor_dsl_003) | Reactor.Dsl | Warning | | A key selector ignores its item, so every item gets the same key. |
+| [REACTOR_DSL_004](#reactor_dsl_004) | Reactor.Dsl | Info | | A `.WithKey` repeats the key that `ForEach` already uses. |
+| [REACTOR_DYM_001](#reactor_dym_001) | Reactor.DidYouMean | Warning | Yes | A property is called like a method. |
+| [REACTOR_DYM_002](#reactor_dym_002) | Reactor.DidYouMean | Warning | Yes | A `Theme` background token does not exist. |
+| [REACTOR_DYM_003](#reactor_dym_003) | Reactor.DidYouMean | Warning | Yes | A factory name looks misspelled. |
+| [REACTOR_DYM_004](#reactor_dym_004) | Reactor.DidYouMean | Warning | | A factory call is missing a required argument. |
+| [REACTOR_DYM_005](#reactor_dym_005) | Reactor.DidYouMean | Warning | | A factory expects an element, but you passed a string. |
+| [REACTOR_DYM_006](#reactor_dym_006) | Reactor.DidYouMean | Warning | Yes | A color string can't be parsed, so it renders gray. |
+| [REACTOR_EVENT_001](#reactor_event_001) | Reactor.Events | Warning | Yes | An event is subscribed inside `.Set(...)`, which runs on every render. |
+| [REACTOR_GRID_001](#reactor_grid_001) | Reactor.Layout | Warning | | A `Grid` has a row or column that no child uses. |
+| [REACTOR_HOOKS_001](#reactor_hooks_001) | Reactor.Hooks | Warning | | A hook is called inside a condition or loop. |
+| [REACTOR_HOOKS_002](#reactor_hooks_002) | Reactor.Hooks | Info | | A hook comes after an early `return`. |
+| [REACTOR_HOOKS_003](#reactor_hooks_003) | Reactor.Hooks | Warning | Yes | A `UseEffect` body is `async`, so it runs as `async void`. |
+| [REACTOR_HOOKS_004](#reactor_hooks_004) | Reactor.Hooks | Warning | | A hook dependency is a new object on every render. |
+| [REACTOR_HOOKS_005](#reactor_hooks_005) | Reactor.Hooks | Warning | | A hook is called outside `Render` or a custom `Use*` method. |
+| [REACTOR_HOOKS_006](#reactor_hooks_006) | Reactor.Hooks | Info | | A resource fetcher looks like it writes data. |
+| [REACTOR_HOOKS_007](#reactor_hooks_007) | Reactor.Hooks | Warning | Yes | A `UseMemoCells` builder uses a value that is not in its dependencies. |
+| [REACTOR_HOOKS_008](#reactor_hooks_008) | Reactor.Hooks | Info | | State is read right after its setter, and still has the old value. |
+| [REACTOR_HOOKS_009](#reactor_hooks_009) | Reactor.Hooks | Warning | Yes | A command sets `DebounceMs` but is not created with `UseCommand`. |
+| [REACTOR_HOOKS_010](#reactor_hooks_010) | Reactor.Hooks | Warning | Yes | An object is changed in place and passed back to its setter, so nothing re-renders. |
+| [REACTOR_HOOKS_011](#reactor_hooks_011) | Reactor.Hooks | Warning | Yes | An input shows state, but its change callback ignores the new value. |
+| [REACTOR_HOOKS_012](#reactor_hooks_012) | Reactor.Hooks | Warning | | A `Memo` dependency is a new object on every render. |
+| [REACTOR_HOOKS_013](#reactor_hooks_013) | Reactor.Hooks | Warning | Yes | A `UseState` or `UsePersisted` initial value is allocated on every render. |
+| [REACTOR_ICON_001](#reactor_icon_001) | Reactor.Windowing | Warning | | A `WindowIcon` kind can't be used by the surface it is passed to. |
+| [REACTOR_INPUT_001](#reactor_input_001) | Reactor.Input | Warning | Yes | A Ctrl or Alt shortcut is handled in `.OnKeyDown` instead of a command accelerator. |
+| [REACTOR_INPUT_002](#reactor_input_002) | Reactor.Input | Warning | Yes | A drop handler uses `TryGetFiles` instead of `TryGetSafeLocalFiles`. |
+| [REACTOR_ITEMS_001](#reactor_items_001) | Reactor.Collections | Warning | | `.Set` writes `ItemsSource` on a collection that Reactor owns. |
+| [REACTOR_ITEMS_002](#reactor_items_002) | Reactor.Collections | Warning | Yes | An `ItemsView` view builder does not return an `ItemContainer`. |
+| [REACTOR_LIFECYCLE_002](#reactor_lifecycle_002) | Reactor.Lifecycle | Warning | | A `UseEffect` creates a long-lived resource and never cleans it up. |
+| [REACTOR_LIFECYCLE_003](#reactor_lifecycle_003) | Reactor.Lifecycle | Warning | Yes | A custom handler calls `Reconciler.UpdateChild` and can leave a replaced control mounted. |
+| [REACTOR_MEDIA_001](#reactor_media_001) | Reactor.Layout | Info | | A `WebView2` in a stack has no fixed size. |
+| [REACTOR_MEMO_001](#reactor_memo_001) | Reactor.Performance | Info | Yes | A modifier on a keyed `Memo` wrapper turns off the recycle cache. |
+| [REACTOR_MOD_001](#reactor_mod_001) | Reactor.Modifier | Info | Yes | The same placement modifier is applied twice. Only the last one counts. |
+| [REACTOR_MOD_002](#reactor_mod_002) | Reactor.Modifier | Info | Yes | `.Set(...)` writes a property that has its own modifier. |
+| [REACTOR_MOD_003](#reactor_mod_003) | Reactor.Modifier | Warning | Yes | A modifier has no effect on this control type. |
+| [REACTOR_NAV_001](#reactor_nav_001) | Reactor.Navigation | Warning | | A `UseNavigation` handle is stored in a static field or property. |
+| [REACTOR_OPT_001](#reactor_opt_001) | Reactor.Controlled | Info | Yes | A sentinel value such as `-1` is used instead of `Optional<T>.Unset`. |
+| [REACTOR_PERF_001](#reactor_perf_001) | Reactor.Performance | Info | Yes | `.Width(...)` and `.Height(...)` are chained where one `.Size(...)` call would do. |
+| [REACTOR_PERF_FUNCREF](#reactor_perf_funcref) | Reactor.Performance | Info | Yes | A `Command` is created in `Render` without `UseMemo`. |
+| [REACTOR_PERSIST_001](#reactor_persist_001) | Reactor.Persistence | Warning | Yes | `UsePersisted` has no explicit scope. |
+| [REACTOR_POOL_001](#reactor_pool_001) | Reactor.Pool | Warning | Yes | `.Set(...)` writes a property that is reset when the control is pooled. |
+| [REACTOR_REF_001](#reactor_ref_001) | Reactor.Reference | Warning | | `ElementRef.Current` is read to set a reference property. |
+| [REACTOR_STATE_001](#reactor_state_001) | Reactor.State | Warning | | A component implements `INotifyPropertyChanged`, which Reactor ignores. |
+| [REACTOR_THEME_001](#reactor_theme_001) | Reactor.Style | Warning | Yes | A color is hard-coded instead of using a theme token. |
+| [REACTOR_THEME_002](#reactor_theme_002) | Reactor.Style | Info | | A property set with `.Set` has a lightweight styling key. |
+| [REACTOR_THEME_003](#reactor_theme_003) | Reactor.Style | Info | Yes | `RequestedTheme` is set with `.Set` instead of its modifier. |
+| [REACTOR_THEME_004](#reactor_theme_004) | Reactor.Style | Warning | Yes | A brush is created inline instead of using a theme token. |
+| [REACTOR_THREAD_001](#reactor_thread_001) | Reactor.Threading | Warning | Yes | A UI-thread-only member is called from a background task. |
+| [REACTOR_THREAD_002](#reactor_thread_002) | Reactor.Threading | Warning | | A task is blocked on the UI thread in `Render` or an effect. |
+| [REACTOR_VIS_001](#reactor_vis_001) | Reactor.Layout | Warning | Yes | `Visibility` is set with `.Set` instead of `.IsVisible(...)`. |
+| [REACTOR_WIN2D_001](#reactor_win2d_001) | Reactor.Win2D | Error | Yes | A Win2D canvas draws `UseCanvasResources` output without `.UseSharedDevice()`. |
+
+The package also contains source generators. They report their own IDs,
+such as `REACTORGEN001` and `REACTOR_LOC001`, which this page does not list.
+
+## Change the severity
+
+Set the severity of one rule in an `.editorconfig` file at the root of your
+project or solution:
+
+```ini
+[*.cs]
+# Fail the build when a hook is called conditionally.
+dotnet_diagnostic.REACTOR_HOOKS_001.severity = error
+
+# Turn off one rule.
+dotnet_diagnostic.REACTOR_DSL_004.severity = none
+
+# Raise every rule in one category.
+dotnet_analyzer_diagnostic.category-Reactor.Hooks.severity = error
+```
+
+The values are `error`, `warning`, `suggestion`, `silent`, and `none`. The
+category names are in the [table](#all-rules).
+
+To turn off a rule for one line, wrap the line in
+`#pragma warning disable REACTOR_DSL_004` and
+`#pragma warning restore REACTOR_DSL_004`. To make every warning fail the
+build, set `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` in the
+project file.
+
+## Examples
+
+Each example shows code that a rule flags, and the code that fixes it.
+[Rules of Reactor](rules-of-reactor.md) explains why these rules exist.
+
+**Hooks must run on every render.** This code calls `UseState` only when
+`ShouldCount` is true, so `REACTOR_HOOKS_001` fires:
+
+```csharp
+// Wrong: REACTOR_HOOKS_001
+if (ShouldCount)
+{
+    var (count, _) = UseState(0);
+    return TextBlock($"Count: {count}");
+}
+return TextBlock("No counter.");
+```
+
+Call the hook every time, and move the condition into the output:
+
+```csharp snippet="rules-of-reactor/hook-order-good"
+```
+
+**Items in a dynamic list need a key.** Without `.WithKey`, the reconciler
+matches rows by position. `REACTOR_DSL_001` fires:
+
+```csharp
+// Wrong: REACTOR_DSL_001
+Items.Select(i => TextBox(i.Title, title => Rename(i, title))).ToArray()
+```
+
+Key each row by a stable ID. The code fix adds the `.WithKey(...)` call:
+
+```csharp snippet="rules-of-reactor/keys-good"
+```
+
+**Use theme tokens, not hard-coded colors.** A hex color does not follow
+light, dark, or high-contrast themes. `REACTOR_THEME_001` fires and
+suggests a token:
+
+```csharp
+// Wrong: REACTOR_THEME_001
+Button("Save", () => { }).Background("#0078D4");
+```
+
+The code fix replaces the color with the token:
+
+```csharp snippet="rules-of-reactor/theme-token-good"
+```
+
+## mur check
+
+[`mur check`](mur-cli.md#check-your-code) runs `dotnet build`, so it sees
+every diagnostic the analyzers report. It does not run a second copy of the
+rules. It changes how the results are shown:
+
+- In the default mode, it prints errors and `REACTOR_` warnings. It hides
+  info-level rules and most other warnings, including `REACTOR0050`, whose ID
+  has no underscore. `--final` prints everything. `--strict` ranks every
+  warning as an error, so all warnings print.
+- For 11 rules it adds a pointer to the skill section that explains the fix:
+  `REACTOR_HOOKS_001`, `REACTOR_HOOKS_004`, `REACTOR_HOOKS_005`,
+  `REACTOR_HOOKS_006`, `REACTOR_HOOKS_009`, `REACTOR_THEME_001`,
+  `REACTOR_THEME_002`, `REACTOR_A11Y_001`, `REACTOR_DSL_001`,
+  `REACTOR_DOCK_001`, and `REACTOR_ITEMS_002`.
+- For compiler errors such as `CS0103` and `CS1061`, it suggests the Reactor
+  name you probably meant (`→ try: ...`). These suggestions cover mistakes
+  that the analyzers can't see, because the code does not compile.
+- It has seven rules of its own for common mistakes. One of them mirrors
+  `REACTOR_DYM_006` and prints the hex value for an unknown color name.
+
+The
+[`mur check` design notes](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/mur-check-did-you-mean.md)
+describe each tier and rule.
+
+## Rule reference
+
+Each entry says what the rule catches and what to do instead. The anchor of
+each entry is the rule ID in lower case, for example
+`analyzers.md#reactor_hooks_001`.
+
+### Hooks
+
+#### REACTOR_HOOKS_001
+
+A hook is called inside an `if`, a loop, a `switch`, or a lambda. Reactor
+matches hooks by call order, so the order must be the same on every render.
+Call the hook every time and branch on its result.
+
+#### REACTOR_HOOKS_002
+
+A hook comes after an early `return`. On renders that return early, the
+hooks below it are skipped and the order breaks. Move every hook above the
+first `return`.
+
+#### REACTOR_HOOKS_003
+
+The `UseEffect` lambda is `async`, so it compiles as `async void`.
+Exceptions escape, the cleanup does not wait for the work, and a setter can
+run after the component unmounts. Move the async work into a method and
+start it from a normal effect. The code fix does this.
+
+#### REACTOR_HOOKS_004
+
+A hook dependency is a new object, such as an array or a lambda, on every
+render. It never equals the previous value, so the hook runs every time.
+Wrap it in `UseMemo`, move it to a field, or pass a simple value instead.
+
+#### REACTOR_HOOKS_005
+
+A hook is called outside `Render` or a custom hook. Only call hooks from a
+`Render` override or from a method whose name starts with `Use`.
+
+#### REACTOR_HOOKS_006
+
+A resource fetcher calls something that looks like a write. Resources run
+again when their dependencies change, on retry, and on focus. Use
+`UseMutation` for writes. See [Async resources](async-resources.md).
+
+#### REACTOR_HOOKS_007
+
+The builder passed to `UseMemoCells`, `UseMemoCellsByKey`, or
+`UseMemoCellsByIndex` uses a value that is not in its dependency list. The
+cell does not update when that value changes. Add the value to the
+dependencies.
+
+#### REACTOR_HOOKS_008
+
+A state variable is read right after its setter in the same handler. The
+setter only schedules a new render, so the variable still has the old value.
+Use the value you passed to the setter.
+
+#### REACTOR_HOOKS_009
+
+A `Command` sets `DebounceMs`, but it is not created with `UseCommand`. The
+debounce state lives in that hook, so the command does not debounce. Create
+it with `UseCommand(...)`. See [Commanding](commanding.md).
+
+#### REACTOR_HOOKS_010
+
+An object or collection is changed in place, and the same instance is
+passed back to its setter. The setter sees an equal value and does not
+re-render. Pass a new instance, for example with a `with` expression or a
+copy of the list.
+
+#### REACTOR_HOOKS_011
+
+An input such as a `TextBox` shows a value from state, but its change
+callback is empty or ignores the new value. The user's edits are lost.
+Update state in the callback, or make the control read-only.
+
+#### REACTOR_HOOKS_012
+
+A `Memo` dependency is a new object on every render, so the memo never
+reuses its result. Make it stable with `UseMemo` or a field, or pass a
+simple key.
+
+#### REACTOR_HOOKS_013
+
+The initial value of `UseState` or `UsePersisted` allocates a new object on
+every render, but the hook only reads it once. Wrap it in
+`UseMemo(() => ..., [])`.
+
+### State and context
+
+#### REACTOR_STATE_001
+
+A component implements `INotifyPropertyChanged`. Reactor never listens to
+it, so raising `PropertyChanged` does nothing. Keep state in `UseState`, or
+use one of the observable bridges in [State management](data-system.md).
+
+#### REACTOR_CTX_001
+
+A context value is a new object on every render, so every component that
+reads the context re-renders. Wrap the value in `UseMemo`. See
+[Context](context.md).
+
+#### REACTOR_PERSIST_001
+
+`UsePersisted` is called without a scope, so it uses
+`PersistedScope.Application` and is shared by every window. Pass
+`PersistedScope.Window` or `PersistedScope.Application` so the scope is
+clear. See [Persistence](persistence.md).
+
+### Lists and keys
+
+#### REACTOR_DSL_001
+
+An item built in a dynamic list has no `.WithKey(...)`. The reconciler
+matches rows by position, so an insert or a reorder re-creates the rows and
+loses focus and state. Add a key from the item's ID.
+
+#### REACTOR_DSL_002
+
+`.WithKey(...)` uses the list index, or a value such as `Guid.NewGuid()`
+or `DateTime.Now`. These keys change when the list changes, so the rows are
+re-created. Use the item's ID.
+
+#### REACTOR_DSL_003
+
+A key selector, for example in a typed `ListView<T>`, ignores its item and
+returns the same key for every item. Return a unique key for each item,
+such as `item.Id`.
+
+#### REACTOR_DSL_004
+
+The item implements `IReactorKeyed`, so `ForEach` already keys it. The
+`.WithKey(...)` call repeats that key and can be removed.
+
+#### REACTOR_ITEMS_001
+
+`.Set(...)` assigns `ItemsSource` on a collection element that Reactor
+fills itself. This fights the keyed diff. Pass the data through the
+element's `items` argument. See [Collections](collections.md).
+
+#### REACTOR_ITEMS_002
+
+An `ItemsView` view builder returns something other than an
+`ItemContainer`. `ItemsView` needs an `ItemContainer` root. The code fix
+wraps the result in `ItemContainer(...)`.
+
+#### REACTOR_MEMO_001
+
+A modifier is applied to a keyed `Memo(key, factory)` wrapper. A wrapper
+with modifiers can't use the cache that virtualized lists use when they
+recycle rows. Move the modifiers inside the factory.
+
+### Modifiers and .Set
+
+#### REACTOR_MOD_001
+
+A placement modifier, such as `.Grid(...)` or `.Canvas(...)`, is applied
+more than once in one chain. The last call replaces the earlier ones. Merge
+them into one call.
+
+#### REACTOR_MOD_002
+
+`.Set(...)` writes a property that has a Reactor modifier. `.Set` runs on
+every render and is never undone. Use the modifier instead.
+
+#### REACTOR_MOD_003
+
+The modifier does nothing on this control type. For example, `.Background`
+has no effect on a `Rectangle`, because shapes use `.Fill`. Use the
+modifier that the control supports.
+
+#### REACTOR_PERF_001
+
+`.Width(...)` and `.Height(...)` are chained on a built-in element. Each call
+copies the element, so one `.Size(width: ..., height: ...)` call saves a copy.
+The code fix makes the change and keeps the arguments in their original
+order. This is a small allocation saving, not a bug. See
+[Analyzer architecture](analyzer-architecture.md#combined-sizing-without-extra-copies).
+
+#### REACTOR_POOL_001
+
+`.Set(...)` writes a property that Reactor resets when it returns the
+control to the pool. The value is lost on a later render. Use the matching
+modifier. See [Element pooling](element-pool.md).
+
+#### REACTOR_VIS_001
+
+`.Set(c => c.Visibility = ...)` is not tracked, so the value is lost on the
+next render or when the control is reused. Use `.IsVisible(bool)`.
+
+#### REACTOR_EVENT_001
+
+An event is subscribed inside `.Set(...)`, which runs on every render and
+adds a new handler each time. Use the event modifier if there is one.
+Otherwise, subscribe in `.OnMountAdd(...)` and unsubscribe in
+`.OnUnmountAdd(...)`.
+
+### Controls and selection
+
+#### REACTOR_CTRL_001
+
+The control's selection is controlled by `SelectedIndex`, and
+`.Set(x => x.SelectedItem = ...)` sets it a second way. The two fight.
+Remove the `.Set(...)` call.
+
+#### REACTOR_OPT_001
+
+A selection property of type `Optional<T>` gets a sentinel value such as
+`-1`. That forces the value on every render. Use `Optional<T>.Unset` to let
+the control own the selection.
+
+#### REACTOR_CMD_001
+
+An element sets both `Command` and its own callback, such as `OnClick`.
+Reactor runs the callback, so the command never runs. Remove one of them.
+See [Commanding](commanding.md).
+
+#### REACTOR_PERF_FUNCREF
+
+A `new Command { ... }` is created in `Render` on every render. Wrap it in
+`UseMemo(() => new Command { ... }, deps)` to keep one instance. The code
+fix does this and works out the dependencies.
+
+#### REACTOR_INPUT_001
+
+`.OnKeyDown` checks for a Ctrl or Alt shortcut. `.OnKeyDown` only runs while
+the element has focus, so the shortcut doesn't work elsewhere. Register a
+command with an accelerator instead. See
+[Input and gestures](input-and-gestures.md).
+
+#### REACTOR_INPUT_002
+
+A drop handler calls `TryGetFiles`, which can return network paths, device
+paths, links, and virtual files from the drag source. Use
+`TryGetSafeLocalFiles` to keep only safe local files.
+
+### Theming
+
+#### REACTOR_THEME_001
+
+A color is hard-coded, for example `"#0078D4"`. It does not change with the
+light, dark, or high-contrast theme. Use a `Theme` token, such as
+`Theme.Accent`. See [Theming tokens](theming-tokens.md).
+
+#### REACTOR_THEME_002
+
+`.Set(...)` writes a control property that also has a lightweight styling
+resource key. The hover and pressed states keep their own colors. Set the
+resource with `.Resources(r => r.Set(...))` instead.
+
+#### REACTOR_THEME_003
+
+`RequestedTheme` is set through `.Set(...)`. Use the
+`.RequestedTheme(...)` modifier.
+
+#### REACTOR_THEME_004
+
+A brush, such as `new SolidColorBrush(Colors.White)`, is created inline. It
+does not follow the theme. Use a `Theme` token.
+
+### Accessibility
+
+#### REACTOR_A11Y_001
+
+A button shows only an icon or an element, not text. Screen readers can't
+announce it. Add `.AutomationName("...")`. See
+[Accessibility](accessibility.md).
+
+#### REACTOR_A11Y_002
+
+An image has no accessible name. Add `.AutomationName("...")` as alt text,
+or `.AccessibilityHidden()` if the image is only decoration.
+
+#### REACTOR_A11Y_003
+
+A form field has no label. Add a `header:` argument, `.Header(...)`,
+`.AutomationName(...)`, or `.LabeledBy(...)`.
+
+#### REACTOR_A11Y_004
+
+A container has `.OnTapped(...)` but is not a tab stop, so keyboard users
+can't reach it. Add `.IsTabStop(true)`, and handle Enter and Space in
+`.OnKeyDown(...)`.
+
+### Did you mean
+
+These rules catch names and arguments that are close to a real Reactor
+API, usually typed by a person or an AI agent that guessed.
+
+#### REACTOR_DYM_001
+
+A Reactor property is called with parentheses, as if it were a method.
+Remove the parentheses.
+
+#### REACTOR_DYM_002
+
+The `Theme` background token does not exist. The message names the token
+you probably meant.
+
+#### REACTOR_DYM_003
+
+The name is not defined, but it is close to a Reactor factory name. The
+message and the code fix suggest the factory.
+
+#### REACTOR_DYM_004
+
+A factory call is missing a required argument. The message shows the call
+with the argument added.
+
+#### REACTOR_DYM_005
+
+A factory expects an element, but you passed a string. Wrap the string in a
+text factory such as `TextBlock(...)`.
+
+#### REACTOR_DYM_006
+
+A color string, such as `"orange"`, is not a format Reactor can read, so the
+color renders gray. The message suggests a hex value. Better still, use a
+`Theme` token.
+
+### Animation
+
+#### REACTOR_ANIM_002
+
+The trigger passed to `.Keyframes(...)` changes on every render, so the
+animation restarts each time and flickers. Pass a value that changes only
+when you want to replay it, such as a counter in state. See
+[Animation](animation.md).
+
+#### REACTOR_ANIM_003
+
+An `async` lambda is passed to `WithAnimation`. Changes after the first
+`await` are not animated. Use one `WithAnimation` call for each step, around
+each `await`.
+
+#### REACTOR_ANIM_004
+
+`.Set(...)` or `.OnMount(...)` writes `Rotation`, `Scale`, `CenterPoint`,
+`RotationAxis`, `TransformMatrix` or a `*Transition` property, or calls
+`StartAnimation`, on an element whose modifiers already own its composition
+visual, such as `.Scale(...)`, `.Rotation(...)` or `.Keyframes(...)`. WinUI
+rejects the write. Use the matching modifier, such as `.Rotation(...)` or
+`.OpacityTransition()`; the code fix rewrites the simple cases. The rule also
+flags a `.Set` that writes `Translation` on an element that uses
+`.Translation(...)`. See [Animation](animation.md).
+
+### Layout and media
+
+#### REACTOR_GRID_001
+
+A `Grid` declares a row or column that no child is placed in. Remove the
+track, or place a child in it. See [Layout](layout.md).
+
+#### REACTOR_MEDIA_001
+
+A `WebView2` is a direct child of a stack and has no `.Width` and
+`.Height`. It sizes itself to the page and keeps changing size. Set
+`.Width` and `.Height`, or put it in a fixed-size grid cell.
+
+### Lifecycle and threading
+
+#### REACTOR_LIFECYCLE_002
+
+A `UseEffect` creates a long-lived object, such as a timer or a
+subscription, and returns no cleanup. It keeps running after the component
+unmounts. Return a cleanup action that disposes it. See
+[Effects](effects.md).
+
+#### REACTOR_DIALOG_001
+
+`ContentDialog.ShowAsync()` opens a dialog outside the Reactor tree. Use the
+`ContentDialog(...)` element with `IsOpen` instead. See
+[Dialogs and flyouts](dialogs-and-flyouts.md).
+
+#### REACTOR_NAV_001
+
+A `UseNavigation` handle is stored in a static field or property. It
+outlives the page and holds on to its dispatcher. Read it with
+`UseNavigation<TRoute>()` where you need it, or pass it through context.
+
+#### REACTOR_THREAD_001
+
+A member that must run on the UI thread is called inside a background task.
+Move the call back to the UI thread with
+`ReactorApp.UIDispatcher?.TryEnqueue(...)`. See
+[Threading and dispatch](threading-and-dispatch.md).
+
+#### REACTOR_THREAD_002
+
+`Render` or an effect blocks on a task, for example with `.Result` or
+`.Wait()`. That freezes the UI. Use `UseResource`, or `await` inside an
+effect.
+
+### Advanced features
+
+#### REACTOR_DOCK_001
+
+`OnLiveLayoutChanged` passes the live dock layout straight into a setter.
+The dock host already owns that layout, so writing it back breaks drag,
+tab, and splitter behavior. Only read the layout in this callback. See
+[Docking](docking.md).
+
+#### REACTOR_ICON_001
+
+A `WindowIcon` is passed to a surface that can't use its kind. For example,
+the tray icon can't read a `FromResource` icon. The icon is dropped at run
+time. The message names the kind to use instead.
+
+#### REACTOR_WIN2D_001
+
+A Win2D canvas draws resources from `UseCanvasResources`, which live on the
+shared device, but the canvas does not call `.UseSharedDevice()`.
+This crashes at run time. Add `.UseSharedDevice()` to the canvas. See
+[Win2D canvas](win2d-canvas.md).
+
+### Custom controls
+
+These rules apply when you write your own control descriptors or handlers.
+See [Extending Reactor controls](extending-reactor-controls.md).
+
+#### REACTOR0050
+
+A OneWay descriptor entry uses `Optional<T>` but has no `dp:` argument.
+Without the dependency property, `Unset` skips the write instead of clearing
+the value. Add `dp:`. This is the only rule with a help link today. It
+points to
+[spec 050](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/050-controlled-prop-authority-and-optional-t.md).
+
+#### REACTOR_DESC_001
+
+The handler factory passed to `ControlRegistry.Register` is not a `static`
+lambda. Mark it `static`, and move any captured state out, so trimming and
+[Native AOT](native-aot.md) stay safe.
+
+#### REACTOR_REF_001
+
+`ElementRef.Current` is read to set a reference property. That value is a
+snapshot, so it breaks when the target mounts late or unmounts. Declare the
+reference through `descriptor.Reference` or `binding.Reference`.
+
+#### REACTOR_LIFECYCLE_003
+
+A handler calls `Reconciler.UpdateChild`, which does not check that the
+child's element type is the same, and does not unmount a control it
+replaces. Call `Reconcile` and install its result when it differs from the
+current control.
+
+## How it works
+
+[Analyzer architecture](analyzer-architecture.md) explains how the
+analyzers are built, tested, and packed.
+
+## Tips
+
+- Treat analyzer warnings as real bugs. Most of them point at code that
+  compiles but behaves wrongly at run time.
+- In CI, set `TreatWarningsAsErrors`, or run
+  `mur check -- -p:TreatWarningsAsErrors=true`, so new warnings fail the
+  build. `mur check --strict` shows every warning but keeps the build's exit
+  code.
+- Info-level rules don't fail a build. Run `mur check --final` before you
+  merge to see them.
+- If a rule is wrong for your code, turn it off for that line with
+  `#pragma`, not for the whole project.
+
+## Next Steps
+
+- **[Rules of Reactor](rules-of-reactor.md)**: the rules the analyzers enforce, and why
+- **[mur CLI](mur-cli.md)**: run `mur check` and its modes
+- **[Analyzer architecture](analyzer-architecture.md)**: how the analyzers work inside
+- **[Developer tools](dev-tooling.md)**: where analyzers fit in the inner loop

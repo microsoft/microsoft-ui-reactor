@@ -1,13 +1,27 @@
 # UseObservableProperty
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseObservableProperty``2(``0,System.Func{``0,``1},System.String)`
+Subscribes to a specific property on an INotifyPropertyChanged source. Re-renders only when that property changes.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public TProp UseObservableProperty<T, TProp>(T source, Func<T, TProp> selector, string propertyName) where T : INotifyPropertyChanged
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Subscribes to a specific property on an INotifyPropertyChanged source.
-Re-renders only when that property changes.
+**Learn more:** [Reactivity Model](../../reactivity-model.md), [Hooks](../../hooks.md)
 
+## Parameters
 
+| Name | Type | Description |
+| --- | --- | --- |
+| `source` | `T` |  |
+| `selector` | `Func<T, TProp>` |  |
+| `propertyName` | `string` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected TProp UseObservableProperty<T, TProp>(T source, Func<T, TProp> selector, string propertyName) where T : INotifyPropertyChanged
+```

@@ -1,3 +1,4 @@
+using System.Numerics;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Xaml;
@@ -54,7 +55,7 @@ public sealed partial class Reconciler
         // entries, the pool's visual reset drops them all (spec 066 §7.3 step 4).
         internal Dictionary<KeyframeName, KeyframeTriggerState>? Keyframes;
         // The .InteractionStates() tracker while its pointer and focus handlers are attached.
-        internal InteractionStateTracker? InteractionTracker;
+        internal InteractionStateApplier.InteractionStateTracker? InteractionTracker;
         // Reactor enabled translation on the handed-out visual for a declared Translation channel
         // (spec 066 §4.3). The pool's visual reset disables it again and clears this.
         internal bool TranslationEnabled;
@@ -64,7 +65,7 @@ public sealed partial class Reconciler
         // Set while a visual-lane renter waits to get its XAML opacity on the visual (ElementPool).
         internal EventHandler<object>? OpacitySyncLayoutHandler;
         // The visual offset the pool's reset wrote, so the renter's sync can tell a later write from it.
-        internal global::System.Numerics.Vector3? PoolResetOffset;
+        internal Vector3? PoolResetOffset;
 
         /// <summary>
         /// Spec 066 §7.3 step 4: forgets what the previous renter owned on a visual the pool reset.
@@ -86,6 +87,36 @@ public sealed partial class Reconciler
             OriginExpressionRunning = false;
         }
     }
+
+    /// <summary>The transform modifier values last written to an element's handed-out Visual.</summary>
+    internal sealed class TransformRest
+    {
+        public Vector3 Scale = Vector3.One;
+        public Vector3 Translation;
+        public float RotationDegrees;
+        // The static .CenterPoint() value; the origin expression's offset while an origin is active.
+        public Vector3 CenterPoint;
+        // The active .TransformOrigin(), or null when the pivot is the static CenterPoint (spec 066 §8.2).
+        public Vector2? Origin;
+        // The .Opacity() modifier's value while Reactor writes it to the visual, or null.
+        public float? Opacity;
+    }
+
+    /// <summary>The transform an element's modifiers last wrote to its handed-out Visual, or identity.</summary>
+    internal static TransformRest RestTransformOf(UIElement uie)
+        => GetCompositionState(uie)?.TransformRest ?? IdentityRest;
+
+    private static readonly TransformRest IdentityRest = new();
+
+    /// <summary>
+    /// The opacity an element rests at: the <c>.Opacity()</c> modifier's value while Reactor owns the
+    /// visual's opacity (an animated modifier writes only the visual), otherwise <see cref="UIElement.Opacity"/>
+    /// (a local value or a style's).
+    /// </summary>
+    internal static float RestOpacityOf(UIElement uie)
+        => GetCompositionState(uie) is { TransformRest.Opacity: { } opacity } composition
+            && (composition.ModifierProperties & AnimateProperty.Opacity) != 0
+                ? opacity : (float)uie.Opacity;
 
     /// <summary>A keyframe entry's previous trigger and the controllers of the channels it started.</summary>
     internal record struct KeyframeTriggerState(object? Trigger, Dictionary<string, AnimationController>? Started);
