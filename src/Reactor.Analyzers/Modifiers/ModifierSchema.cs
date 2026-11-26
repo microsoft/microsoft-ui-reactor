@@ -11,9 +11,10 @@ namespace Microsoft.UI.Reactor.Analyzers.Modifiers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Layer 1 of the rollout: the analyzer's <c>ModifierTable</c> takes its gates from here, and the
-/// tests check the facts below against the hand-written reconciler. Nothing in <c>src/Reactor</c>
-/// is generated from it yet.
+/// The analyzer's <c>ModifierTable</c> takes its gates from here, and the tests check the facts
+/// below against the hand-written reconciler. Layer 2 generates the skip equality
+/// (<c>ModifierEquality</c>) and the four <c>Merge</c> bodies from it into
+/// <c>src/Reactor/Core/Element.Modifiers.Generated.cs</c>; the apply arms are still hand-written.
 /// </para>
 /// <para>
 /// The analyzer facts (<see cref="ModifierSlot.AnalyzerControlGate"/>,

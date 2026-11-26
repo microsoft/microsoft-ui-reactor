@@ -873,6 +873,18 @@ same (slot, receiver, DP) set, that carriers are receivers and negatives are not
 slot has a negative or a recorded reason, that every hand-coded slot is excluded with a reason, and
 that the generated file is fresh.
 
+Layer 2 is split in two PRs. The first generates the skip equality and the four `Merge` bodies
+into `src/Reactor/Core/Element.Modifiers.Generated.cs`. The comparison moved out of `Element` into
+`internal static partial class ModifierEquality` (`ModifierEquality.cs` keeps the declarations
+and the rationale), so `Element` and its doc snippet are untouched, and the four modifier records
+became `partial` with `partial` `Merge` declarations. The emitted shape is today's: Layout and
+Accessibility compare by record `Equals`, Visual and root fields one by one, the routed handlers
+through `ModifierCallbacksEqual`. The emitter throws on a declaration that shape cannot express
+(for example a Layout slot that is not `Value`) instead of emitting different code. Because
+`ModifierFieldContractTests` reads the skip policy from the same schema, a frozen literal
+(`ModifierSkipPolicySnapshotTests`), captured while that test still checked the hand-written
+comparison, is the independent oracle. The second PR generates `AppliedModifierMap` and
+`GetDependencyPropertyName`'s modifier rows.
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

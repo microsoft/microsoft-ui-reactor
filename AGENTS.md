@@ -341,24 +341,27 @@ point of return: stop and ship.
     `<!-- index:<control-id> -->` marker in a SKILL.md, so index and skills cannot drift. Edit the
     marked block, not the JSON; an unclosed/nested marker or an id naming no control fails
     generation. Spec 064.
-- A new common-element modifier touches every seam: the `ElementModifiers` field, skip
-  equality, `Merge`, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
+- A new common-element modifier touches every seam: the `ElementModifiers` field, the schema
+  slot, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
   helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
   gates scan it), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
   Declare the field in `ModifierSchema.Slots` (`src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`)
   at its apply position, with its bucket, receivers, skip-gate comparison and analyzer gates.
+  Skip equality (`ModifierEquality`) and the four `Merge` bodies are generated from the slot into
+  `Element.Modifiers.Generated.cs`: run `dotnet run --project tools/Reactor.ModifierGen` and add
+  its `ModifierSkipPolicySnapshotTests.Frozen` row (never hand-edit the generated file).
   `ModifierFieldContractTests` checks `Merge` and both skip-equality modes against it for every
   headless field, and `ModifierSchemaTests` checks its receivers, order, types and write
-  equality against the reconciler and its fluent names against the public extensions. If the
+  equality against the reconciler and its fluent names against the public extensions. A simple,
+  converted or attached field also gets a typed probe from the same tool run (a stale generated
+  file fails `ModifierMatrixSchemaAgreementTests`). If the
   analyzer should map the property's `.Set` form, also add a `Common("<Name>", poolReset: …)` row
   to `ModifierTable.Properties`, which takes its gates from the slot. A `Brush` or
   `FontFamily` field runs in the `ModifierFieldContract_BrushAndFont` selftest instead: add it to
   `ModifierFieldContractSelfTestFields` and a `CheckField` line in `ModifierFieldContractFixture`.
-  Update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067). A simple, converted
-  or attached field also gets a typed probe: run `dotnet run --project tools/Reactor.ModifierGen`
-  (a stale `ModifierProbes.Generated.cs` fails `ModifierMatrixSchemaAgreementTests`), then add its
-  rows to `ModifierMatrixExpectations` and sample values to `ModifierMatrixFixtures.SampleValues`.
+  Update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067). Then add the
+  probe's rows to `ModifierMatrixExpectations` and sample values to `ModifierMatrixFixtures.SampleValues`.
   A gated field (any receiver other than `FrameworkElement`) also needs a `Negatives` entry, with
   its DP in `ModifierMatrixFixtures.NegativeDp`, or a `NoNegative` reason. A hand-coded field
   goes in `Excluded` with a reason instead.
