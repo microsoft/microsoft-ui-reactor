@@ -922,7 +922,12 @@ generates `ApplyTypographyModifiers` (`FontFamily`, `FontSize`, `FontWeight`), w
 the reset arm, `Control` then `TextBlock`) and reference-compared guards (`!ReferenceEquals`, for
 `FontFamily`). Its output is token-identical to the removed method once comments are ignored and
 `TextBlock` is read as `WinUI.TextBlock`, the generated file's only spelling for that namespace.
-Converted and hand-coded slots still throw.
+Converted and hand-coded slots still throw. Three arms left for 3d and 3e sit in helpers that also
+hold hand-coded arms: `CornerRadius` opens `ApplyBorderModifiers`, `IsVisible` closes the composition
+helper `ApplyOpacityTransformAndVisibilityModifiers`, and `ToolTipPlacement` sits inside
+`ApplyToolTipAndFlyoutModifiers`. Whole-helper generation reaches them only once each is moved into a
+helper of its own at the same point in the call sequence, so the apply order does not move. Each of
+those PRs makes that extraction first.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run

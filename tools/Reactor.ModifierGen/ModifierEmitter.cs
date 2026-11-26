@@ -124,7 +124,7 @@ internal static class ModifierEmitter
                 if (receivers.Count > 1 || chains.ContainsKey(slot.Name))
                 {
                     if (!chains.TryGetValue(slot.Name, out var names) || names.Length != receivers.Count || receivers.Count < 2 || inGate)
-                        throw new InvalidOperationException($"{helper.Name}: {slot.Name} has {receivers.Count} Apply receivers ({string.Join(", ", receivers.Select(r => r.SimpleType))}). "
+                        throw new InvalidOperationException($"{helper.Name}: {slot.Name} has {receivers.Count} Apply receiver{(receivers.Count == 1 ? "" : "s")} ({string.Join(", ", receivers.Select(r => r.SimpleType))}). "
                             + "A chain of two or more is declared in ReceiverChains only, with one pattern-variable name per receiver in schema order.");
                     continue;
                 }
