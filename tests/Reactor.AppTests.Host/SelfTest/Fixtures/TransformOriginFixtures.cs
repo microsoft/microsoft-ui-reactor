@@ -279,9 +279,9 @@ internal sealed class TransformOriginFixture(Harness h, string scenario) : SelfT
         using var lab = new Lab(H);
         var target = await lab.Show(Target().TransformOrigin(0.5f, 0.5f)
             .InteractionStates(static s => s.PointerOver(scale: 2f), Curve.Linear(30)));
-        Reconciler.SimulatePointerOverForTests(target!, isOver: true);
+        InteractionStateApplier.SimulatePointerOverForTests(target!, isOver: true);
         await CheckPose(P + "_Hover_In", lab, Expect(50, 20, scale: 2));
-        Reconciler.SimulatePointerOverForTests(target!, isOver: false);
+        InteractionStateApplier.SimulatePointerOverForTests(target!, isOver: false);
         await CheckPose(P + "_Hover_Out", lab, Expect(50, 20));
     }
 

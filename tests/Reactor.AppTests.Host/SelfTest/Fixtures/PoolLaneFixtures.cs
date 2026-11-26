@@ -528,7 +528,7 @@ internal static class PoolLaneFixtures
             var hovered = await lab.Show(TextBlock("H").InteractionStates(b => b.PointerOver(foreground: hoverBrush)));
             H.Check(p + "_Mounted", hovered is WinUI.TextBlock);
             if (hovered is null) return;
-            Reconciler.SimulatePointerOverForTests(hovered, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(hovered, isOver: true);
             H.Check(p + "_HoverApplied", hovered.ReadLocalValue(WinUI.TextBlock.ForegroundProperty)
                 is Microsoft.UI.Xaml.Media.SolidColorBrush { Color.R: 255, Color.G: 0 });
             await lab.Show(null);
@@ -840,7 +840,7 @@ internal static class PoolLaneFixtures
             var source = await lab.Show(TextBox("t", static _ => { }).InteractionStates(b => b.PointerOver(foreground: hoverBrush)));
             H.Check(p + "_Mounted", source is WinUI.TextBox);
             if (source is null) return;
-            Reconciler.SimulatePointerOverForTests(source, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(source, isOver: true);
             // What PrepareConnectedAnimationSource does once WinUI accepts the source.
             ElementPool.ExcludeFromPool(source, releaseOnReturn: true);
             await lab.Show(null);
@@ -1028,14 +1028,14 @@ internal static class PoolLaneFixtures
         {
             const string p = "ElementPoolLanes_CompositionStateReset";
             using var lab = new Lab(H);
-            int trackers = Reconciler.InteractionTrackerCountForTests;
+            int trackers = InteractionStateApplier.InteractionTrackerCountForTests;
             var control = await lab.Show(Memo("k", static () => Target("C")).Keyframes("pulse", 1, Pulse)
                 .InteractionStates(b => b.PointerOver(opacity: 0.8f)).Scale(1.1f));
             var state = control is null ? null : Reconciler.GetCompositionState(control);
             var visual = state?.HandedOutVisual;
             H.Check(p + "_Owned", state is { VisualTaken: true, Keyframes.Count: 1, InteractionTracker: not null, TransformRest: not null }
                 && visual is not null && (state.ModifierProperties & AnimateProperty.Scale) != 0
-                && Reconciler.InteractionTrackerCountForTests == trackers + 1,
+                && InteractionStateApplier.InteractionTrackerCountForTests == trackers + 1,
                 $"keyframes={state?.Keyframes?.Count} tracker={state?.InteractionTracker is not null} rest={state?.TransformRest is not null} props={state?.ModifierProperties}");
             if (control is null || state is null) return;
 
@@ -1044,7 +1044,7 @@ internal static class PoolLaneFixtures
             H.Check(p + "_HandoffKept", state.VisualTaken && ReferenceEquals(state.HandedOutVisual, visual)
                 && ElementPool.IsVisualTaken(control));
             H.Check(p + "_RenterStateDropped", state is { Keyframes: null, InteractionTracker: null, TransformRest: null }
-                && state.ModifierProperties == default && Reconciler.InteractionTrackerCountForTests == trackers,
+                && state.ModifierProperties == default && InteractionStateApplier.InteractionTrackerCountForTests == trackers,
                 $"keyframes={state.Keyframes?.Count} tracker={state.InteractionTracker is not null} props={state.ModifierProperties}");
 
             var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));

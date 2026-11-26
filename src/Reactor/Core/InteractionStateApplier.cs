@@ -1,37 +1,23 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
-using Microsoft.UI.Reactor.Controls.Validation;
-using Microsoft.UI.Reactor.Core.Diagnostics;
-using Microsoft.UI.Reactor.Core.V1Protocol;
-using Microsoft.UI.Reactor.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
-using Microsoft.UI.Xaml.Media.Imaging;
 using WinUI = Microsoft.UI.Xaml.Controls;
-using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
-using WinShapes = Microsoft.UI.Xaml.Shapes;
-using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 
 namespace Microsoft.UI.Reactor.Core;
 
-// Reconciler partial: .InteractionStates() modifier.
-public sealed partial class Reconciler
+/// <summary>
+/// The <c>.InteractionStates()</c> modifier: attaches pointer and focus handlers to a control and
+/// animates its visual and brushes between the Normal, PointerOver, Pressed and Focused states.
+/// The per-control tracker lives on <see cref="Reconciler.CompositionState.InteractionTracker"/>.
+/// </summary>
+internal static class InteractionStateApplier
 {
-    // ════════════════════════════════════════════════════════════════
-    //  Interaction states (.InteractionStates() modifier)
-    // ════════════════════════════════════════════════════════════════
-
     /// <summary>
     /// The live tracker count, for the test seam below. The trackers themselves live on each
-    /// control's <see cref="CompositionState.InteractionTracker"/>; hosts on different UI threads
-    /// update this concurrently, hence the interlocked writes.
+    /// control's <see cref="Reconciler.CompositionState.InteractionTracker"/>; hosts on different
+    /// UI threads update this concurrently, hence the interlocked writes.
     /// </summary>
     private static int s_interactionTrackerCount;
 
@@ -39,7 +25,7 @@ public sealed partial class Reconciler
     internal static int InteractionTrackerCountForTests => Volatile.Read(ref s_interactionTrackerCount);
 
     private static InteractionStateTracker? InteractionTrackerOf(object sender)
-        => sender is UIElement uie ? GetCompositionState(uie)?.InteractionTracker : null;
+        => sender is UIElement uie ? Reconciler.GetCompositionState(uie)?.InteractionTracker : null;
 
     // Test-only: drives a hover-in / hover-out transition without synthesizing pointer input.
     internal static void SimulatePointerOverForTests(UIElement uie, bool isOver)
@@ -106,7 +92,7 @@ public sealed partial class Reconciler
     internal static void ApplyInteractionStates(UIElement uie, InteractionStatesConfig config)
     {
         ElementPool.MarkVisualTaken(uie);
-        var composition = GetOrCreateCompositionState(uie);
+        var composition = Reconciler.GetOrCreateCompositionState(uie);
         if (composition.InteractionTracker is not { } tracker)
         {
             tracker = new InteractionStateTracker();
@@ -131,7 +117,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal static void ClearInteractionStates(UIElement uie, bool restoreBrushes = false)
     {
-        if (GetCompositionState(uie) is not { InteractionTracker: { } tracker } composition) return;
+        if (Reconciler.GetCompositionState(uie) is not { InteractionTracker: { } tracker } composition) return;
         composition.InteractionTracker = null;
         Interlocked.Decrement(ref s_interactionTrackerCount);
 
@@ -219,11 +205,11 @@ public sealed partial class Reconciler
         // Normal returns the transforms to the values the element's modifiers wrote, not to
         // identity, so a hover-out does not discard them (#1613). The visual was taken above,
         // so a facade transform has already moved and been recorded.
-        var rest = RestTransformOf(uie);
+        var rest = Reconciler.RestTransformOf(uie);
 
         // Compositor properties — animate via Visual. The state takes the opacity channel, so a
         // pending opacity restart must not replace it (#1669).
-        CancelOpacityRestart(uie);
+        Reconciler.CancelOpacityRestart(uie);
         var targetOpacity = values?.Opacity ?? 1.0f;
         var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetOpacity, curve);
         visual.StartAnimation("Opacity", opacityAnim);
@@ -367,35 +353,6 @@ public sealed partial class Reconciler
         else
             fe.ClearValue(dp);
     }
-
-    /// <summary>The transform modifier values last written to an element's handed-out Visual.</summary>
-    internal sealed class TransformRest
-    {
-        public Vector3 Scale = Vector3.One;
-        public Vector3 Translation;
-        public float RotationDegrees;
-        // The static .CenterPoint() value; the origin expression's offset while an origin is active.
-        public Vector3 CenterPoint;
-        // The active .TransformOrigin(), or null when the pivot is the static CenterPoint (spec 066 §8.2).
-        public Vector2? Origin;
-        // The .Opacity() modifier's value while Reactor writes it to the visual, or null.
-        public float? Opacity;
-    }
-
-    private static TransformRest RestTransformOf(UIElement uie)
-        => GetCompositionState(uie)?.TransformRest ?? IdentityRest;
-
-    private static readonly TransformRest IdentityRest = new();
-
-    /// <summary>
-    /// The opacity an element rests at: the <c>.Opacity()</c> modifier's value while Reactor owns the
-    /// visual's opacity (an animated modifier writes only the visual), otherwise <see cref="UIElement.Opacity"/>
-    /// (a local value or a style's).
-    /// </summary>
-    internal static float RestOpacityOf(UIElement uie)
-        => GetCompositionState(uie) is { TransformRest.Opacity: { } opacity } composition
-            && (composition.ModifierProperties & AnimateProperty.Opacity) != 0
-                ? opacity : (float)uie.Opacity;
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {

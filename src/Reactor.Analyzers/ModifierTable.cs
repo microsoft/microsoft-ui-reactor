@@ -724,7 +724,7 @@ internal static class ModifierTable
         new Dictionary<string, string>(System.StringComparer.Ordinal)
         {
             ["Animate"] = "Reconciler.ApplyPropertyAnimation takes the visual to install its implicit animations.",
-            ["InteractionStates"] = "Reconciler.TransitionToState takes the visual on the first state change to animate it.",
+            ["InteractionStates"] = "InteractionStateApplier.TransitionToState takes the visual on the first state change to animate it.",
             ["Transition"] = "Reconciler.ApplyEnterTransition/ApplyExitTransition take the visual to animate enter and exit.",
             ["Keyframes"] = "Reconciler.ApplyKeyframeAnimations takes the visual to start the keyframe animation.",
             ["LayoutAnimation"] = "Reconciler.ApplyLayoutAnimation takes the visual to install its Offset/Size implicit animations.",

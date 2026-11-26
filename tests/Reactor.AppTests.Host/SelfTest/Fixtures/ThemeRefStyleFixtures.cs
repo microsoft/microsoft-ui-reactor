@@ -650,14 +650,14 @@ internal static class ThemeRefStyleFixtures
             {
                 H.Check($"ThemeRefStyle_Hover_{name}_NormalIsTheme", ColorOf(control.GetValue(property)) == LightColor,
                     $"value={ColorOf(control.GetValue(property))}");
-                Reconciler.SimulatePointerOverForTests(control, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(control, isOver: true);
                 H.Check($"ThemeRefStyle_Hover_{name}_HoverBrush", ReferenceEquals(control.GetValue(property), hover));
                 // Pressed sets its own brush: the press must not capture the hover brush as the
                 // value to restore.
-                Reconciler.SimulatePressedForTests(control, isPressed: true);
+                InteractionStateApplier.SimulatePressedForTests(control, isPressed: true);
                 H.Check($"ThemeRefStyle_Hover_{name}_PressedBrush", ReferenceEquals(control.GetValue(property), pressed));
-                Reconciler.SimulatePressedForTests(control, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(control, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(control, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(control, isOver: false);
                 H.Check($"ThemeRefStyle_Hover_{name}_LocalReleased", !HasLocal(control, property),
                     $"local={control.ReadLocalValue(property)}");
                 H.Check($"ThemeRefStyle_Hover_{name}_NormalRestored", ColorOf(control.GetValue(property)) == LightColor);
@@ -684,8 +684,8 @@ internal static class ThemeRefStyleFixtures
             var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trs-opacity" });
             H.Check("ThemeRefStyle_Opacity_NormalIsTheme", ColorOf(border?.Background) == LightColor);
             if (border is null) return;
-            Reconciler.SimulatePointerOverForTests(border, isOver: true);
-            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
             H.Check("ThemeRefStyle_Opacity_NoLocalBackground", !HasLocal(border, WinUI.Border.BackgroundProperty));
             H.Check("ThemeRefStyle_Opacity_ThemeLive",
                 await FlipToDark(border, () => ColorOf(border.Background) == DarkColor),
@@ -728,11 +728,11 @@ internal static class ThemeRefStyleFixtures
                 object Local() => border.ReadLocalValue(WinUI.Border.BackgroundProperty);
 
                 // Over → Pressed → Over → Normal: the press must not recapture the hover brush.
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
-                Reconciler.SimulatePressedForTests(border, isPressed: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: true);
                 H.Check("ThemeRefStyle_Explicit_PressedBrush", ReferenceEquals(border.Background, pressed));
-                Reconciler.SimulatePressedForTests(border, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Explicit_FirstRestoredAfterPress", ReferenceEquals(Local(), first),
                     $"bg={ColorOf(border.Background)}");
 
@@ -740,7 +740,7 @@ internal static class ThemeRefStyleFixtures
                 setPhase!(1);
                 await Harness.Render();
                 H.Check("ThemeRefStyle_Explicit_SecondApplied", ReferenceEquals(border.Background, second));
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
                 H.Check("ThemeRefStyle_Explicit_HoverBrush", ReferenceEquals(border.Background, hover));
 
                 // A re-render during the hover writes a new brush: it stands, and leaving the hover
@@ -748,17 +748,17 @@ internal static class ThemeRefStyleFixtures
                 setPhase!(2);
                 await Harness.Render();
                 H.Check("ThemeRefStyle_Explicit_ThirdAppliedDuringHover", ReferenceEquals(Local(), third));
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Explicit_ThirdKeptOnExit", ReferenceEquals(Local(), third),
                     $"bg={ColorOf(border.Background)}");
 
                 // And once the hover starts over that brush, a press and release still come back to it.
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
                 setPhase!(1);
                 await Harness.Render();
-                Reconciler.SimulatePressedForTests(border, isPressed: true);
-                Reconciler.SimulatePressedForTests(border, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: true);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Explicit_MidHoverBrushRestoredAfterPress", ReferenceEquals(Local(), second),
                     $"bg={ColorOf(border.Background)}");
             }
@@ -796,11 +796,11 @@ internal static class ThemeRefStyleFixtures
                 H.Check("ThemeRefStyle_Bound_Initial", ReferenceEquals(border?.Background, first));
                 if (border is null) return;
 
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
-                Reconciler.SimulatePressedForTests(border, isPressed: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: true);
                 H.Check("ThemeRefStyle_Bound_PressedBrush", ReferenceEquals(border.Background, pressed));
-                Reconciler.SimulatePressedForTests(border, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Bound_Restored", ReferenceEquals(border.Background, first),
                     $"bg={ColorOf(border.Background)}");
 

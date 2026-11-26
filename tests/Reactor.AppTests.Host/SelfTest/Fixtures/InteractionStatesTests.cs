@@ -149,14 +149,14 @@ internal static class InteractionStatesTests
             var visual = ElementCompositionPreview.GetElementVisual(target);
             var layoutY = visual.Offset.Y;
 
-            Reconciler.SimulatePointerOverForTests(target, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(target, isOver: true);
             H.Check("InterState_HoverIn_AnimatesTranslation", visual.TryGetAnimationController("Translation") is not null);
             H.Check("InterState_HoverIn_LeavesOffsetAlone", visual.TryGetAnimationController("Offset") is null);
             await Task.Delay(400);
             await Harness.Render();
             H.Check("InterState_HoverIn_OffsetKeptLayoutPosition", visual.Offset.Y >= 40, $"offset={visual.Offset} layoutY={layoutY}");
 
-            Reconciler.SimulatePointerOverForTests(target, isOver: false);
+            InteractionStateApplier.SimulatePointerOverForTests(target, isOver: false);
             H.Check("InterState_HoverOut_AnimatesTranslation", visual.TryGetAnimationController("Translation") is not null);
             H.Check("InterState_HoverOut_LeavesOffsetAlone", visual.TryGetAnimationController("Offset") is null);
             await Task.Delay(400);
