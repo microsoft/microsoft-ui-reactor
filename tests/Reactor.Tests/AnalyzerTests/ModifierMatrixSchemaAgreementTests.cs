@@ -37,7 +37,9 @@ public class ModifierMatrixSchemaAgreementTests
     [InlineData("gated in neither", "declare its arm shape in exactly one of SharedGate or InlineGates")]
     [InlineData("ungated but declared", "Width is ungated, so it cannot be in SharedGate or InlineGates")]
     [InlineData("declared out of range", "'HorizontalContentAlignment' is declared as gated but is not in the helper's slot range")]
-    [InlineData("reference-compared", "FontFamily compares by reference")]
+    [InlineData("converted", "IsVisible is Converted, and only Simple and Attached slots are emitted so far")]
+    [InlineData("chain undeclared", "FontSize has 2 Apply receivers (Control, TextBlock)")]
+    [InlineData("chain miscounted", "FontSize has 2 Apply receivers (Control, TextBlock)")]
     [InlineData("reversed range", "must name slots in ModifierSchema.Slots, in that order")]
     public void Reconciler_Emitter_Rejects_Undeclared_Shapes(string scenario, string expected)
     {
@@ -48,7 +50,9 @@ public class ModifierMatrixSchemaAgreementTests
             "gated in neither" => new("H", "s", "ElementSoundMode", "ElementSoundMode"),
             "ungated but declared" => new("H", "s", "Width", "Width", InlineGates: new Dictionary<string, (string Set, string Clear)> { ["Width"] = ("a", "b") }),
             "declared out of range" => new("H", "s", "Width", "Width", SharedGate: ("c", ["HorizontalContentAlignment"])),
-            "reference-compared" => new("H", "s", "FontFamily", "FontFamily"),
+            "converted" => new("H", "s", "IsVisible", "IsVisible"),
+            "chain undeclared" => new("H", "s", "FontSize", "FontSize"),
+            "chain miscounted" => new("H", "s", "FontSize", "FontSize", ReceiverChains: new Dictionary<string, string[]> { ["FontSize"] = ["a"] }),
             "reversed range" => new("H", "s", "Height", "Width"),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
         };

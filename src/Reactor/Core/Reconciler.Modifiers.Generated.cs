@@ -127,4 +127,41 @@ public sealed partial class Reconciler
         else if (!m.XYFocusKeyboardNavigation.HasValue && oldM?.XYFocusKeyboardNavigation.HasValue == true)
             fe.ClearValue(UIElement.XYFocusKeyboardNavigationProperty);
     }
+
+    /// <summary>FontFamily, FontSize, and FontWeight.</summary>
+    private static void ApplyTypographyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
+        if (m.FontFamily is not null && !ReferenceEquals(m.FontFamily, oldM?.FontFamily))
+        {
+            if (fe is WinUI.Control ffCtrl) ffCtrl.FontFamily = m.FontFamily;
+            else if (fe is WinUI.TextBlock ffTb) ffTb.FontFamily = m.FontFamily;
+        }
+        else if (m.FontFamily is null && oldM?.FontFamily is not null)
+        {
+            if (fe is WinUI.Control ffCtrl) ffCtrl.ClearValue(WinUI.Control.FontFamilyProperty);
+            else if (fe is WinUI.TextBlock ffTb) ffTb.ClearValue(WinUI.TextBlock.FontFamilyProperty);
+        }
+
+        if (m.FontSize.HasValue && m.FontSize != oldM?.FontSize)
+        {
+            if (fe is WinUI.Control fsCtrl) fsCtrl.FontSize = m.FontSize.Value;
+            else if (fe is WinUI.TextBlock fsTb) fsTb.FontSize = m.FontSize.Value;
+        }
+        else if (!m.FontSize.HasValue && oldM?.FontSize.HasValue == true)
+        {
+            if (fe is WinUI.Control fsCtrl) fsCtrl.ClearValue(WinUI.Control.FontSizeProperty);
+            else if (fe is WinUI.TextBlock fsTb) fsTb.ClearValue(WinUI.TextBlock.FontSizeProperty);
+        }
+
+        if (m.FontWeight.HasValue && m.FontWeight != oldM?.FontWeight)
+        {
+            if (fe is WinUI.Control fwCtrl) fwCtrl.FontWeight = m.FontWeight.Value;
+            else if (fe is WinUI.TextBlock fwTb) fwTb.FontWeight = m.FontWeight.Value;
+        }
+        else if (!m.FontWeight.HasValue && oldM?.FontWeight.HasValue == true)
+        {
+            if (fe is WinUI.Control fwCtrl) fwCtrl.ClearValue(WinUI.Control.FontWeightProperty);
+            else if (fe is WinUI.TextBlock fwTb) fwTb.ClearValue(WinUI.TextBlock.FontWeightProperty);
+        }
+    }
 }
