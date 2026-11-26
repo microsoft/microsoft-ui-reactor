@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/MarkdownTextSelectionOptions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelectionOptions.md",
+  "route": "/reference/markdown/MarkdownTextSelectionOptions",
+  "title": "MarkdownTextSelectionOptions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelectionOptions",
+  "description": "Copy policy for one selection scope; a non-null parser value only enables semantic surfaces.",
+  "markdown": "---\ntitle: \"MarkdownTextSelectionOptions\"\ndescription: \"Copy policy for one selection scope; a non-null parser value only enables semantic surfaces.\"\n---\n\n```csharp\npublic sealed record MarkdownTextSelectionOptions\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n**Learn more:** [Text and Media](/microsoft-ui-reactor/main/controls/text-and-media)\n\n## Constructors [#constructors]\n\n### `MarkdownTextSelectionOptions` [#markdowntextselectionoptions_1]\n\n```csharp\npublic MarkdownTextSelectionOptions()\n```\n\n## Properties [#properties]\n\n### `OnCopyResult` [#oncopyresult]\n\nFeedback only, called after Reactor's single clipboard write. The Boolean is true only on success. Expected clipboard-access failures report false; unexpected exceptions propagate. This callback must not write the clipboard again.\n\n```csharp\npublic Action<string, bool>? OnCopyResult  // get, init\n```\n"
+}

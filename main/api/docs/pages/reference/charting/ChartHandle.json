@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ChartHandle.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartHandle.md",
+  "route": "/reference/charting/ChartHandle",
+  "title": "ChartHandle<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartHandle",
+  "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.",
+  "markdown": "---\ntitle: \"ChartHandle<T>\"\ndescription: \"Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.\"\nsidebar:\n  label: \"ChartHandle\"\n---\n\n```csharp\npublic sealed class ChartHandle<T>\n```\n\nNamespace: `Microsoft.UI.Reactor.Charting`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n**Learn more:** [Charting](/microsoft-ui-reactor/main/controls/charting)\n\n## Properties [#properties]\n\n### `Canvas` [#canvas]\n\n```csharp\npublic Canvas Canvas  // get\n```\n\n## Methods [#methods]\n\n### `Redraw` [#redraw]\n\nRe-renders the chart with new data. Prefer state-driven re-renders instead.\n\n```csharp\npublic void Redraw(IReadOnlyList<T> data)\n```\n\n> **Obsolete.** Use state-driven re-renders (e.g. setData(newData)) instead of ChartHandle.Redraw. Charts are now native Reactor elements that diff efficiently.\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `data` | `IReadOnlyList<T>` |  |\n"
+}

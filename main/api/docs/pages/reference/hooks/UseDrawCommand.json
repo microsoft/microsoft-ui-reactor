@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDrawCommand.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawCommand.md",
+  "route": "/reference/hooks/UseDrawCommand",
+  "title": "UseDrawCommand",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawCommand",
+  "description": "Memoizes a Win2D draw callback and rebuilds it only when deps change.",
+  "markdown": "---\ntitle: \"UseDrawCommand\"\ndescription: \"Memoizes a Win2D draw callback and rebuilds it only when deps change.\"\n---\n\n```csharp\npublic static Action<CanvasDrawingSession, CanvasDrawEventArgs> UseDrawCommand<TState>(this RenderContext ctx, TState state, Action<CanvasDrawingSession, CanvasDrawEventArgs, TState> draw, object[] deps)\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseDrawCommandHook`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Advanced.Win2D;`.\n\n**Learn more:** [Win2D canvas](/microsoft-ui-reactor/main/controls/win2d-canvas)\n\n## Parameters [#parameters]\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `state` | `TState` |  |\n| `draw` | `Action<CanvasDrawingSession, CanvasDrawEventArgs, TState>` |  |\n| `deps` | `object[]` |  |\n\n## Remarks [#remarks]\n\nThe returned delegate is typically passed to `Win2DCanvas(...)` from [`Factories`](/microsoft-ui-reactor/main/reference/factories). If the delegate is consumed by animated callbacks, follow [the Win2D canvas threading guide](/microsoft-ui-reactor/main/controls/win2d-canvas#threading).\n"
+}

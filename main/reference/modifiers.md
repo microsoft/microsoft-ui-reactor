@@ -45,6 +45,8 @@ Modifiers that only some controls have, grouped by the area of those controls.
 | [Status and info](/microsoft-ui-reactor/main/reference/modifiers/status-and-info) | Modifiers that only the controls in the Status and info area have. |
 | [Forms](/microsoft-ui-reactor/main/reference/modifiers/forms) | Modifiers that only the controls in the Forms area have. |
 | [Interop](/microsoft-ui-reactor/main/reference/modifiers/interop) | Modifiers that only the controls in the Interop area have. |
+| [Docking](/microsoft-ui-reactor/main/reference/modifiers/docking) | Modifiers that only the controls in the Docking area have. |
+| [Win2D canvas](/microsoft-ui-reactor/main/reference/modifiers/win2d) | Modifiers that only the controls in the Win2D canvas area have. |
 
 ## Types [#types]
 

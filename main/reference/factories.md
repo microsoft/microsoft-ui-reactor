@@ -5,7 +5,7 @@ sidebar:
   label: "Overview"
 ---
 
-Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`. A few factories live on other classes, such as `ValidationRuleDsl`; their sections name the `using static` they need.
+Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`. A few factories live on other classes, such as `ValidationRuleDsl`; their sections name the `using static` they need. The Data grid, Markdown and Win2D canvas factories come from the `Microsoft.UI.Reactor.Advanced` package and are on `Microsoft.UI.Reactor.Advanced.Factories`.
 
 **Learn more:** [Controls](/microsoft-ui-reactor/main/controls), [Layout](/microsoft-ui-reactor/main/guides/layout), [Cheat Sheet](/microsoft-ui-reactor/main/get-started/cheat-sheet)
 
@@ -27,3 +27,6 @@ Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to bui
 | [Forms](/microsoft-ui-reactor/main/reference/factories/forms) | Form fields, validation rules, validation visualizers and the property grid. |
 | [Composition](/microsoft-ui-reactor/main/reference/factories/composition) | Components, memoization, error boundaries, conditionals and other structural elements. |
 | [Interop](/microsoft-ui-reactor/main/reference/factories/interop) | Hosted XAML content, web views and maps. |
+| [Data grid](/microsoft-ui-reactor/main/reference/factories/data-grid) | The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package. |
+| [Markdown](/microsoft-ui-reactor/main/reference/factories/markdown) | Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package. |
+| [Win2D canvas](/microsoft-ui-reactor/main/reference/factories/win2d) | Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package. |

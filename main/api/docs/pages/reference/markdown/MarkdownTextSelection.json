@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/MarkdownTextSelection.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelection.md",
+  "route": "/reference/markdown/MarkdownTextSelection",
+  "title": "MarkdownTextSelection",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelection",
+  "description": "Message-bounded, opt-in semantic text selection for Markdown and custom content.",
+  "markdown": "---\ntitle: \"MarkdownTextSelection\"\ndescription: \"Message-bounded, opt-in semantic text selection for Markdown and custom content.\"\n---\n\n```csharp\npublic static class MarkdownTextSelection\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n**Learn more:** [Text and Media](/microsoft-ui-reactor/main/controls/text-and-media)\n\n## Methods [#methods]\n\n### `Scope` [#scope]\n\nWrap the complete assembled message once, not each Markdown leaf.\n\n```csharp\npublic static Element Scope(MarkdownTextSelectionOptions options, Element content)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `options` | [`MarkdownTextSelectionOptions`](/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelectionOptions) |  |\n| `content` | [`Element`](/microsoft-ui-reactor/main/reference/elements/Element) |  |\n\n### `Surface` [#surface]\n\nRegister exact visible plain text, with an explicit separator to the next surface. Chrome not included in this wrapper is not selectable.\n\n```csharp\npublic static Element Surface(string text, Element content, string separatorAfter = \"\\n\")\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `text` | `string` |  |  |\n| `content` | [`Element`](/microsoft-ui-reactor/main/reference/elements/Element) |  |  |\n| `separatorAfter` | `string` | `\"\\n\"` |  |\n\n### `Visibility` [#visibility]\n\nInclude or exclude descendant surfaces without changing the app's visual rendering. Nested gates compose. The app owns disclosure state and native Expander policy.\n\n```csharp\npublic static Element Visibility(bool isVisible, Element content)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `isVisible` | `bool` |  |\n| `content` | [`Element`](/microsoft-ui-reactor/main/reference/elements/Element) |  |\n"
+}

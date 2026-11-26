@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/win2d.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d.md",
+  "route": "/reference/win2d",
+  "title": "Win2D canvas",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d",
+  "description": "Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package.",
+  "markdown": "---\ntitle: \"Win2D canvas\"\ndescription: \"Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package.\"\nsidebar:\n  label: \"Overview\"\n---\n\n**Learn more:** [Win2D canvas](/microsoft-ui-reactor/main/controls/win2d-canvas)\n\n## Types [#types]\n\n| Type | Description |\n| --- | --- |\n| [`Win2DAnimatedCanvasHandler`](/microsoft-ui-reactor/main/reference/win2d/Win2DAnimatedCanvasHandler) | V1 handler that mounts, updates, and unmounts `Win2DAnimatedCanvasElement` instances. |\n| [`Win2DCanvasHandler`](/microsoft-ui-reactor/main/reference/win2d/Win2DCanvasHandler) | V1 handler that mounts, updates, and unmounts `Win2DCanvasElement` instances. |\n| [`Win2DVirtualCanvasHandler`](/microsoft-ui-reactor/main/reference/win2d/Win2DVirtualCanvasHandler) | V1 handler that mounts, updates, and unmounts `Win2DVirtualCanvasElement` instances. |\n"
+}

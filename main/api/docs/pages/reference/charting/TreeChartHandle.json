@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/TreeChartHandle.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartHandle.md",
+  "route": "/reference/charting/TreeChartHandle",
+  "title": "TreeChartHandle",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartHandle",
+  "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.",
+  "markdown": "---\ntitle: \"TreeChartHandle\"\ndescription: \"Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.\"\n---\n\n```csharp\npublic sealed class TreeChartHandle\n```\n\nNamespace: `Microsoft.UI.Reactor.Charting`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n**Learn more:** [Charting](/microsoft-ui-reactor/main/controls/charting)\n\n## Properties [#properties]\n\n### `Canvas` [#canvas]\n\n```csharp\npublic Canvas Canvas  // get\n```\n\n## Methods [#methods]\n\n### `Redraw` [#redraw]\n\nRe-renders the tree with new data. Prefer state-driven re-renders instead.\n\n```csharp\npublic void Redraw<T>(T root)\n```\n\n> **Obsolete.** Use state-driven re-renders (e.g. setRoot(newRoot)) instead of TreeChartHandle.Redraw. Tree charts are now native Reactor elements that diff efficiently.\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `root` | `T` |  |\n"
+}

@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/MarkdownLink.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownLink.md",
+  "route": "/reference/markdown/MarkdownLink",
+  "title": "MarkdownLink",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownLink",
+  "markdown": "---\ntitle: \"MarkdownLink\"\nseo:\n  description: \"A Markdown link passed to MarkdownOptions.LinkBuilder.\"\n---\n\nA Markdown link passed to [`MarkdownOptions.LinkBuilder`](/microsoft-ui-reactor/main/reference/markdown/MarkdownOptions#linkbuilder).\n\n```csharp\npublic sealed record MarkdownLink\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n**Learn more:** [Text and Media](/microsoft-ui-reactor/main/controls/text-and-media)\n\n## Constructors [#constructors]\n\n### `MarkdownLink` [#markdownlink_1]\n\n```csharp\npublic MarkdownLink()\n```\n\n## Properties [#properties]\n\n### `Label` [#label]\n\nThe label as one selectable rich-text element preserving inline formatting, default heading/table-header typography, and images, or `null` for an empty label.\n\n```csharp\npublic RichTextBlockElement? Label  // get, init\n```\n\n### `Text` [#text]\n\nThe label as plain text: its text runs concatenated, the alternative text of any rendered image in place of the image, and line breaks as spaces. Use it for an accessible name or tooltip. Empty for an empty label.\n\n```csharp\npublic required string Text  // get, init\n```\n\n**Remarks**\n\nThe label is written by the document author and can claim any destination (for example `[https://bank.example](https://other.example)`). Anything that tells the user where the link goes, such as a confirmation prompt, must show [`MarkdownLink.Uri`](#uri), not this text.\n\n### `Uri` [#uri]\n\nThe link target. Always absolute with an `http`, `https`, or `mailto` scheme.\n\n```csharp\npublic required Uri Uri  // get, init\n```\n"
+}

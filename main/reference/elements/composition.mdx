@@ -43,7 +43,7 @@ public record ComponentElement<TProps> : ComponentElement
 
 Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`ComponentElement`](#componentelement).
 
-**Created by:** [`Component`](/microsoft-ui-reactor/main/reference/factories/composition#component), [`LocaleProvider`](/microsoft-ui-reactor/main/reference/factories/composition#localeprovider), [`PropertyGrid`](/microsoft-ui-reactor/main/reference/factories/composition#propertygrid), [`VirtualList`](/microsoft-ui-reactor/main/reference/factories/composition#virtuallist)
+**Created by:** [`Component`](/microsoft-ui-reactor/main/reference/factories/composition#component), [`DataGrid`](/microsoft-ui-reactor/main/reference/factories/data-grid#datagrid), [`LocaleProvider`](/microsoft-ui-reactor/main/reference/factories/composition#localeprovider), [`PropertyGrid`](/microsoft-ui-reactor/main/reference/factories/composition#propertygrid), [`VirtualList`](/microsoft-ui-reactor/main/reference/factories/composition#virtuallist)
 
 | Property | Type | Description |
 | --- | --- | --- |

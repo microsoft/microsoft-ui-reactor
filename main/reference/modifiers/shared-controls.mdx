@@ -252,12 +252,13 @@ GridViewElement SelectionChanged(this GridViewElement el, Action<IReadOnlyList<i
 ListBoxElement SelectionChanged(this ListBoxElement el, Action<IReadOnlyList<int>>? handler)
 ListViewElement SelectionChanged(this ListViewElement el, Action<IReadOnlyList<int>>? handler)
 TextBoxElement SelectionChanged(this TextBoxElement el, Action<string, int, int>? handler)
+DataGridElement<T> SelectionChanged<T>(this DataGridElement<T> el, Action<IReadOnlySet<RowKey>>? handler)
 ItemsViewElement<T> SelectionChanged<T>(this ItemsViewElement<T> el, Action<IReadOnlyList<T>>? handler)
 TemplatedGridViewElement<T> SelectionChanged<T>(this TemplatedGridViewElement<T> el, Action<IReadOnlyList<T>>? handler)
 TemplatedListViewElement<T> SelectionChanged<T>(this TemplatedListViewElement<T> el, Action<IReadOnlyList<T>>? handler)
 ```
 
-Declared in `ElementExtensions`.
+Declared in `ElementExtensions`, `DataGridEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Controls;`).
 
 | Overload | Description |
 | --- | --- |
@@ -265,17 +266,18 @@ Declared in `ElementExtensions`.
 | `SelectionChanged(ListBoxElement, Action<IReadOnlyList<int>>?)` | Wires the multi-select snapshot handler. Passing `null` clears. |
 | `SelectionChanged(ListViewElement, Action<IReadOnlyList<int>>?)` | Wires the multi-select snapshot handler. Receives the FULL list of selected indices on every change (not added/removed deltas). Snapshot semantics match `CalendarView.SelectedDatesChanged`. Passing `null` clears. |
 | `SelectionChanged(TextBoxElement, Action<string, int, int>?)` | Wires the selection-changed handler. Receives (selectedText, selectionStart, selectionLength). Passing `null` clears. |
+| `SelectionChanged<T>(DataGridElement<T>, Action<IReadOnlySet<RowKey>>?)` | Wires the multi-select snapshot handler for [`DataGridElement<T>`](/microsoft-ui-reactor/main/reference/elements/data-grid#datagridelementt). Receives the full set of currently-selected `RowKey`s on every change (not added/removed deltas). Passing `null` clears. |
 | `SelectionChanged<T>(ItemsViewElement<T>, Action<IReadOnlyList<T>>?)` | Wires the multi-select snapshot handler. Receives the full list of currently selected items (not indices). Passing `null` clears. |
 | `SelectionChanged<T>(TemplatedGridViewElement<T>, Action<IReadOnlyList<T>>?)` | Wires the multi-select snapshot handler for the typed peer. Passing `null` clears. |
 | `SelectionChanged<T>(TemplatedListViewElement<T>, Action<IReadOnlyList<T>>?)` | Wires the multi-select snapshot handler for the typed peer. Receives the full list of currently selected items. Passing `null` clears. |
 
-**Applies to:** [`GridViewElement`](/microsoft-ui-reactor/main/reference/elements/collections#gridviewelement), [`ListBoxElement`](/microsoft-ui-reactor/main/reference/elements/collections#listboxelement), [`ListViewElement`](/microsoft-ui-reactor/main/reference/elements/collections#listviewelement), [`TextBoxElement`](/microsoft-ui-reactor/main/reference/elements/input#textboxelement), [`ItemsViewElement<T>`](/microsoft-ui-reactor/main/reference/elements/collections#itemsviewelementt), [`TemplatedGridViewElement<T>`](/microsoft-ui-reactor/main/reference/elements/collections#templatedgridviewelementt), [`TemplatedListViewElement<T>`](/microsoft-ui-reactor/main/reference/elements/collections#templatedlistviewelementt).
+**Applies to:** [`GridViewElement`](/microsoft-ui-reactor/main/reference/elements/collections#gridviewelement), [`ListBoxElement`](/microsoft-ui-reactor/main/reference/elements/collections#listboxelement), [`ListViewElement`](/microsoft-ui-reactor/main/reference/elements/collections#listviewelement), [`TextBoxElement`](/microsoft-ui-reactor/main/reference/elements/input#textboxelement), [`DataGridElement<T>`](/microsoft-ui-reactor/main/reference/elements/data-grid#datagridelementt), [`ItemsViewElement<T>`](/microsoft-ui-reactor/main/reference/elements/collections#itemsviewelementt), [`TemplatedGridViewElement<T>`](/microsoft-ui-reactor/main/reference/elements/collections#templatedgridviewelementt), [`TemplatedListViewElement<T>`](/microsoft-ui-reactor/main/reference/elements/collections#templatedlistviewelementt).
 
 **Parameters**
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `handler` | `Action<IReadOnlyList<int>>?` or `Action<string, int, int>?` or `Action<IReadOnlyList<T>>?` |  |
+| `handler` | `Action<IReadOnlyList<int>>?` or `Action<string, int, int>?` or `Action<IReadOnlySet<RowKey>>?` or `Action<IReadOnlyList<T>>?` |  |
 
 ## `TransformOrigin` [#transformorigin]
 

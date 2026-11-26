@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseIsActivePane.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActivePane.md",
+  "route": "/reference/hooks/UseIsActivePane",
+  "title": "UseIsActivePane",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActivePane",
+  "description": "Returns true when the \\enclosing pane\\ is the host's currently-active pane. Re-renders the consumer only on the false ↔ true transition.",
+  "markdown": "---\ntitle: \"UseIsActivePane\"\ndescription: \"Returns true when the \\\\enclosing pane\\\\ is the host's currently-active pane. Re-renders the consumer only on the false ↔ true transition.\"\n---\n\n```csharp\npublic static bool UseIsActivePane(this RenderContext ctx)\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.\n\n**Learn more:** [Windows](/microsoft-ui-reactor/main/guides/windows), [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n\n## Remarks [#remarks]\n\nResolves \"the enclosing pane\" via [`UsePane`](/microsoft-ui-reactor/main/reference/hooks/UsePane); returns false outside any pane subtree.\n"
+}

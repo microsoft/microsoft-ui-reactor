@@ -109,6 +109,22 @@ This skill points you at the Reactor docs, at https://microsoft.github.io/micros
 
 - [UseDevtools](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDevtools.md): Returns true when the current process is running with the in-app devtools UI enabled. This is the AND of two independent signals:
 
+##### Docking
+
+- [UseActivePaneKey](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseActivePaneKey.md): Returns the active pane's DockableContent.Key, or null when no pane is active. Re-renders the consumer only when the active key changes (selector-style scope).
+- [UseDockHost](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockHost.md): Returns the nearest enclosing DockHostModel, or null when the component is rendered outside any docking host.
+- [UseDockLayout](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockLayout.md): Returns a wide snapshot of the dock layout — re-renders the consumer on any structural change. Documented as "used sparingly — devtools, not pane content."
+- [UseDockPanePersisted](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockPanePersisted.md): Per-pane persisted state. Auto-prefixes the supplied key with pane:<paneKey>: so two panes that share a key name (e.g. "scrollOffset") get independent stored values instead of trampling each other in the underlying WindowPersistedScope.
+- [UseDockState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockState.md): Returns the enclosing pane's current dock state (Docked / Floating / AutoHidden / AutoHiddenExpanded / Hidden). Re-renders the consumer only on transitions.
+- [UseIsActivePane](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActivePane.md): Returns true when the \enclosing pane\ is the host's currently-active pane. Re-renders the consumer only on the false ↔ true transition.
+- [UsePane](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePane.md): Returns identity info for the enclosing pane subtree. Throws InvalidOperationException when called from a component that isn't rendered inside a docked pane.
+
+##### Win2D drawing
+
+- [UseCanvasResources](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCanvasResources.md): Creates resources for the current Win2D shared device, recreates them after CanvasDevice.DeviceLost, and disposes them on unmount.
+- [UseDrawCommand](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawCommand.md): Memoizes a Win2D draw callback and rebuilds it only when deps change.
+- [UseDrawState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawState.md): Creates a stable mutable draw-state reference for Win2D callbacks.
+
 ##### Types and options
 
 - [Focus helpers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/focus-helpers.md): The focus manager and the modifiers that the UseFocus hooks work with.
@@ -150,6 +166,9 @@ This skill points you at the Reactor docs, at https://microsoft.github.io/micros
 - [Elements: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/forms.md): Form fields, validation rules, validation visualizers and the property grid.
 - [Elements: Composition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/composition.md): Components, memoization, error boundaries, conditionals and other structural elements.
 - [Elements: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/interop.md): Hosted XAML content, web views and maps.
+- [Elements: Data grid](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/data-grid.md): The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package.
+- [Elements: Docking](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/docking.md): The dock manager and its events, from the Microsoft.UI.Reactor.Advanced package.
+- [Elements: Win2D canvas](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/win2d.md): Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package.
 
 ##### Types
 
@@ -172,6 +191,9 @@ This skill points you at the Reactor docs, at https://microsoft.github.io/micros
 - [Factories: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/forms.md): Form fields, validation rules, validation visualizers and the property grid.
 - [Factories: Composition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/composition.md): Components, memoization, error boundaries, conditionals and other structural elements.
 - [Factories: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/interop.md): Hosted XAML content, web views and maps.
+- [Factories: Data grid](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/data-grid.md): The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package.
+- [Factories: Markdown](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/markdown.md): Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package.
+- [Factories: Win2D canvas](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/win2d.md): Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package.
 
 #### Modifiers
 
@@ -205,6 +227,8 @@ This skill points you at the Reactor docs, at https://microsoft.github.io/micros
 - [Control modifiers: Status and info](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/status-and-info.md): Modifiers that only the controls in the Status and info area have.
 - [Control modifiers: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/forms.md): Modifiers that only the controls in the Forms area have.
 - [Control modifiers: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/interop.md): Modifiers that only the controls in the Interop area have.
+- [Control modifiers: Docking](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/docking.md): Modifiers that only the controls in the Docking area have.
+- [Control modifiers: Win2D canvas](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/win2d.md): Modifiers that only the controls in the Win2D canvas area have.
 
 ##### Types
 
@@ -278,26 +302,5 @@ This skill points you at the Reactor docs, at https://microsoft.github.io/micros
 - [Column attributes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/column-attributes.md): Attributes that change how a property shows as a column.
 - [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/enums.md): The enumerations in this category.
 - [Paging](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/paging.md): Types for infinite and paged resources.
-- [Query cache](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/query-cache.md): The process-wide cache that resource hooks share.
-- [Sort and filter descriptors](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/descriptors.md): Requests, sort, filter and field descriptors that data sources receive.
-- [FocusRevalidationService](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/FocusRevalidationService.md): Central service that invalidates stale QueryCache entries when the app window is reactivated or resumed, so consumers that opted in via ResourceOptions.RefetchOnWindowFocus = true see fresh data after an Alt-Tab or resume. Disabled by default — see ReactorFeatureFlags.FocusRevalidation.
-- [IDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IDataSource.md): A read-only data source that provides paged access to items.
-- [IKeyedDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IKeyedDataSource.md): A data source that supports fetching individual items by key.
-- [IMutableDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IMutableDataSource.md): A mutable data source that supports CRUD operations.
-- [IObservableDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IObservableDataSource.md): A data source that fires events when data changes.
-- [ListDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ListDataSource.md): In-memory data source backed by a list. Supports client-side sorting, filtering, text search, paging, and CRUD mutations.
-- [ObservableListDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ObservableListDataSource.md): An observable data source that watches an ObservableCollection for changes and fires DataChanged when items are added, removed, or modified. The collection is the authoritative source — mutations go through the collection, not through the data source's CRUD methods.
 
-#### Navigation
-
-- [Navigation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation.md): Navigation state, routes, lifecycle contexts and page transitions.
-- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/enums.md): The enumerations in this category.
-- [Navigation diagnostics](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/diagnostics.md): Diagnostic events raised by the navigation system.
-- [Navigation lifecycle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/lifecycle.md): Contexts passed to the navigation lifecycle callbacks.
-- [Navigation transitions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/transitions.md): Transitions that play when the navigation host changes pages.
-- [DeepLinkMap<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkMap.md): Maps URI patterns to route constructors for deep linking. Patterns use /segment/{param:type} syntax where type is int or string.
-- [DeepLinkResult<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkResult.md): Result of a deep link resolution attempt.
-- [NavigateOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigateOptions.md): Options for a single navigation action.
-- [NavigationEventArgs<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationEventArgs.md): Event args fired after a successful navigation.
-
-…and 167 more. [llms.txt](https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt) lists every page.
+…and 234 more. [llms.txt](https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt) lists every page.

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown.md",
+  "route": "/reference/markdown",
+  "title": "Markdown",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown",
+  "description": "Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package.",
+  "markdown": "---\ntitle: \"Markdown\"\ndescription: \"Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package.\"\nsidebar:\n  label: \"Overview\"\n---\n\nThese types ship in the `Microsoft.UI.Reactor.Advanced` package. Call the `Markdown` factory to render a Markdown string.\n\n**Learn more:** [Text and Media](/microsoft-ui-reactor/main/controls/text-and-media)\n\n## Types [#types]\n\n| Type | Description |\n| --- | --- |\n| [Delegates](/microsoft-ui-reactor/main/reference/markdown/delegates) | The delegate types in this category. |\n| [Enums](/microsoft-ui-reactor/main/reference/markdown/enums) | The enumerations in this category. |\n| [Parser block and span details](/microsoft-ui-reactor/main/reference/markdown/parser-details) | Details the Markdown parser passes for each block and span. |\n| [`MarkdownLink`](/microsoft-ui-reactor/main/reference/markdown/MarkdownLink) | A Markdown link passed to `MarkdownOptions.LinkBuilder`. |\n| [`MarkdownOptions`](/microsoft-ui-reactor/main/reference/markdown/MarkdownOptions) | Options for customizing how markdown is rendered to Reactor elements. |\n| [`MarkdownTextSelection`](/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelection) | Message-bounded, opt-in semantic text selection for Markdown and custom content. |\n| [`MarkdownTextSelectionOptions`](/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelectionOptions) | Copy policy for one selection scope; a non-null parser value only enables semantic surfaces. |\n"
+}

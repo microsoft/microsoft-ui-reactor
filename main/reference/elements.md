@@ -27,6 +27,9 @@ Every control in Reactor is described by an element record. Factory methods crea
 | [Forms](/microsoft-ui-reactor/main/reference/elements/forms) | Form fields, validation rules, validation visualizers and the property grid. |
 | [Composition](/microsoft-ui-reactor/main/reference/elements/composition) | Components, memoization, error boundaries, conditionals and other structural elements. |
 | [Interop](/microsoft-ui-reactor/main/reference/elements/interop) | Hosted XAML content, web views and maps. |
+| [Data grid](/microsoft-ui-reactor/main/reference/elements/data-grid) | The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package. |
+| [Docking](/microsoft-ui-reactor/main/reference/elements/docking) | The dock manager and its events, from the Microsoft.UI.Reactor.Advanced package. |
+| [Win2D canvas](/microsoft-ui-reactor/main/reference/elements/win2d) | Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package. |
 
 ## Types [#types]
 

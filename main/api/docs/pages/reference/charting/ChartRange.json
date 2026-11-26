@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ChartRange.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartRange.md",
+  "route": "/reference/charting/ChartRange",
+  "title": "ChartRange",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartRange",
+  "description": "Represents a range of x-axis values selected via brush interaction.",
+  "markdown": "---\ntitle: \"ChartRange\"\ndescription: \"Represents a range of x-axis values selected via brush interaction.\"\n---\n\n```csharp\npublic record ChartRange(double Start, double End)\n```\n\nNamespace: `Microsoft.UI.Reactor.Charting`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n**Learn more:** [Charting](/microsoft-ui-reactor/main/controls/charting)\n\n## Constructors [#constructors]\n\n### `ChartRange` [#chartrange_1]\n\nRepresents a range of x-axis values selected via brush interaction.\n\n```csharp\npublic ChartRange(double Start, double End)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `Start` | `double` |  |\n| `End` | `double` |  |\n\n## Properties [#properties]\n\n### `End` [#end]\n\n```csharp\npublic double End  // get, init\n```\n\n### `Start` [#start]\n\n```csharp\npublic double Start  // get, init\n```\n"
+}

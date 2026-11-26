@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseActivePaneKey.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseActivePaneKey.md",
+  "route": "/reference/hooks/UseActivePaneKey",
+  "title": "UseActivePaneKey",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseActivePaneKey",
+  "markdown": "---\ntitle: \"UseActivePaneKey\"\nseo:\n  description: \"Returns the active pane's DockableContent.Key, or null when no pane is active. Re-renders the consumer only when the active key changes (selector-style scope).\"\n---\n\nReturns the active pane's [`DockableContent.Key`](/microsoft-ui-reactor/main/reference/docking/layout-model#key_1), or null when no pane is active. Re-renders the consumer only when the active key changes (selector-style scope).\n\n```csharp\npublic static object? UseActivePaneKey(this RenderContext ctx)\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.\n\n**Learn more:** [Docking Windows](/microsoft-ui-reactor/main/guides/docking)\n\n## Remarks [#remarks]\n\nSpec 045 §5.3.11.\n"
+}

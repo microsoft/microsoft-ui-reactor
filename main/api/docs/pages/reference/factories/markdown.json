@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/factories/markdown.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/markdown.md",
+  "route": "/reference/factories/markdown",
+  "title": "Factories: Markdown",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/markdown",
+  "description": "Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package.",
+  "markdown": "---\ntitle: \"Factories: Markdown\"\ndescription: \"Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package.\"\nsidebar:\n  label: \"Markdown\"\n---\n\nEach factory method returns an element record. These are on `Microsoft.UI.Reactor.Advanced.Factories` in the `Microsoft.UI.Reactor.Advanced` package, so add `using static Microsoft.UI.Reactor.Advanced.Factories;`.\n\n**Learn more:** [Text and Media](/microsoft-ui-reactor/main/controls/text-and-media)\n\n## `Markdown` [#markdown]\n\n```csharp\nElement Markdown(string markdown)\nElement Markdown(string markdown, MarkdownOptions options)\n```\n\nDeclared in `Factories` (package `Microsoft.UI.Reactor.Advanced`). Call it through `using static Microsoft.UI.Reactor.Advanced.Factories;`.\n\n| Overload | Description |\n| --- | --- |\n| `Markdown(string)` | Render a markdown string as a Reactor element tree. |\n| `Markdown(string, MarkdownOptions)` | Render a markdown string as a Reactor element tree with custom rendering options. |\n\n**Returns:** [`Element`](/microsoft-ui-reactor/main/reference/elements/Element).\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `markdown` | `string` |  |\n| `options` | [`MarkdownOptions`](/microsoft-ui-reactor/main/reference/markdown/MarkdownOptions) |  |\n"
+}

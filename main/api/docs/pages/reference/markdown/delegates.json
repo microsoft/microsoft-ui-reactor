@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/delegates.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/delegates.md",
+  "route": "/reference/markdown/delegates",
+  "title": "Delegates",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/delegates",
+  "description": "The delegate types in this category.",
+  "markdown": "---\ntitle: \"Delegates\"\ndescription: \"The delegate types in this category.\"\n---\n\n**Learn more:** [Text and Media](/microsoft-ui-reactor/main/controls/text-and-media)\n\n## `MarkdownDebugLogCallback` [#markdowndebuglogcallback]\n\n```csharp\npublic delegate void MarkdownDebugLogCallback(string message)\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n## `MarkdownEnterBlockCallback` [#markdownenterblockcallback]\n\nCallback delegates for the SAX-style parser. All callbacks may abort parsing by returning non-zero.\n\n```csharp\npublic delegate int MarkdownEnterBlockCallback(MarkdownBlockType type, object? detail)\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n## `MarkdownEnterSpanCallback` [#markdownenterspancallback]\n\n```csharp\npublic delegate int MarkdownEnterSpanCallback(MarkdownSpanType type, object? detail)\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n## `MarkdownLeaveBlockCallback` [#markdownleaveblockcallback]\n\n```csharp\npublic delegate int MarkdownLeaveBlockCallback(MarkdownBlockType type, object? detail)\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n## `MarkdownLeaveSpanCallback` [#markdownleavespancallback]\n\n```csharp\npublic delegate int MarkdownLeaveSpanCallback(MarkdownSpanType type, object? detail)\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n## `MarkdownTextCallback` [#markdowntextcallback]\n\n```csharp\npublic delegate int MarkdownTextCallback(MarkdownTextType type, ReadOnlySpan<char> text)\n```\n\nNamespace: `Microsoft.UI.Reactor.Markdown`. Package: `Microsoft.UI.Reactor.Advanced`.\n"
+}

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ForceGraphHandle.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphHandle.md",
+  "route": "/reference/charting/ForceGraphHandle",
+  "title": "ForceGraphHandle",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphHandle",
+  "description": "Exposes the live simulation and WinUI elements so callers can implement drag, animation, hover, or any other interaction outside the library.",
+  "markdown": "---\ntitle: \"ForceGraphHandle\"\ndescription: \"Exposes the live simulation and WinUI elements so callers can implement drag, animation, hover, or any other interaction outside the library.\"\n---\n\n```csharp\npublic sealed class ForceGraphHandle\n```\n\nNamespace: `Microsoft.UI.Reactor.Charting`. Package: `Microsoft.UI.Reactor.Advanced`.\n\n**Learn more:** [Charting](/microsoft-ui-reactor/main/controls/charting)\n\n## Properties [#properties]\n\n### `Canvas` [#canvas]\n\n```csharp\npublic Canvas Canvas  // get\n```\n\n### `LinkLines` [#linklines]\n\n```csharp\npublic Line[] LinkLines  // get\n```\n\n### `NodeEllipses` [#nodeellipses]\n\n```csharp\npublic Ellipse[] NodeEllipses  // get\n```\n\n### `NodeLabels` [#nodelabels]\n\n```csharp\npublic TextBlock?[] NodeLabels  // get\n```\n\n### `Simulation` [#simulation]\n\n```csharp\npublic ForceSimulation Simulation  // get\n```\n\n## Methods [#methods]\n\n### `SyncPositions` [#syncpositions]\n\nPushes current ForceNode positions into the WinUI elements (ellipses, labels, link endpoints). Call this after Simulation.Tick() to animate the display.\n\n```csharp\npublic void SyncPositions()\n```\n"
+}

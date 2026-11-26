@@ -1,0 +1,51 @@
+---
+title: "Elements: Data grid"
+description: "The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package."
+sidebar:
+  label: "Data grid"
+---
+
+Element records are immutable descriptions of a control. You usually create them with a factory method and change them with modifiers.
+
+**Learn more:** [Collections](/microsoft-ui-reactor/main/controls/collections)
+
+## `DataGridElement<T>` [#datagridelementt]
+
+Element record for the DataGrid component. Defines the full API surface for data grid rendering and interaction.
+
+```csharp
+public record DataGridElement<T> : Element
+```
+
+Namespace: `Microsoft.UI.Reactor.Controls`. Package: `Microsoft.UI.Reactor.Advanced`. Inherits from [`Element`](/microsoft-ui-reactor/main/reference/elements/Element).
+
+**Modifiers:** [`SelectionChanged`](/microsoft-ui-reactor/main/reference/modifiers/shared-controls#selectionchanged)
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `AllowColumnReorder` | `bool` | Whether columns can be reordered via drag. |
+| `AllowColumnResize` | `bool` | Whether columns can be resized. |
+| `CellTemplate` | `Func<CellContext<T>, Element>?` | Custom cell template override. |
+| `ColumnOverrides` | `Func<FieldDescriptor, FieldDescriptor>?` | Column override function for reflection-generated columns. |
+| `Columns` | `IReadOnlyList<FieldDescriptor>?` | Column definitions. If null, auto-generated from TypeRegistry + reflection. |
+| `EditMode` | [`EditMode`](/microsoft-ui-reactor/main/reference/controls/data-grid#editmode) | Editing mode: Cell (one cell at a time) or Row (whole row). |
+| `Editable` | `bool` | Whether rows are editable (enables inline editing). |
+| `EmptyTemplate` | [`Element?`](/microsoft-ui-reactor/main/reference/elements/Element) | Element to show when data is empty. |
+| `EstimatedRowHeight` | `double` | Estimated row height for variable-height mode. |
+| `HeaderTemplate` | `Func<HeaderContext, Element>?` | Custom header template override. |
+| `LoadingTemplate` | [`Element?`](/microsoft-ui-reactor/main/reference/elements/Element) | Element to show when data is loading. |
+| `OnRowChanged` | `Func<RowKey, T, Task>?` | Callback when a row is edited and committed. |
+| `OnSelectionChanged` | `Action<IReadOnlySet<RowKey>>?` | Callback when selection changes. |
+| `PlaceholderCellTemplate` | `Func<FieldDescriptor, double, Element>?` | Custom cell content for placeholder (unloaded) rows. Receives the column descriptor and column width; returns the element to render in that cell. When null, uses a default shimmer-style gray bar. |
+| `Registry` | [`TypeRegistry?`](/microsoft-ui-reactor/main/reference/controls/property-grid-templates#typeregistry) | Type registry for editor/renderer resolution. If null, uses built-in defaults. |
+| `RowDetailTemplate` | `Func<T, RowKey, Element>?` | Callback for row detail content when expanded. |
+| `RowHeight` | `double?` | Fixed row height. When set, all rows have this exact height and the virtualizer uses O(1) offset calculation. When null, rows are measured. |
+| `RowTemplate` | `Func<RowContext<T>, Element>?` | Custom row template override. |
+| `SelectionMode` | [`SelectionMode`](/microsoft-ui-reactor/main/reference/controls/data-grid#selectionmode_1) | Selection mode. |
+| `ShowHeaders` | `bool` | Whether to show column headers. |
+| `ShowSearch` | `bool` | Whether to show the search bar above the grid. |
+| `Source` | [`IDataSource<T>`](/microsoft-ui-reactor/main/reference/data/IDataSource) | The data source providing rows. |
+
+**`OnRowChanged`**
+
+Invoked on the thread that committed the edit — the UI thread for a keyboard, blur or click-away commit — because the grid routes commits through a `UseMutation` handle that runs its mutator synchronously. Do not rely on that as a guarantee: when no commit dispatcher is installed the grid offloads this callback to a thread-pool thread instead (see `DataGridComponent<T>.HandleAsyncCommit` for both contracts and when each applies). Marshal your own UI work rather than assuming UI-thread affinity. Whatever the returned [`Task`](https://learn.microsoft.com/dotnet/api/system.threading.tasks.task) awaits internally resumes wherever its own context says. On both of the grid's own commit paths a faulted task is caught and surfaced in the row's error banner with the edit reverted — but a custom [`DataGridState.CommitDispatcher`](/microsoft-ui-reactor/main/reference/controls/data-grid#commitdispatcher) takes over invoking this callback, and owes callers that handling itself.

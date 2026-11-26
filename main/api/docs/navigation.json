@@ -495,24 +495,106 @@
             {
               "children": [
                 {
+                  "kind": "page",
+                  "label": "UseActivePaneKey",
+                  "pageId": "filesystem:reference/01-hooks/11-(docking)/UseActivePaneKey.md",
+                  "route": "/reference/hooks/UseActivePaneKey"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseDockHost",
+                  "pageId": "filesystem:reference/01-hooks/11-(docking)/UseDockHost.md",
+                  "route": "/reference/hooks/UseDockHost"
+                },
+                {
+                  "description": "Returns a wide snapshot of the dock layout — re-renders the consumer on any structural change. Documented as \"used sparingly — devtools, not pane content.\"",
+                  "kind": "page",
+                  "label": "UseDockLayout",
+                  "pageId": "filesystem:reference/01-hooks/11-(docking)/UseDockLayout.md",
+                  "route": "/reference/hooks/UseDockLayout"
+                },
+                {
+                  "kind": "page",
+                  "label": "UseDockPanePersisted",
+                  "pageId": "filesystem:reference/01-hooks/11-(docking)/UseDockPanePersisted.md",
+                  "route": "/reference/hooks/UseDockPanePersisted"
+                },
+                {
+                  "description": "Returns the enclosing pane's current dock state (Docked / Floating / AutoHidden / AutoHiddenExpanded / Hidden). Re-renders the consumer only on transitions.",
+                  "kind": "page",
+                  "label": "UseDockState",
+                  "pageId": "filesystem:reference/01-hooks/11-(docking)/UseDockState.md",
+                  "route": "/reference/hooks/UseDockState"
+                },
+                {
+                  "description": "Returns true when the \\enclosing pane\\ is the host's currently-active pane. Re-renders the consumer only on the false ↔ true transition.",
+                  "kind": "page",
+                  "label": "UseIsActivePane",
+                  "pageId": "filesystem:reference/01-hooks/11-(docking)/UseIsActivePane.md",
+                  "route": "/reference/hooks/UseIsActivePane"
+                },
+                {
+                  "kind": "page",
+                  "label": "UsePane",
+                  "pageId": "filesystem:reference/01-hooks/11-(docking)/UsePane.md",
+                  "route": "/reference/hooks/UsePane"
+                }
+              ],
+              "display": "flat",
+              "kind": "group",
+              "label": "Docking",
+              "path": "/reference/hooks"
+            },
+            {
+              "children": [
+                {
+                  "description": "Creates resources for the current Win2D shared device, recreates them after CanvasDevice.DeviceLost, and disposes them on unmount.",
+                  "kind": "page",
+                  "label": "UseCanvasResources",
+                  "pageId": "filesystem:reference/01-hooks/12-(win2d)/UseCanvasResources.md",
+                  "route": "/reference/hooks/UseCanvasResources"
+                },
+                {
+                  "description": "Memoizes a Win2D draw callback and rebuilds it only when deps change.",
+                  "kind": "page",
+                  "label": "UseDrawCommand",
+                  "pageId": "filesystem:reference/01-hooks/12-(win2d)/UseDrawCommand.md",
+                  "route": "/reference/hooks/UseDrawCommand"
+                },
+                {
+                  "description": "Creates a stable mutable draw-state reference for Win2D callbacks.",
+                  "kind": "page",
+                  "label": "UseDrawState",
+                  "pageId": "filesystem:reference/01-hooks/12-(win2d)/UseDrawState.md",
+                  "route": "/reference/hooks/UseDrawState"
+                }
+              ],
+              "display": "flat",
+              "kind": "group",
+              "label": "Win2D drawing",
+              "path": "/reference/hooks"
+            },
+            {
+              "children": [
+                {
                   "description": "The focus manager and the modifiers that the UseFocus hooks work with.",
                   "kind": "page",
                   "label": "Focus helpers",
-                  "pageId": "filesystem:reference/01-hooks/11-(types)/focus-helpers.md",
+                  "pageId": "filesystem:reference/01-hooks/13-(types)/focus-helpers.md",
                   "route": "/reference/hooks/focus-helpers"
                 },
                 {
                   "description": "Small types that hooks return or take as options.",
                   "kind": "page",
                   "label": "Hook results and options",
-                  "pageId": "filesystem:reference/01-hooks/11-(types)/hook-types.md",
+                  "pageId": "filesystem:reference/01-hooks/13-(types)/hook-types.md",
                   "route": "/reference/hooks/hook-types"
                 },
                 {
                   "description": "The Pending element that shows a fallback while resources below it load.",
                   "kind": "page",
                   "label": "Pending",
-                  "pageId": "filesystem:reference/01-hooks/11-(types)/pending.md",
+                  "pageId": "filesystem:reference/01-hooks/13-(types)/pending.md",
                   "route": "/reference/hooks/pending"
                 }
               ],
@@ -747,6 +829,27 @@
               "route": "/reference/elements/interop"
             },
             {
+              "description": "The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Data grid",
+              "pageId": "filesystem:reference/03-elements/data-grid.md",
+              "route": "/reference/elements/data-grid"
+            },
+            {
+              "description": "The dock manager and its events, from the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Docking",
+              "pageId": "filesystem:reference/03-elements/docking.md",
+              "route": "/reference/elements/docking"
+            },
+            {
+              "description": "Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Win2D canvas",
+              "pageId": "filesystem:reference/03-elements/win2d.md",
+              "route": "/reference/elements/win2d"
+            },
+            {
               "children": [
                 {
                   "description": "A lightweight, immutable description of a UI node (the \"virtual DOM\"). Elements are cheap to create and diff — they never touch real controls directly.",
@@ -874,6 +977,27 @@
               "label": "Interop",
               "pageId": "filesystem:reference/04-factories/interop.md",
               "route": "/reference/factories/interop"
+            },
+            {
+              "description": "The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Data grid",
+              "pageId": "filesystem:reference/04-factories/data-grid.md",
+              "route": "/reference/factories/data-grid"
+            },
+            {
+              "description": "Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Markdown",
+              "pageId": "filesystem:reference/04-factories/markdown.md",
+              "route": "/reference/factories/markdown"
+            },
+            {
+              "description": "Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Win2D canvas",
+              "pageId": "filesystem:reference/04-factories/win2d.md",
+              "route": "/reference/factories/win2d"
             }
           ],
           "display": "flat",
@@ -1061,6 +1185,20 @@
                   "label": "Interop",
                   "pageId": "filesystem:reference/05-modifiers/02-(controls)/interop.md",
                   "route": "/reference/modifiers/interop"
+                },
+                {
+                  "description": "Modifiers that only the controls in the Docking area have.",
+                  "kind": "page",
+                  "label": "Docking",
+                  "pageId": "filesystem:reference/05-modifiers/02-(controls)/docking.md",
+                  "route": "/reference/modifiers/docking"
+                },
+                {
+                  "description": "Modifiers that only the controls in the Win2D canvas area have.",
+                  "kind": "page",
+                  "label": "Win2D canvas",
+                  "pageId": "filesystem:reference/05-modifiers/02-(controls)/win2d.md",
+                  "route": "/reference/modifiers/win2d"
                 }
               ],
               "display": "flat",
@@ -1919,6 +2057,13 @@
               "route": "/reference/controls/collection-items"
             },
             {
+              "description": "The data grid component, its state, column builders and cell contexts. From the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Data grid",
+              "pageId": "filesystem:reference/15-controls/data-grid.md",
+              "route": "/reference/controls/data-grid"
+            },
+            {
               "description": "Records that describe an icon.",
               "kind": "page",
               "label": "Icon data",
@@ -2280,6 +2425,363 @@
           "label": "Extensibility",
           "path": "/reference/extensibility",
           "route": "/reference/extensibility"
+        },
+        {
+          "children": [
+            {
+              "description": "Charts, the D3 scales, shapes and layouts behind them, and chart accessibility. From the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Overview",
+              "pageId": "filesystem:reference/19-charting/index.md",
+              "route": "/reference/charting"
+            },
+            {
+              "description": "Descriptors, palettes and the contrast checks that make charts accessible.",
+              "kind": "page",
+              "label": "Chart accessibility",
+              "pageId": "filesystem:reference/19-charting/chart-accessibility.md",
+              "route": "/reference/charting/chart-accessibility"
+            },
+            {
+              "description": "Binning, bisection, extents, grouping, ranges, ticks, statistics and random numbers.",
+              "kind": "page",
+              "label": "D3: arrays and statistics",
+              "pageId": "filesystem:reference/19-charting/d3-data.md",
+              "route": "/reference/charting/d3-data"
+            },
+            {
+              "description": "Colors, number formatting, easing and interpolators.",
+              "kind": "page",
+              "label": "D3: color, format and interpolation",
+              "pageId": "filesystem:reference/19-charting/d3-color-and-format.md",
+              "route": "/reference/charting/d3-color-and-format"
+            },
+            {
+              "description": "Contour generators, Delaunay triangulation, Voronoi diagrams and polygon helpers.",
+              "kind": "page",
+              "label": "D3: contours, Delaunay and polygons",
+              "pageId": "filesystem:reference/19-charting/d3-geometry.md",
+              "route": "/reference/charting/d3-geometry"
+            },
+            {
+              "description": "Hierarchy, treemap, pack, partition, chord, Sankey and force layouts.",
+              "kind": "page",
+              "label": "D3: layouts",
+              "pageId": "filesystem:reference/19-charting/d3-layouts.md",
+              "route": "/reference/charting/d3-layouts"
+            },
+            {
+              "description": "Scales that map data values to positions, sizes and colors.",
+              "kind": "page",
+              "label": "D3: scales",
+              "pageId": "filesystem:reference/19-charting/d3-scales.md",
+              "route": "/reference/charting/d3-scales"
+            },
+            {
+              "description": "Line, area, arc, pie, stack, link and symbol generators, curves and the path builder.",
+              "kind": "page",
+              "label": "D3: shapes",
+              "pageId": "filesystem:reference/19-charting/d3-shapes.md",
+              "route": "/reference/charting/d3-shapes"
+            },
+            {
+              "description": "The enumerations in this category.",
+              "kind": "page",
+              "label": "Enums",
+              "pageId": "filesystem:reference/19-charting/enums.md",
+              "route": "/reference/charting/enums"
+            },
+            {
+              "kind": "page",
+              "label": "ChartElement",
+              "pageId": "filesystem:reference/19-charting/ChartElement.md",
+              "route": "/reference/charting/ChartElement"
+            },
+            {
+              "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.",
+              "kind": "page",
+              "label": "ChartHandle",
+              "pageId": "filesystem:reference/19-charting/ChartHandle.md",
+              "route": "/reference/charting/ChartHandle"
+            },
+            {
+              "description": "Represents a range of x-axis values selected via brush interaction.",
+              "kind": "page",
+              "label": "ChartRange",
+              "pageId": "filesystem:reference/19-charting/ChartRange.md",
+              "route": "/reference/charting/ChartRange"
+            },
+            {
+              "description": "Static factory methods that integrate D3 charting into Reactor's declarative model. Import with: using static Microsoft.UI.Reactor.Charting.Charts;",
+              "kind": "page",
+              "label": "Charts",
+              "pageId": "filesystem:reference/19-charting/Charts.md",
+              "route": "/reference/charting/Charts"
+            },
+            {
+              "description": "Static factory methods for declarative D3 chart drawing. Import with: using static Microsoft.UI.Reactor.Charting.D3Charts;",
+              "kind": "page",
+              "label": "D3Charts",
+              "pageId": "filesystem:reference/19-charting/D3Charts.md",
+              "route": "/reference/charting/D3Charts"
+            },
+            {
+              "description": "Force-directed graph element for Reactor's virtual tree. Pure renderer — draws nodes, links, labels from a ForceSimulation's current state. Interaction (drag, animation) is the caller's responsibility.",
+              "kind": "page",
+              "label": "ForceGraphElement",
+              "pageId": "filesystem:reference/19-charting/ForceGraphElement.md",
+              "route": "/reference/charting/ForceGraphElement"
+            },
+            {
+              "description": "Exposes the live simulation and WinUI elements so callers can implement drag, animation, hover, or any other interaction outside the library.",
+              "kind": "page",
+              "label": "ForceGraphHandle",
+              "pageId": "filesystem:reference/19-charting/ForceGraphHandle.md",
+              "route": "/reference/charting/ForceGraphHandle"
+            },
+            {
+              "kind": "page",
+              "label": "ForcedColorsTheme",
+              "pageId": "filesystem:reference/19-charting/ForcedColorsTheme.md",
+              "route": "/reference/charting/ForcedColorsTheme"
+            },
+            {
+              "kind": "page",
+              "label": "PieChartElement",
+              "pageId": "filesystem:reference/19-charting/PieChartElement.md",
+              "route": "/reference/charting/PieChartElement"
+            },
+            {
+              "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.",
+              "kind": "page",
+              "label": "PieChartHandle",
+              "pageId": "filesystem:reference/19-charting/PieChartHandle.md",
+              "route": "/reference/charting/PieChartHandle"
+            },
+            {
+              "kind": "page",
+              "label": "PieSliceLayout",
+              "pageId": "filesystem:reference/19-charting/PieSliceLayout.md",
+              "route": "/reference/charting/PieSliceLayout"
+            },
+            {
+              "description": "Tree diagram element for Reactor's virtual tree — renders as native D3 elements.",
+              "kind": "page",
+              "label": "TreeChartElement",
+              "pageId": "filesystem:reference/19-charting/TreeChartElement.md",
+              "route": "/reference/charting/TreeChartElement"
+            },
+            {
+              "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.",
+              "kind": "page",
+              "label": "TreeChartHandle",
+              "pageId": "filesystem:reference/19-charting/TreeChartHandle.md",
+              "route": "/reference/charting/TreeChartHandle"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Charting",
+          "path": "/reference/charting",
+          "route": "/reference/charting"
+        },
+        {
+          "children": [
+            {
+              "description": "The dock layout model, its events, persistence and the native window interop. From the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Overview",
+              "pageId": "filesystem:reference/20-docking/index.md",
+              "route": "/reference/docking"
+            },
+            {
+              "description": "Event arguments the dock manager raises.",
+              "kind": "page",
+              "label": "Dock events",
+              "pageId": "filesystem:reference/20-docking/events.md",
+              "route": "/reference/docking/events"
+            },
+            {
+              "description": "A log of the operations the dock manager performed.",
+              "kind": "page",
+              "label": "Docking diagnostics",
+              "pageId": "filesystem:reference/20-docking/diagnostics.md",
+              "route": "/reference/docking/diagnostics"
+            },
+            {
+              "description": "Resource keys and default strings for the docking UI.",
+              "kind": "page",
+              "label": "Docking strings",
+              "pageId": "filesystem:reference/20-docking/strings.md",
+              "route": "/reference/docking/strings"
+            },
+            {
+              "description": "The nodes, panes and targets that make up a dock layout.",
+              "kind": "page",
+              "label": "Layout model",
+              "pageId": "filesystem:reference/20-docking/layout-model.md",
+              "route": "/reference/docking/layout-model"
+            },
+            {
+              "description": "Save, load and migrate dock layouts.",
+              "kind": "page",
+              "label": "Layout persistence",
+              "pageId": "filesystem:reference/20-docking/persistence.md",
+              "route": "/reference/docking/persistence"
+            },
+            {
+              "description": "Floating windows, display bounds and the layout snapshots exchanged with native code.",
+              "kind": "page",
+              "label": "Native window interop",
+              "pageId": "filesystem:reference/20-docking/native.md",
+              "route": "/reference/docking/native"
+            },
+            {
+              "kind": "page",
+              "label": "DockContexts",
+              "pageId": "filesystem:reference/20-docking/DockContexts.md",
+              "route": "/reference/docking/DockContexts"
+            },
+            {
+              "kind": "page",
+              "label": "DockHostModel",
+              "pageId": "filesystem:reference/20-docking/DockHostModel.md",
+              "route": "/reference/docking/DockHostModel"
+            },
+            {
+              "kind": "page",
+              "label": "DockLayoutOps",
+              "pageId": "filesystem:reference/20-docking/DockLayoutOps.md",
+              "route": "/reference/docking/DockLayoutOps"
+            },
+            {
+              "kind": "page",
+              "label": "IDockAdapter",
+              "pageId": "filesystem:reference/20-docking/IDockAdapter.md",
+              "route": "/reference/docking/IDockAdapter"
+            },
+            {
+              "kind": "page",
+              "label": "IDockBehavior",
+              "pageId": "filesystem:reference/20-docking/IDockBehavior.md",
+              "route": "/reference/docking/IDockBehavior"
+            },
+            {
+              "kind": "page",
+              "label": "IDockLayoutMigration",
+              "pageId": "filesystem:reference/20-docking/IDockLayoutMigration.md",
+              "route": "/reference/docking/IDockLayoutMigration"
+            },
+            {
+              "kind": "page",
+              "label": "IDockLayoutStrategy",
+              "pageId": "filesystem:reference/20-docking/IDockLayoutStrategy.md",
+              "route": "/reference/docking/IDockLayoutStrategy"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Docking",
+          "path": "/reference/docking",
+          "route": "/reference/docking"
+        },
+        {
+          "children": [
+            {
+              "description": "Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Overview",
+              "pageId": "filesystem:reference/21-markdown/index.md",
+              "route": "/reference/markdown"
+            },
+            {
+              "description": "The delegate types in this category.",
+              "kind": "page",
+              "label": "Delegates",
+              "pageId": "filesystem:reference/21-markdown/delegates.md",
+              "route": "/reference/markdown/delegates"
+            },
+            {
+              "description": "The enumerations in this category.",
+              "kind": "page",
+              "label": "Enums",
+              "pageId": "filesystem:reference/21-markdown/enums.md",
+              "route": "/reference/markdown/enums"
+            },
+            {
+              "description": "Details the Markdown parser passes for each block and span.",
+              "kind": "page",
+              "label": "Parser block and span details",
+              "pageId": "filesystem:reference/21-markdown/parser-details.md",
+              "route": "/reference/markdown/parser-details"
+            },
+            {
+              "kind": "page",
+              "label": "MarkdownLink",
+              "pageId": "filesystem:reference/21-markdown/MarkdownLink.md",
+              "route": "/reference/markdown/MarkdownLink"
+            },
+            {
+              "description": "Options for customizing how markdown is rendered to Reactor elements. All callback properties are optional — null means use the default rendering.",
+              "kind": "page",
+              "label": "MarkdownOptions",
+              "pageId": "filesystem:reference/21-markdown/MarkdownOptions.md",
+              "route": "/reference/markdown/MarkdownOptions"
+            },
+            {
+              "description": "Message-bounded, opt-in semantic text selection for Markdown and custom content.",
+              "kind": "page",
+              "label": "MarkdownTextSelection",
+              "pageId": "filesystem:reference/21-markdown/MarkdownTextSelection.md",
+              "route": "/reference/markdown/MarkdownTextSelection"
+            },
+            {
+              "description": "Copy policy for one selection scope; a non-null parser value only enables semantic surfaces.",
+              "kind": "page",
+              "label": "MarkdownTextSelectionOptions",
+              "pageId": "filesystem:reference/21-markdown/MarkdownTextSelectionOptions.md",
+              "route": "/reference/markdown/MarkdownTextSelectionOptions"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Markdown",
+          "path": "/reference/markdown",
+          "route": "/reference/markdown"
+        },
+        {
+          "children": [
+            {
+              "description": "Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package.",
+              "kind": "page",
+              "label": "Overview",
+              "pageId": "filesystem:reference/22-win2d/index.md",
+              "route": "/reference/win2d"
+            },
+            {
+              "kind": "page",
+              "label": "Win2DAnimatedCanvasHandler",
+              "pageId": "filesystem:reference/22-win2d/Win2DAnimatedCanvasHandler.md",
+              "route": "/reference/win2d/Win2DAnimatedCanvasHandler"
+            },
+            {
+              "kind": "page",
+              "label": "Win2DCanvasHandler",
+              "pageId": "filesystem:reference/22-win2d/Win2DCanvasHandler.md",
+              "route": "/reference/win2d/Win2DCanvasHandler"
+            },
+            {
+              "kind": "page",
+              "label": "Win2DVirtualCanvasHandler",
+              "pageId": "filesystem:reference/22-win2d/Win2DVirtualCanvasHandler.md",
+              "route": "/reference/win2d/Win2DVirtualCanvasHandler"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Win2D canvas",
+          "path": "/reference/win2d",
+          "route": "/reference/win2d"
         }
       ],
       "display": "flat",

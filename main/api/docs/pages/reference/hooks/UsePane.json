@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UsePane.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePane.md",
+  "route": "/reference/hooks/UsePane",
+  "title": "UsePane",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePane",
+  "markdown": "---\ntitle: \"UsePane\"\nseo:\n  description: \"Returns identity info for the enclosing pane subtree. Throws InvalidOperationException when called from a component that isn't rendered inside a docked pane.\"\n---\n\nReturns identity info for the enclosing pane subtree. Throws [`InvalidOperationException`](https://learn.microsoft.com/dotnet/api/system.invalidoperationexception) when called from a component that isn't rendered inside a docked pane.\n\n```csharp\npublic static DockPaneInfo UsePane(this RenderContext ctx)\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.\n\n**Learn more:** [Docking Windows](/microsoft-ui-reactor/main/guides/docking)\n\n## Remarks [#remarks]\n\nSpec 045 §5.3.11.\n"
+}

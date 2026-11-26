@@ -1,5 +1,5 @@
 {
-  "count": 374,
+  "count": 441,
   "generator": "blume@2.2.7",
   "pages": [
     {
@@ -1126,6 +1126,244 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting.md",
+      "route": "/reference/charting",
+      "title": "Charting",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting",
+      "description": "Charts, the D3 scales, shapes and layouts behind them, and chart accessibility. From the Microsoft.UI.Reactor.Advanced package."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/chart-accessibility.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/chart-accessibility.md",
+      "route": "/reference/charting/chart-accessibility",
+      "title": "Chart accessibility",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/chart-accessibility",
+      "description": "Descriptors, palettes and the contrast checks that make charts accessible."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ChartElement.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartElement.md",
+      "route": "/reference/charting/ChartElement",
+      "title": "ChartElement<T>",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartElement"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ChartHandle.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartHandle.md",
+      "route": "/reference/charting/ChartHandle",
+      "title": "ChartHandle<T>",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartHandle",
+      "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ChartRange.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartRange.md",
+      "route": "/reference/charting/ChartRange",
+      "title": "ChartRange",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartRange",
+      "description": "Represents a range of x-axis values selected via brush interaction."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/Charts.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/Charts.md",
+      "route": "/reference/charting/Charts",
+      "title": "Charts",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/Charts",
+      "description": "Static factory methods that integrate D3 charting into Reactor's declarative model. Import with: using static Microsoft.UI.Reactor.Charting.Charts;"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/d3-color-and-format.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-color-and-format.md",
+      "route": "/reference/charting/d3-color-and-format",
+      "title": "D3: color, format and interpolation",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-color-and-format",
+      "description": "Colors, number formatting, easing and interpolators."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/d3-data.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-data.md",
+      "route": "/reference/charting/d3-data",
+      "title": "D3: arrays and statistics",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-data",
+      "description": "Binning, bisection, extents, grouping, ranges, ticks, statistics and random numbers."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/d3-geometry.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-geometry.md",
+      "route": "/reference/charting/d3-geometry",
+      "title": "D3: contours, Delaunay and polygons",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-geometry",
+      "description": "Contour generators, Delaunay triangulation, Voronoi diagrams and polygon helpers."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/d3-layouts.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-layouts.md",
+      "route": "/reference/charting/d3-layouts",
+      "title": "D3: layouts",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-layouts",
+      "description": "Hierarchy, treemap, pack, partition, chord, Sankey and force layouts."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/d3-scales.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-scales.md",
+      "route": "/reference/charting/d3-scales",
+      "title": "D3: scales",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-scales",
+      "description": "Scales that map data values to positions, sizes and colors."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/d3-shapes.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-shapes.md",
+      "route": "/reference/charting/d3-shapes",
+      "title": "D3: shapes",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-shapes",
+      "description": "Line, area, arc, pie, stack, link and symbol generators, curves and the path builder."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/D3Charts.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/D3Charts.md",
+      "route": "/reference/charting/D3Charts",
+      "title": "D3Charts",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/D3Charts",
+      "description": "Static factory methods for declarative D3 chart drawing. Import with: using static Microsoft.UI.Reactor.Charting.D3Charts;"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/enums.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/enums.md",
+      "route": "/reference/charting/enums",
+      "title": "Enums",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/enums",
+      "description": "The enumerations in this category."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ForcedColorsTheme.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForcedColorsTheme.md",
+      "route": "/reference/charting/ForcedColorsTheme",
+      "title": "ForcedColorsTheme",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForcedColorsTheme"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ForceGraphElement.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphElement.md",
+      "route": "/reference/charting/ForceGraphElement",
+      "title": "ForceGraphElement",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphElement",
+      "description": "Force-directed graph element for Reactor's virtual tree. Pure renderer — draws nodes, links, labels from a ForceSimulation's current state. Interaction (drag, animation) is the caller's responsibility."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/ForceGraphHandle.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphHandle.md",
+      "route": "/reference/charting/ForceGraphHandle",
+      "title": "ForceGraphHandle",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphHandle",
+      "description": "Exposes the live simulation and WinUI elements so callers can implement drag, animation, hover, or any other interaction outside the library."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/PieChartElement.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieChartElement.md",
+      "route": "/reference/charting/PieChartElement",
+      "title": "PieChartElement<T>",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieChartElement"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/PieChartHandle.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieChartHandle.md",
+      "route": "/reference/charting/PieChartHandle",
+      "title": "PieChartHandle<T>",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieChartHandle",
+      "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/PieSliceLayout.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieSliceLayout.md",
+      "route": "/reference/charting/PieSliceLayout",
+      "title": "PieSliceLayout",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieSliceLayout"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/TreeChartElement.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartElement.md",
+      "route": "/reference/charting/TreeChartElement",
+      "title": "TreeChartElement<T>",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartElement",
+      "description": "Tree diagram element for Reactor's virtual tree — renders as native D3 elements."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/charting/TreeChartHandle.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartHandle.md",
+      "route": "/reference/charting/TreeChartHandle",
+      "title": "TreeChartHandle",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartHandle",
+      "description": "Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/components.json",
       "lastModified": null,
       "locale": "",
@@ -1307,6 +1545,17 @@
       "title": "Collection items",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/collection-items",
       "description": "Records and enums for tree, swipe and items view content."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/controls/data-grid.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/data-grid.md",
+      "route": "/reference/controls/data-grid",
+      "title": "Data grid",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/data-grid",
+      "description": "The data grid component, its state, column builders and cell contexts. From the Microsoft.UI.Reactor.Advanced package."
     },
     {
       "contentType": "doc",
@@ -1648,6 +1897,153 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking.md",
+      "route": "/reference/docking",
+      "title": "Docking",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking",
+      "description": "The dock layout model, its events, persistence and the native window interop. From the Microsoft.UI.Reactor.Advanced package."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/diagnostics.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/diagnostics.md",
+      "route": "/reference/docking/diagnostics",
+      "title": "Docking diagnostics",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/diagnostics",
+      "description": "A log of the operations the dock manager performed."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/DockContexts.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockContexts.md",
+      "route": "/reference/docking/DockContexts",
+      "title": "DockContexts",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockContexts"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/DockHostModel.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockHostModel.md",
+      "route": "/reference/docking/DockHostModel",
+      "title": "DockHostModel",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockHostModel"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/DockLayoutOps.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockLayoutOps.md",
+      "route": "/reference/docking/DockLayoutOps",
+      "title": "DockLayoutOps",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockLayoutOps"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/events.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/events.md",
+      "route": "/reference/docking/events",
+      "title": "Dock events",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/events",
+      "description": "Event arguments the dock manager raises."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/IDockAdapter.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockAdapter.md",
+      "route": "/reference/docking/IDockAdapter",
+      "title": "IDockAdapter",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockAdapter"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/IDockBehavior.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockBehavior.md",
+      "route": "/reference/docking/IDockBehavior",
+      "title": "IDockBehavior",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockBehavior"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/IDockLayoutMigration.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockLayoutMigration.md",
+      "route": "/reference/docking/IDockLayoutMigration",
+      "title": "IDockLayoutMigration",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockLayoutMigration"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/IDockLayoutStrategy.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockLayoutStrategy.md",
+      "route": "/reference/docking/IDockLayoutStrategy",
+      "title": "IDockLayoutStrategy",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockLayoutStrategy"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/layout-model.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/layout-model.md",
+      "route": "/reference/docking/layout-model",
+      "title": "Layout model",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/layout-model",
+      "description": "The nodes, panes and targets that make up a dock layout."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/native.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/native.md",
+      "route": "/reference/docking/native",
+      "title": "Native window interop",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/native",
+      "description": "Floating windows, display bounds and the layout snapshots exchanged with native code."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/persistence.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/persistence.md",
+      "route": "/reference/docking/persistence",
+      "title": "Layout persistence",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/persistence",
+      "description": "Save, load and migrate dock layouts."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/docking/strings.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/strings.md",
+      "route": "/reference/docking/strings",
+      "title": "Docking strings",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/strings",
+      "description": "Resource keys and default strings for the docking UI."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/elements.json",
       "lastModified": null,
       "locale": "",
@@ -1692,6 +2088,17 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/elements/data-grid.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/data-grid.md",
+      "route": "/reference/elements/data-grid",
+      "title": "Elements: Data grid",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/data-grid",
+      "description": "The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/elements/dialogs-and-flyouts.json",
       "lastModified": null,
       "locale": "",
@@ -1700,6 +2107,17 @@
       "title": "Elements: Dialogs and flyouts",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/dialogs-and-flyouts",
       "description": "Content dialogs, flyouts, popups and teaching tips."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/elements/docking.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/docking.md",
+      "route": "/reference/elements/docking",
+      "title": "Elements: Docking",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/docking",
+      "description": "The dock manager and its events, from the Microsoft.UI.Reactor.Advanced package."
     },
     {
       "contentType": "doc",
@@ -1821,6 +2239,17 @@
       "title": "Elements: Text",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/text",
       "description": "Text blocks, rich text and the typography factories."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/elements/win2d.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/win2d.md",
+      "route": "/reference/elements/win2d",
+      "title": "Elements: Win2D canvas",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/win2d",
+      "description": "Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package."
     },
     {
       "contentType": "doc",
@@ -2039,6 +2468,17 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/factories/data-grid.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/data-grid.md",
+      "route": "/reference/factories/data-grid",
+      "title": "Factories: Data grid",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/data-grid",
+      "description": "The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/factories/dialogs-and-flyouts.json",
       "lastModified": null,
       "locale": "",
@@ -2091,6 +2531,17 @@
       "title": "Factories: Layout",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/layout",
       "description": "Panels, stacks, grids, scrolling and other containers."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/factories/markdown.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/markdown.md",
+      "route": "/reference/factories/markdown",
+      "title": "Factories: Markdown",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/markdown",
+      "description": "Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package."
     },
     {
       "contentType": "doc",
@@ -2160,6 +2611,17 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/factories/win2d.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/win2d.md",
+      "route": "/reference/factories/win2d",
+      "title": "Factories: Win2D canvas",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/win2d",
+      "description": "Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks.json",
       "lastModified": null,
       "locale": "",
@@ -2204,6 +2666,16 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseActivePaneKey.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseActivePaneKey.md",
+      "route": "/reference/hooks/UseActivePaneKey",
+      "title": "UseActivePaneKey",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseActivePaneKey"
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseAnnounce.json",
       "lastModified": null,
       "locale": "",
@@ -2233,6 +2705,17 @@
       "title": "UseCallback",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCallback",
       "description": "Returns a stable callback reference that doesn't change between renders."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseCanvasResources.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCanvasResources.md",
+      "route": "/reference/hooks/UseCanvasResources",
+      "title": "UseCanvasResources",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCanvasResources",
+      "description": "Creates resources for the current Win2D shared device, recreates them after CanvasDevice.DeviceLost, and disposes them on unmount."
     },
     {
       "contentType": "doc",
@@ -2331,6 +2814,48 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDockHost.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockHost.md",
+      "route": "/reference/hooks/UseDockHost",
+      "title": "UseDockHost",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockHost"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDockLayout.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockLayout.md",
+      "route": "/reference/hooks/UseDockLayout",
+      "title": "UseDockLayout",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockLayout",
+      "description": "Returns a wide snapshot of the dock layout — re-renders the consumer on any structural change. Documented as \"used sparingly — devtools, not pane content.\""
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDockPanePersisted.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockPanePersisted.md",
+      "route": "/reference/hooks/UseDockPanePersisted",
+      "title": "UseDockPanePersisted",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockPanePersisted"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDockState.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockState.md",
+      "route": "/reference/hooks/UseDockState",
+      "title": "UseDockState",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockState",
+      "description": "Returns the enclosing pane's current dock state (Docked / Floating / AutoHidden / AutoHiddenExpanded / Hidden). Re-renders the consumer only on transitions."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDpi.json",
       "lastModified": null,
       "locale": "",
@@ -2338,6 +2863,28 @@
       "route": "/reference/hooks/UseDpi",
       "title": "UseDpi",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDpi"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDrawCommand.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawCommand.md",
+      "route": "/reference/hooks/UseDrawCommand",
+      "title": "UseDrawCommand",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawCommand",
+      "description": "Memoizes a Win2D draw callback and rebuilds it only when deps change."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDrawState.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawState.md",
+      "route": "/reference/hooks/UseDrawState",
+      "title": "UseDrawState",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawState",
+      "description": "Creates a stable mutable draw-state reference for Win2D callbacks."
     },
     {
       "contentType": "doc",
@@ -2456,6 +3003,17 @@
       "title": "UseIsActive",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActive",
       "description": "Subscribes to the host window's activation events and re-renders on change. Returns true outside a window (the surface is \"active\" while shown). (spec 036 §7)"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseIsActivePane.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActivePane.md",
+      "route": "/reference/hooks/UseIsActivePane",
+      "title": "UseIsActivePane",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActivePane",
+      "description": "Returns true when the \\enclosing pane\\ is the host's currently-active pane. Re-renders the consumer only on the false ↔ true transition."
     },
     {
       "contentType": "doc",
@@ -2593,6 +3151,16 @@
       "route": "/reference/hooks/UseOpenWindow",
       "title": "UseOpenWindow",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseOpenWindow"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UsePane.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePane.md",
+      "route": "/reference/hooks/UsePane",
+      "title": "UsePane",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePane"
     },
     {
       "contentType": "doc",
@@ -3258,6 +3826,93 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown.md",
+      "route": "/reference/markdown",
+      "title": "Markdown",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown",
+      "description": "Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/delegates.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/delegates.md",
+      "route": "/reference/markdown/delegates",
+      "title": "Delegates",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/delegates",
+      "description": "The delegate types in this category."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/enums.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/enums.md",
+      "route": "/reference/markdown/enums",
+      "title": "Enums",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/enums",
+      "description": "The enumerations in this category."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/MarkdownLink.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownLink.md",
+      "route": "/reference/markdown/MarkdownLink",
+      "title": "MarkdownLink",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownLink"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/MarkdownOptions.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownOptions.md",
+      "route": "/reference/markdown/MarkdownOptions",
+      "title": "MarkdownOptions",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownOptions",
+      "description": "Options for customizing how markdown is rendered to Reactor elements. All callback properties are optional — null means use the default rendering."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/MarkdownTextSelection.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelection.md",
+      "route": "/reference/markdown/MarkdownTextSelection",
+      "title": "MarkdownTextSelection",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelection",
+      "description": "Message-bounded, opt-in semantic text selection for Markdown and custom content."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/MarkdownTextSelectionOptions.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelectionOptions.md",
+      "route": "/reference/markdown/MarkdownTextSelectionOptions",
+      "title": "MarkdownTextSelectionOptions",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelectionOptions",
+      "description": "Copy policy for one selection scope; a non-null parser value only enables semantic surfaces."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/markdown/parser-details.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/parser-details.md",
+      "route": "/reference/markdown/parser-details",
+      "title": "Parser block and span details",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/parser-details",
+      "description": "Details the Markdown parser passes for each block and span."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/modifiers.json",
       "lastModified": null,
       "locale": "",
@@ -3343,6 +3998,17 @@
       "title": "Control modifiers: Dialogs and flyouts",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/dialogs-and-flyouts",
       "description": "Modifiers that only the controls in the Dialogs and flyouts area have."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/modifiers/docking.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/docking.md",
+      "route": "/reference/modifiers/docking",
+      "title": "Control modifiers: Docking",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/docking",
+      "description": "Modifiers that only the controls in the Docking area have."
     },
     {
       "contentType": "doc",
@@ -3581,6 +4247,17 @@
       "route": "/reference/modifiers/VisualModifiers",
       "title": "VisualModifiers",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/VisualModifiers"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/modifiers/win2d.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/win2d.md",
+      "route": "/reference/modifiers/win2d",
+      "title": "Control modifiers: Win2D canvas",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/win2d",
+      "description": "Modifiers that only the controls in the Win2D canvas area have."
     },
     {
       "contentType": "doc",
@@ -3971,6 +4648,47 @@
       "title": "ValidationRuleDsl",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationRuleDsl",
       "description": "DSL factory methods for ValidationRule elements."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/win2d.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d.md",
+      "route": "/reference/win2d",
+      "title": "Win2D canvas",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d",
+      "description": "Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/win2d/Win2DAnimatedCanvasHandler.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DAnimatedCanvasHandler.md",
+      "route": "/reference/win2d/Win2DAnimatedCanvasHandler",
+      "title": "Win2DAnimatedCanvasHandler",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DAnimatedCanvasHandler"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/win2d/Win2DCanvasHandler.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DCanvasHandler.md",
+      "route": "/reference/win2d/Win2DCanvasHandler",
+      "title": "Win2DCanvasHandler",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DCanvasHandler"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/win2d/Win2DVirtualCanvasHandler.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DVirtualCanvasHandler.md",
+      "route": "/reference/win2d/Win2DVirtualCanvasHandler",
+      "title": "Win2DVirtualCanvasHandler",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DVirtualCanvasHandler"
     },
     {
       "contentType": "doc",

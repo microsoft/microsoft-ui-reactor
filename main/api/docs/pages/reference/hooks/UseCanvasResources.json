@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseCanvasResources.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCanvasResources.md",
+  "route": "/reference/hooks/UseCanvasResources",
+  "title": "UseCanvasResources",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCanvasResources",
+  "description": "Creates resources for the current Win2D shared device, recreates them after CanvasDevice.DeviceLost, and disposes them on unmount.",
+  "markdown": "---\ntitle: \"UseCanvasResources\"\ndescription: \"Creates resources for the current Win2D shared device, recreates them after CanvasDevice.DeviceLost, and disposes them on unmount.\"\n---\n\n```csharp\npublic static Ref<TResources?> UseCanvasResources<TResources>(this RenderContext ctx, Func<CanvasDevice, ValueTask<TResources>> create, Action<TResources>? dispose = null) where TResources : class\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseCanvasResourcesHook`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Advanced.Win2D;`.\n\n**Learn more:** [Win2D canvas](/microsoft-ui-reactor/main/controls/win2d-canvas)\n\n## Parameters [#parameters]\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `create` | `Func<CanvasDevice, ValueTask<TResources>>` |  |  |\n| `dispose` | `Action<TResources>?` | `null` |  |\n\n## Remarks [#remarks]\n\nResources are created on the process-wide shared device (`CanvasDevice.GetSharedDevice`). Win2D resources are device-affine, so any canvas that draws these resources **must** opt into the shared device via `.UseSharedDevice()` (or `UseSharedDevice = true`). A canvas defaults to its own dedicated device; drawing a shared-device resource with that device raises a cross-device error that surfaces as a fatal stowed exception. See [the shared-device guidance](/microsoft-ui-reactor/main/controls/win2d-canvas#shared-device).\n\nThe resource factory can run on a Win2D worker or game thread depending on the host canvas. See [the Win2D canvas threading guide](/microsoft-ui-reactor/main/controls/win2d-canvas#threading) and [device loss](/microsoft-ui-reactor/main/controls/win2d-canvas#device-loss).\n"
+}

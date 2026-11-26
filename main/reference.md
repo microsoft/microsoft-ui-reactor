@@ -25,3 +25,7 @@ sidebar:
 | [Validation](/microsoft-ui-reactor/main/reference/validation) | Validators, validation contexts and error styling for forms. |
 | [Diagnostics](/microsoft-ui-reactor/main/reference/diagnostics) | Tracing, source maps, component snapshots and developer tools hosting. |
 | [Extensibility](/microsoft-ui-reactor/main/reference/extensibility) | The control protocol, control descriptors, the reconciler and element pooling. |
+| [Charting](/microsoft-ui-reactor/main/reference/charting) | Charts, the D3 scales, shapes and layouts behind them, and chart accessibility. From the Microsoft.UI.Reactor.Advanced package. |
+| [Docking](/microsoft-ui-reactor/main/reference/docking) | The dock layout model, its events, persistence and the native window interop. From the Microsoft.UI.Reactor.Advanced package. |
+| [Markdown](/microsoft-ui-reactor/main/reference/markdown) | Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package. |
+| [Win2D canvas](/microsoft-ui-reactor/main/reference/win2d) | Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package. |

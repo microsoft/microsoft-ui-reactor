@@ -12,6 +12,7 @@ sidebar:
 | Type | Description |
 | --- | --- |
 | [Collection items](/microsoft-ui-reactor/main/reference/controls/collection-items) | Records and enums for tree, swipe and items view content. |
+| [Data grid](/microsoft-ui-reactor/main/reference/controls/data-grid) | The data grid component, its state, column builders and cell contexts. |
 | [Icon data](/microsoft-ui-reactor/main/reference/controls/icons) | Records that describe an icon. |
 | [Masked input](/microsoft-ui-reactor/main/reference/controls/masked-input) | The mask engine and formatters behind MaskedTextBox. |
 | [Menu and command bar items](/microsoft-ui-reactor/main/reference/controls/menu-items) | Records that describe menu, menu bar, command bar and keyboard accelerator items. |

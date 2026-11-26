@@ -282,6 +282,10 @@ Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Element`](/microsoft-ui-
 | `Spacing` | `double` | Spacing between children, in DIPs. |
 | `VerticalAlignment` | `VerticalAlignment?` |  |
 
+**`Spacing`**
+
+Reactor default is `8` — a deliberate deviation from WinUI's `StackPanel.Spacing` default of `0`. Reactor's call shape (`VStack(a, b, c)`) almost always wants whitespace between siblings; the 8 DIP default produces visually correct output for the zero-argument call. Set to `0` explicitly for legacy WinUI behavior. (spec 039 §0.4 / §16)
+
 ## `ViewboxElement` [#viewboxelement]
 
 The element record that describes a WinUI [`Viewbox`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.viewbox) control.

@@ -50,6 +50,10 @@ Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Element`](/microsoft-ui-
 | `OnNavigationFailed` | `Action<Type, Exception>?` | Raised when a navigation fails. Receives the target `SourcePageType` and the failure exception. Wiring this also marks the failure handled, so a page whose constructor throws degrades into this callback instead of tearing down the application. |
 | `SourcePageType` | `Type?` | The [`Page`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.page)-derived type to navigate to on mount. |
 
+**`SourcePageType`**
+
+Must be a `Page` the XAML metadata chain can resolve — in practice one with a `.xaml` file, since that is what makes the XAML compiler emit it. A code-only `Page` is refused and reported through [`FrameElement.OnNavigationFailed`](#frameelement).
+
 ## `NavigationHostElement` [#navigationhostelement]
 
 Renders the content for the current route of a [`NavigationHandle<TRoute>`](/microsoft-ui-reactor/main/reference/navigation/NavigationHandle). Created via `NavigationHost<TRoute>(nav, routeMap)` in the DSL. The reconciler uses a Grid container so outgoing/incoming pages can overlap during transitions (Phase 4).
@@ -224,6 +228,12 @@ Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Element`](/microsoft-ui-
 | `TabWidthMode` | `TabViewWidthMode` | How tab widths are sized. Defaults to `Equal` (matches WinUI default). |
 | `Tabs` | [`TabViewItemData[]`](/microsoft-ui-reactor/main/reference/controls/navigation-items#tabviewitemdata) |  |
 
+**`FillContentArea`**
+
+WinUI's `DefaultTabViewStyle` ships `<Setter Property="VerticalAlignment" Value="Top" />`, so a TabView is arranged at its *desired* height and the `*` content row in its template never receives any leftover space — tab content is sized to content and the rest of the tab body stays unpainted. Setting this to `true` writes [`VerticalAlignment.Stretch`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.verticalalignment.stretch) on the control, which is what the XAML TabView templates do by hand. An explicit `.VAlign(…)` on this element always wins over the opt-in.
+
+Defaults to `false` so the WinUI style default is preserved.
+
 ## `TitleBarElement` [#titlebarelement]
 
 The element record that describes a WinUI [`TitleBar`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.titlebar) control.
@@ -255,3 +265,15 @@ Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Element`](/microsoft-ui-
 | `Subtitle` | `string?` |  |
 | `SuppressIcon` | `bool` | Suppresses the icon entirely, including the one Reactor would otherwise inherit from the window (see [`TitleBarElement.Icon`](#titlebarelement)). Set via `.NoIcon()`. |
 | `Title` | `string` |  |
+
+**`HeightOption`**
+
+Sets **both** halves: the native caption height and the control's own height (the WinUI `TitleBar` control does not follow the caption, so setting only one leaves the caption and the title bar disagreeing). An explicit `.Height(...)` on this element still wins over the implied 48 DIP. [`WindowSpec.TitleBarHeight`](/microsoft-ui-reactor/main/reference/hosting/WindowSpec#titlebarheight), when set, wins over this.
+
+**`PreferredTheme`**
+
+WinUI does not derive the caption theme from the content's `RequestedTheme`, so an app that themes its content opposite to the system declares the matching caption theme here. Removing the declaration (or unmounting the title bar) restores the value the caption had before Reactor first applied one. With several declaring title bars mounted, the most recent declaration wins and the others take over as it goes away. [`WindowSpec.TitleBarTheme`](/microsoft-ui-reactor/main/reference/hosting/WindowSpec#titlebartheme), when set, wins over this.
+
+**`SuppressIcon`**
+
+A separate flag rather than a null [`TitleBarElement.Icon`](#titlebarelement), because record `init` properties make "never set an icon" and "explicitly set none" indistinguishable — and those now mean opposite things.

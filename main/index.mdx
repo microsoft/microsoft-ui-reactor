@@ -92,6 +92,22 @@
 
 - [UseDevtools](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDevtools): Returns true when the current process is running with the in-app devtools UI enabled. This is the AND of two independent signals:
 
+#### Docking
+
+- [UseActivePaneKey](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseActivePaneKey): Returns the active pane's DockableContent.Key, or null when no pane is active. Re-renders the consumer only when the active key changes (selector-style scope).
+- [UseDockHost](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockHost): Returns the nearest enclosing DockHostModel, or null when the component is rendered outside any docking host.
+- [UseDockLayout](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockLayout): Returns a wide snapshot of the dock layout — re-renders the consumer on any structural change. Documented as "used sparingly — devtools, not pane content."
+- [UseDockPanePersisted](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockPanePersisted): Per-pane persisted state. Auto-prefixes the supplied key with pane:<paneKey>: so two panes that share a key name (e.g. "scrollOffset") get independent stored values instead of trampling each other in the underlying WindowPersistedScope.
+- [UseDockState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockState): Returns the enclosing pane's current dock state (Docked / Floating / AutoHidden / AutoHiddenExpanded / Hidden). Re-renders the consumer only on transitions.
+- [UseIsActivePane](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActivePane): Returns true when the \enclosing pane\ is the host's currently-active pane. Re-renders the consumer only on the false ↔ true transition.
+- [UsePane](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePane): Returns identity info for the enclosing pane subtree. Throws InvalidOperationException when called from a component that isn't rendered inside a docked pane.
+
+#### Win2D drawing
+
+- [UseCanvasResources](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCanvasResources): Creates resources for the current Win2D shared device, recreates them after CanvasDevice.DeviceLost, and disposes them on unmount.
+- [UseDrawCommand](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawCommand): Memoizes a Win2D draw callback and rebuilds it only when deps change.
+- [UseDrawState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDrawState): Creates a stable mutable draw-state reference for Win2D callbacks.
+
 #### Types and options
 
 - [Focus helpers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/focus-helpers): The focus manager and the modifiers that the UseFocus hooks work with.
@@ -133,6 +149,9 @@
 - [Elements: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/forms): Form fields, validation rules, validation visualizers and the property grid.
 - [Elements: Composition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/composition): Components, memoization, error boundaries, conditionals and other structural elements.
 - [Elements: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/interop): Hosted XAML content, web views and maps.
+- [Elements: Data grid](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/data-grid): The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package.
+- [Elements: Docking](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/docking): The dock manager and its events, from the Microsoft.UI.Reactor.Advanced package.
+- [Elements: Win2D canvas](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/win2d): Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package.
 
 #### Types
 
@@ -155,6 +174,9 @@
 - [Factories: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/forms): Form fields, validation rules, validation visualizers and the property grid.
 - [Factories: Composition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/composition): Components, memoization, error boundaries, conditionals and other structural elements.
 - [Factories: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/interop): Hosted XAML content, web views and maps.
+- [Factories: Data grid](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/data-grid): The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package.
+- [Factories: Markdown](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/markdown): Rendered Markdown, from the Microsoft.UI.Reactor.Advanced package.
+- [Factories: Win2D canvas](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/win2d): Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package.
 
 ### Modifiers
 
@@ -188,6 +210,8 @@
 - [Control modifiers: Status and info](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/status-and-info): Modifiers that only the controls in the Status and info area have.
 - [Control modifiers: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/forms): Modifiers that only the controls in the Forms area have.
 - [Control modifiers: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/interop): Modifiers that only the controls in the Interop area have.
+- [Control modifiers: Docking](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/docking): Modifiers that only the controls in the Docking area have.
+- [Control modifiers: Win2D canvas](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/win2d): Modifiers that only the controls in the Win2D canvas area have.
 
 #### Types
 
@@ -332,6 +356,7 @@
 
 - [Controls](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls): Item data records and support types for the property grid, masked input and virtual lists.
 - [Collection items](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/collection-items): Records and enums for tree, swipe and items view content.
+- [Data grid](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/data-grid): The data grid component, its state, column builders and cell contexts. From the Microsoft.UI.Reactor.Advanced package.
 - [Icon data](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/icons): Records that describe an icon.
 - [Masked input](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/masked-input): The mask engine and formatters behind MaskedTextBox.
 - [Menu and command bar items](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/menu-items): Records that describe menu, menu bar, command bar and keyboard accelerator items.
@@ -389,6 +414,66 @@
 - [ReactorBinding](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorBinding)
 - [ReactorFeatureFlags](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorFeatureFlags): Process-wide feature flags that gate risky or in-progress behavior. Each flag is a plain mutable boolean so apps can flip it on startup; the defaults are chosen to preserve existing behavior.
 - [Reconciler](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/Reconciler): The reconciler diffs old and new element trees and patches the real WinUI control tree.
+
+### Charting
+
+- [Charting](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting): Charts, the D3 scales, shapes and layouts behind them, and chart accessibility. From the Microsoft.UI.Reactor.Advanced package.
+- [Chart accessibility](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/chart-accessibility): Descriptors, palettes and the contrast checks that make charts accessible.
+- [D3: arrays and statistics](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-data): Binning, bisection, extents, grouping, ranges, ticks, statistics and random numbers.
+- [D3: color, format and interpolation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-color-and-format): Colors, number formatting, easing and interpolators.
+- [D3: contours, Delaunay and polygons](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-geometry): Contour generators, Delaunay triangulation, Voronoi diagrams and polygon helpers.
+- [D3: layouts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-layouts): Hierarchy, treemap, pack, partition, chord, Sankey and force layouts.
+- [D3: scales](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-scales): Scales that map data values to positions, sizes and colors.
+- [D3: shapes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/d3-shapes): Line, area, arc, pie, stack, link and symbol generators, curves and the path builder.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/enums): The enumerations in this category.
+- [ChartElement<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartElement)
+- [ChartHandle<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartHandle): Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.
+- [ChartRange](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ChartRange): Represents a range of x-axis values selected via brush interaction.
+- [Charts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/Charts): Static factory methods that integrate D3 charting into Reactor's declarative model. Import with: using static Microsoft.UI.Reactor.Charting.Charts;
+- [D3Charts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/D3Charts): Static factory methods for declarative D3 chart drawing. Import with: using static Microsoft.UI.Reactor.Charting.D3Charts;
+- [ForceGraphElement](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphElement): Force-directed graph element for Reactor's virtual tree. Pure renderer — draws nodes, links, labels from a ForceSimulation's current state. Interaction (drag, animation) is the caller's responsibility.
+- [ForceGraphHandle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForceGraphHandle): Exposes the live simulation and WinUI elements so callers can implement drag, animation, hover, or any other interaction outside the library.
+- [ForcedColorsTheme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/ForcedColorsTheme): Holds the actual system high-contrast colors queried from UISettings.GetColorValue. The host populates this each render cycle so chart brushes adapt to the user's chosen high-contrast theme (including custom themes).
+- [PieChartElement<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieChartElement)
+- [PieChartHandle<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieChartHandle): Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.
+- [PieSliceLayout](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/PieSliceLayout): Layout metadata for a single pie slice, supplied to PieChartElement.LabelView callbacks. Centroid coordinates are absolute within the chart canvas; angles are radians measured clockwise from 12 o'clock (matches d3-shape semantics).
+- [TreeChartElement<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartElement): Tree diagram element for Reactor's virtual tree — renders as native D3 elements.
+- [TreeChartHandle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/charting/TreeChartHandle): Handle returned by OnReady — exposes the underlying Canvas for escape-hatch scenarios.
+
+### Docking
+
+- [Docking](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking): The dock layout model, its events, persistence and the native window interop. From the Microsoft.UI.Reactor.Advanced package.
+- [Dock events](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/events): Event arguments the dock manager raises.
+- [Docking diagnostics](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/diagnostics): A log of the operations the dock manager performed.
+- [Docking strings](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/strings): Resource keys and default strings for the docking UI.
+- [Layout model](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/layout-model): The nodes, panes and targets that make up a dock layout.
+- [Layout persistence](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/persistence): Save, load and migrate dock layouts.
+- [Native window interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/native): Floating windows, display bounds and the layout snapshots exchanged with native code.
+- [DockContexts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockContexts): Context slots used to surface docking state to function components via the DockHooks hooks. Spec 045 §5.3.11; tracking §2.17.
+- [DockHostModel](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockHostModel): Internal source-of-truth for a DockManager host's runtime layout state. Mutations land here first and re-render the reconciled element tree; the declarative DockManager.Layout prop is the controlled input, the model is the live state, and OnLayoutChanged closes the loop (spec 045 §5.3.10).
+- [DockLayoutOps](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/DockLayoutOps): Spec 046 §6.4 — public façade over the layout-tree operations apps need to build, mutate, and inspect a DockNode tree programmatically (e.g. an "Open new document" button that should route through role-aware DockTarget.Center insert, or a "Close pane" handler that needs the spec-046 reserved-empty rule applied).
+- [IDockAdapter](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockAdapter): App-supplied adapter for two paths the wrapper can't infer from the declarative DockManager.Layout alone: content rehydration after layout-JSON restore, and custom floating-window title bar chrome.
+- [IDockBehavior](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockBehavior): App-supplied observation hook for dock and float lifecycle events. Phase 1 surface; Phase 2 collapses into Action props on DockManager (spec 045 §5.3.5).
+- [IDockLayoutMigration](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockLayoutMigration): Layout-JSON schema migration step. Registered with the layout-migration registry exposed on DockManager (Phase 2 wiring); the loader resolves an ordered ladder (FromVersion→ToVersion, applied sequentially) when a persisted layout is loaded under a newer schema target.
+- [IDockLayoutStrategy](https://microsoft.github.io/microsoft-ui-reactor/main/reference/docking/IDockLayoutStrategy): Insertion-policy hook applied when a pane is added to the layout (programmatic insert, drag-drop landing, JSON restore). Apps register a strategy on DockManager.LayoutStrategy.
+
+### Markdown
+
+- [Markdown](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown): Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package.
+- [Delegates](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/delegates): The delegate types in this category.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/enums): The enumerations in this category.
+- [Parser block and span details](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/parser-details): Details the Markdown parser passes for each block and span.
+- [MarkdownLink](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownLink): A Markdown link passed to MarkdownOptions.LinkBuilder.
+- [MarkdownOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownOptions): Options for customizing how markdown is rendered to Reactor elements. All callback properties are optional — null means use the default rendering.
+- [MarkdownTextSelection](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelection): Message-bounded, opt-in semantic text selection for Markdown and custom content.
+- [MarkdownTextSelectionOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/markdown/MarkdownTextSelectionOptions): Copy policy for one selection scope; a non-null parser value only enables semantic surfaces.
+
+### Win2D canvas
+
+- [Win2D canvas](https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d): Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package.
+- [Win2DAnimatedCanvasHandler](https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DAnimatedCanvasHandler): V1 handler that mounts, updates, and unmounts Win2DAnimatedCanvasElement instances.
+- [Win2DCanvasHandler](https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DCanvasHandler): V1 handler that mounts, updates, and unmounts Win2DCanvasElement instances.
+- [Win2DVirtualCanvasHandler](https://microsoft.github.io/microsoft-ui-reactor/main/reference/win2d/Win2DVirtualCanvasHandler): V1 handler that mounts, updates, and unmounts Win2DVirtualCanvasElement instances.
 
 ## Changelog
 

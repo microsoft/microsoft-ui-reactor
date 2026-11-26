@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseDockHost.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockHost.md",
+  "route": "/reference/hooks/UseDockHost",
+  "title": "UseDockHost",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDockHost",
+  "markdown": "---\ntitle: \"UseDockHost\"\nseo:\n  description: \"Returns the nearest enclosing DockHostModel, or null when the component is rendered outside any docking host.\"\n---\n\nReturns the nearest enclosing [`DockHostModel`](/microsoft-ui-reactor/main/reference/docking/DockHostModel), or null when the component is rendered outside any docking host.\n\n```csharp\npublic static DockHostModel? UseDockHost(this RenderContext ctx)\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.\n\n**Learn more:** [Docking Windows](/microsoft-ui-reactor/main/guides/docking)\n\n## Remarks [#remarks]\n\nSpec 045 §5.3.11.\n"
+}

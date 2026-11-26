@@ -131,6 +131,30 @@ Hooks for the Reactor developer tools.
 | --- | --- |
 | [`UseDevtools`](/microsoft-ui-reactor/main/reference/hooks/UseDevtools) | Returns `true` when the current process is running with the in-app devtools UI enabled. |
 
+## Docking [#docking]
+
+Hooks that read the dock layout and the enclosing pane. From the Microsoft.UI.Reactor.Advanced package.
+
+| Hook | Description |
+| --- | --- |
+| [`UseActivePaneKey`](/microsoft-ui-reactor/main/reference/hooks/UseActivePaneKey) | Returns the active pane's `DockableContent.Key`, or null when no pane is active. |
+| [`UseDockHost`](/microsoft-ui-reactor/main/reference/hooks/UseDockHost) | Returns the nearest enclosing `DockHostModel`, or null when the component is rendered outside any docking host. |
+| [`UseDockLayout`](/microsoft-ui-reactor/main/reference/hooks/UseDockLayout) | Returns a wide snapshot of the dock layout — re-renders the consumer on any structural change. |
+| [`UseDockPanePersisted`](/microsoft-ui-reactor/main/reference/hooks/UseDockPanePersisted) | Per-pane persisted state. |
+| [`UseDockState`](/microsoft-ui-reactor/main/reference/hooks/UseDockState) | Returns the enclosing pane's current dock state (Docked / Floating / AutoHidden / AutoHiddenExpanded / Hidden). |
+| [`UseIsActivePane`](/microsoft-ui-reactor/main/reference/hooks/UseIsActivePane) | Returns true when the \*enclosing pane\* is the host's currently-active pane. |
+| [`UsePane`](/microsoft-ui-reactor/main/reference/hooks/UsePane) | Returns identity info for the enclosing pane subtree. |
+
+## Win2D drawing [#win2d-drawing]
+
+Hooks that keep Win2D draw state and device resources. From the Microsoft.UI.Reactor.Advanced package.
+
+| Hook | Description |
+| --- | --- |
+| [`UseCanvasResources`](/microsoft-ui-reactor/main/reference/hooks/UseCanvasResources) | Creates resources for the current Win2D shared device, recreates them after `CanvasDevice.DeviceLost`, and disposes them on unmount. |
+| [`UseDrawCommand`](/microsoft-ui-reactor/main/reference/hooks/UseDrawCommand) | Memoizes a Win2D draw callback and rebuilds it only when `deps` change. |
+| [`UseDrawState`](/microsoft-ui-reactor/main/reference/hooks/UseDrawState) | Creates a stable mutable draw-state reference for Win2D callbacks. |
+
 ## Types and options [#types-and-options]
 
 | Type | Description |
