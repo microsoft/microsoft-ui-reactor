@@ -221,6 +221,13 @@ Conventions for contributors:
   animates opacity and its trigger stays the same. Removing the looping entry or
   finishing a one-shot applies the latest declared opacity (#1651, #1660).
 
+- **`WindowLevel.AlwaysOnTop` refused by Windows is now reapplied (spec 054, issue #1707).** Windows
+  can decline a runtime topmost request from an app that doesn't own the foreground, for example
+  while the workstation is locked. The call reports success but the window never becomes topmost, and
+  Reactor never retried, so `Spec.Level` said `AlwaysOnTop` while the window wasn't. Reactor now checks
+  the result, logs a `DiagnosticLog` warning once, and reapplies the level the next time the app is
+  activated, either by gaining the foreground or by one of its windows activating.
+
 - `.LayoutAnimation()` uses linear easing for position and optional size changes in
   non-spring mode (#1652).
 

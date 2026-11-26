@@ -1,6 +1,9 @@
+using System.Diagnostics.Tracing;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Hosting;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -236,6 +239,193 @@ internal static class Phase4WindowingFixtures
         }
     }
 
+    /// <summary>
+    /// Issue #1707. Windows can silently refuse a runtime <c>HWND_TOPMOST</c> while another
+    /// process owns the foreground, which only reproduces in a locked or background session, so
+    /// the refusal is simulated with <see cref="ReactorWindow.RefuseTopmostForTests"/>: the apply
+    /// skips <c>SetWindowPos</c> and leaves the bit clear, the same observable state. Reactor must
+    /// warn once per refusal and reapply the level when the app gains the foreground
+    /// (<c>WM_ACTIVATEAPP</c>) or any of its windows activates, including the refused one.
+    /// </summary>
+    internal class WindowLevelRefusedTopmostReapplied(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static bool TopmostBit(ReactorWindow win) => (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
+
+        private static int Warnings => Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests);
+
+        private const string TraceProbeOperation = "SelfTest.WindowLevelRefusedTopmost.Probe";
+
+        private static int CountWarnings(ReactorEvent[] events, string operation)
+        {
+            int count = 0;
+            foreach (var e in events.Where(e => string.Equals(e.EventName, "Warning", StringComparison.Ordinal)))
+            {
+                foreach (var p in e.Payload)
+                {
+                    if (p is string s && string.Equals(s, operation, StringComparison.Ordinal))
+                    {
+                        count++;
+                        break;
+                    }
+                }
+            }
+            return count;
+        }
+
+        // Drops win back to Normal (a real, never-refused HWND_NOTOPMOST), then requests
+        // AlwaysOnTop with the next apply refused. True when the refusal took.
+        private static async Task<bool> RefuseAlwaysOnTop(ReactorWindow win, WindowSpec spec)
+        {
+            win.Update(spec with { Level = WindowLevel.Normal });
+            await win.Host.WaitForIdleAsync();
+            win.RefuseTopmostForTests = 1;
+            win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
+            await win.Host.WaitForIdleAsync();
+            return win.RefuseTopmostForTests == 0 && !TopmostBit(win);
+        }
+
+        // The reapply is a real SetWindowPos, so in a locked or background session Windows can
+        // refuse it too. Skip only when a direct call is refused as well and another process
+        // owns the foreground, as WindowLevel_RuntimeFlip does (issue #927).
+        private void CheckReapplied(string name, ReactorWindow win, bool reapplied)
+        {
+            if (!reapplied && !OsGrantsTopmost(win, out bool foregroundIsForeign) && foregroundIsForeign)
+            {
+                H.Skip(name, "issue #927: Windows refused HWND_TOPMOST while another process owned the foreground");
+                return;
+            }
+            H.Check(name, reapplied);
+        }
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var spec = new WindowSpec { Title = "Refused Topmost", Width = 260, Height = 180 };
+            ReactorWindow? win = null;
+            ReactorWindow? other = null;
+            ReactorWindow? third = null;
+            try
+            {
+                win = await OpenAndSettle(spec);
+                other = await OpenAndSettle(new WindowSpec { Title = "Refused Topmost Other", Width = 260, Height = 180 });
+                other.Activate();
+                bool winInactive = await Harness.WaitFor(() => !win.IsActive && other.IsActive, maxPasses: 25, perPassMs: 40);
+
+                int warningsBefore = Warnings;
+                var captured = new List<ReactorEvent>();
+                var gate = new Lock();
+                using (ReactorTrace.Subscribe(e => { lock (gate) { captured.Add(e); } }, EventLevel.Warning))
+                {
+                    // Positive control: proves this subscription can see a DiagnosticLog warning at all.
+                    DiagnosticLog.Warning(LogCategory.Hosting, TraceProbeOperation, "probe");
+
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_Simulated", win.RefuseTopmostForTests == 0 && !TopmostBit(win));
+                    H.Check("WindowLevel_RefusedTopmost_Warns", Warnings == warningsBefore + 1);
+
+                    // An unrelated spec change re-applies the level. Still refused, it must not warn again.
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Retitled" });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_WarnsOnce",
+                        win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 1);
+                }
+
+                ReactorEvent[] events;
+                lock (gate) { events = captured.ToArray(); }
+                if (CountWarnings(events, TraceProbeOperation) == 0)
+                {
+                    // NativeAOT defaults EventSourceSupport to false, so no subscriber sees anything.
+                    H.Skip("WindowLevel_RefusedTopmost_WarningLogged",
+                        "EventSource delivered no warnings, not even the probe, so the log can't be observed here");
+                }
+                else
+                {
+                    H.Check("WindowLevel_RefusedTopmost_WarningLogged", CountWarnings(events, "ReactorWindow.WindowLevel") == 1);
+                }
+
+                // The app gaining the foreground reaches every top-level window as WM_ACTIVATEAPP,
+                // even when no Reactor window activates. Sending it doesn't activate win.
+                _ = Native.SendMessage(Hwnd(win), Native.WM_ACTIVATEAPP, 1, 0);
+                CheckReapplied("WindowLevel_RefusedTopmost_ReappliedOnActivateApp", win, TopmostBit(win));
+
+                // A grant re-arms the warning even though the level never changed: demote the
+                // window natively, then refuse the next apply while Spec.Level stays AlwaysOnTop.
+                if (!TopmostBit(win))
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_WarningRearmsAfterGrant",
+                        "issue #927: Windows refused the reapply, so there is no grant to re-arm from");
+                }
+                else
+                {
+                    Native.MakeNotTopmost(Hwnd(win));
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Regranted" });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_WarningRearmsAfterGrant",
+                        win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 2);
+                }
+
+                // Leaving AlwaysOnTop re-arms it too, whatever state the latch was in.
+                int warningsBeforeLevelChange = Warnings;
+                bool refusedAgain = await RefuseAlwaysOnTop(win, spec);
+                H.Check("WindowLevel_RefusedTopmost_WarningRearmsOnLevelChange",
+                    refusedAgain && Warnings == warningsBeforeLevelChange + 1);
+
+                // A grant made outside Reactor, observed on activation, re-arms it as well.
+                if (!Native.MakeTopmost(Hwnd(win), out _) || !TopmostBit(win))
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_WarningRearmsAfterNativeGrant",
+                        "issue #927: Windows refused a direct HWND_TOPMOST, so there is no native grant to observe");
+                }
+                else
+                {
+                    _ = Native.SendMessage(Hwnd(win), Native.WM_ACTIVATEAPP, 1, 0);
+                    Native.MakeNotTopmost(Hwnd(win));
+                    int warningsBeforeNativeGrant = Warnings;
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Native Grant" });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_WarningRearmsAfterNativeGrant",
+                        win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBeforeNativeGrant + 1);
+                }
+
+                // Another window activating reapplies the refused one, which stays inactive.
+                // win is still refused here, and opening `third` activates it.
+                third = await OpenAndSettle(new WindowSpec { Title = "Refused Topmost Third", Width = 260, Height = 180 });
+                bool thirdActive = await Harness.WaitFor(() => third.IsActive, maxPasses: 25, perPassMs: 40);
+                bool otherReapplied = await Harness.WaitFor(() => TopmostBit(win), maxPasses: 25, perPassMs: 40);
+                if (!winInactive || !thirdActive || win.IsActive)
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_ReappliedOnOtherWindowActivation",
+                        $"no clean activation edge on another window (other={winInactive}, third={thirdActive}, win active={win.IsActive})");
+                }
+                else
+                {
+                    CheckReapplied("WindowLevel_RefusedTopmost_ReappliedOnOtherWindowActivation", win, otherReapplied);
+                }
+
+                // The refused window's own activation reapplies it too.
+                bool refusedForSelf = await RefuseAlwaysOnTop(win, spec);
+                win.Activate();
+                bool activated = await Harness.WaitFor(() => win.IsActive, maxPasses: 25, perPassMs: 40);
+                bool selfReapplied = await Harness.WaitFor(() => TopmostBit(win), maxPasses: 25, perPassMs: 40);
+                if (!refusedForSelf || !activated)
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_ReappliedOnActivation",
+                        $"no clean self-activation edge (refused={refusedForSelf}, activated={activated})");
+                }
+                else
+                {
+                    CheckReapplied("WindowLevel_RefusedTopmost_ReappliedOnActivation", win, selfReapplied);
+                }
+            }
+            finally { await CloseAndSettle(third, other, win); }
+        }
+    }
+
     internal class WindowLevelRuntimeFlip(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -245,47 +435,24 @@ internal static class Phase4WindowingFixtures
             var win = await OpenAndSettle(spec);
             try
             {
-                // NOT a settled fix — issue #927 remains open. Four hypotheses tested and
-                // refuted on this fixture, recorded so nobody re-runs them:
-                //   1. "the fixed 80ms wait is too tight" — replaced with WaitFor polling;
-                //      still failed on a later full run.
-                //   2. "the secondary window's host is never awaited" — a REAL gap, fixed
-                //      below (Harness.Render only awaits ReactorApp.PrimaryWindow's host;
-                //      OpenAndSettle awaits win.Host, the Update path did not). Still failed
-                //      1 run in 4 afterwards with a 1.4s poll budget.
-                //   3. "intrinsic to the fixture" — 20/20 clean run in isolation
-                //      (`--self-test --filter WindowLevel_RuntimeFlip`).
-                //   4. "the two preceding Floating fixtures leave topmost/Z-order state" —
-                //      20/20 clean with them included (`--filter WindowLevel`).
-                // So: ~25% in the full 6122-check run, 0/40 across two narrow scopes. What
-                // remains is accumulated state from the hundreds of windows earlier fixtures
-                // open and close, or full-run load/duration. Note (1) only rules out sampling
-                // too early — an event that never fires, an ordering race decided before the
-                // first poll, or a lost wakeup are all budget-insensitive, so "not a
-                // too-short-poll problem" is the sound claim, NOT "not a race".
-                // The await + poll below are kept because both are correct regardless, and
-                // the assertion stays strict: it fails if the bit never flips.
-                // Window-population probe for issue #927. Emitted on EVERY run so a full run and
-                // a filtered run can be compared without waiting to catch the ~25% flake.
+                // Issue #927. Windows can refuse a runtime HWND_TOPMOST: SetWindowPos returns TRUE,
+                // but WM_WINDOWPOSCHANGING arrives with the insert-after rewritten to a non-topmost
+                // window the test window is already below, so nothing moves and the bit stays
+                // clear. Measured with the workstation locked (LockApp in the foreground) late in
+                // long local full runs. An immediate retry, a raw SetWindowPos without
+                // SWP_NOACTIVATE, HWND_TOP followed by HWND_TOPMOST, and
+                // OverlappedPresenter.IsAlwaysOnTop all fail the same way, so it is OS policy
+                // rather than Reactor or WinUI. A freshly launched process in the same session
+                // still got topmost, which matches the fixture never failing in isolation. It has
+                // not been seen in CI. When the bit doesn't follow, the fixture issues the same
+                // call itself. It skips only when that is refused too and another process owns
+                // the foreground; any other mismatch fails. Reactor reapplies a refused level on
+                // the app's next activation (#1707, covered by WindowLevelRefusedTopmostReapplied),
+                // which this fixture doesn't wait for.
                 //
-                // RESULT: hypothesis FALSIFIED, and the probe is kept as the standing evidence.
-                // ReactorWindow.ReassertFloatingWindowsForActivation iterates ReactorApp.Windows
-                // on every activation and re-issues SetWindowPos(HWND_TOP) for every non-disposed
-                // window whose Spec.Level is Floating — it skips only _disposed, so a Floating
-                // window leaked by an earlier fixture would keep churning Z-order for the rest of
-                // the process. That made "leaked Floating windows accumulate over the suite" a
-                // strong candidate. Measured: `ReactorApp.Windows=1, registered Spec.Level==Floating=0` at this
-                // point in BOTH a full ~6100-check run and `--filter WindowLevel`. Identical. So
-                // there is no leak, no accumulated population, and the whole cross-window
-                // coupling family is eliminated — including the version where the two preceding
-                // Floating fixtures are to blame (also 20/20 clean with them included).
-                //
-                // What that leaves: ReactorWindow.ApplyWindowLevel discards the SetWindowPos
-                // BOOL (`_ = NativeShell.SetWindowPos(...)`, ReactorWindow.cs:810), so a rejected
-                // call is silently indistinguishable from one that never took effect. Checking
-                // that return plus GetLastError is now the leading next step — it splits "the
-                // call was rejected" from "something undid it afterwards", and neither is
-                // currently observable.
+                // Earlier, refuted hypotheses: a too-short wait, the secondary window's host not
+                // being awaited (a real gap, fixed below), and Z-order churn from leaked Floating
+                // windows, which the population probe below still rules out on every run.
                 var allWindows = ReactorApp.Windows;
                 int registeredFloatingSpecs = 0;
                 for (int i = 0; i < allWindows.Count; i++)
@@ -295,24 +462,39 @@ internal static class Phase4WindowingFixtures
                     $"registered Spec.Level==Floating={registeredFloatingSpecs} " +
                     $"(disposal NOT checked — see below)");
                 // Deliberately a SUPERSET of what actually churns Z-order:
-                // ReassertFloatingWindowsForActivation additionally skips `_disposed`, which is
+                // ReassertWindowLevelsForActivation additionally skips `_disposed`, which is
                 // private on ReactorWindow and unreachable from here even with InternalsVisibleTo.
-                // So this counts registered Floating specs, disposed or not. That asymmetry is
-                // safe in the direction that matters: an over-count of 0 implies the participating
-                // count is also 0, so the falsification above holds a fortiori. It would only
-                // mislead in the other direction — a non-zero reading here is a lead to
-                // investigate, not proof that anything is still reasserting.
-                //
-                // Only the Floating count is asserted, not the total window count: total would red
-                // on any unrelated fixture's leak and misattribute it to this fixture.
+                // An over-count of 0 implies the participating count is also 0. Only the Floating
+                // count is asserted, not the total window count: total would red on any unrelated
+                // fixture's leak and misattribute it to this fixture.
                 H.Check("WindowLevel_RuntimeFlip_NoRegisteredFloatingWindows", registeredFloatingSpecs == 0);
 
                 win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
+                // Harness.Render only awaits the primary window's host, so await this one's.
                 await win.Host.WaitForIdleAsync();
                 bool topmost = await Harness.WaitFor(
                     () => (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0,
                     maxPasses: 25, perPassMs: 40);
-                if (!topmost) ReportLevelMismatch(win, WindowLevel.AlwaysOnTop, expectTopmostBit: true);
+                if (!topmost)
+                {
+                    // Read before the probe below, which sets the bit when the OS allows it.
+                    bool bitSet = (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
+                    bool specTookUpdate = win.Spec.Level == WindowLevel.AlwaysOnTop;
+                    bool osGranted = true, foregroundIsForeign = false;
+                    if (!bitSet) osGranted = OsGrantsTopmost(win, out foregroundIsForeign);
+                    if (ShouldSkipRefusedTopmost(specTookUpdate, bitSet, osGranted, foregroundIsForeign))
+                    {
+                        const string reason =
+                            "issue #927: Windows refused HWND_TOPMOST while another process owned the " +
+                            "foreground (a direct SetWindowPos was refused too), so the runtime flip " +
+                            "can't be observed";
+                        H.Skip("WindowLevel_RuntimeFlip_Topmost", reason);
+                        // The bit never got set, so the Normal half would pass without testing anything.
+                        H.Skip("WindowLevel_RuntimeFlip_Normal", reason);
+                        return;
+                    }
+                    ReportLevelMismatch(win, WindowLevel.AlwaysOnTop, expectTopmostBit: true, specTookUpdate, bitSet);
+                }
                 H.Check("WindowLevel_RuntimeFlip_Topmost", topmost);
 
                 win.Update(spec with { Level = WindowLevel.Normal });
@@ -320,7 +502,12 @@ internal static class Phase4WindowingFixtures
                 bool normal = await Harness.WaitFor(
                     () => (ExStyleBits(win) & Native.WS_EX_TOPMOST) == 0,
                     maxPasses: 25, perPassMs: 40);
-                if (!normal) ReportLevelMismatch(win, WindowLevel.Normal, expectTopmostBit: false);
+                if (!normal)
+                {
+                    ReportLevelMismatch(win, WindowLevel.Normal, expectTopmostBit: false,
+                        specTookUpdate: win.Spec.Level == WindowLevel.Normal,
+                        bitSet: (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0);
+                }
                 H.Check("WindowLevel_RuntimeFlip_Normal", normal);
             }
             finally { await CloseAndSettle(win); }
@@ -329,7 +516,7 @@ internal static class Phase4WindowingFixtures
 
     /// <summary>
     /// Pure verdict selection for <see cref="ReportLevelMismatch"/>, split out so the three-way
-    /// branch is reachable without reproducing the ~25%-in-a-full-run flake. Returns a short
+    /// branch is reachable without a real failure. Returns a short
     /// stable tag plus the guidance text; the tag is what a test can assert on without pinning
     /// the prose.
     ///
@@ -340,11 +527,10 @@ internal static class Phase4WindowingFixtures
     /// <item><description><b>spec stale</b> — the Update never reached Reactor's own state, so
     /// the fault is upstream of the native apply entirely.</description></item>
     /// <item><description><b>spec updated, bit still wrong</b> — Reactor accepted it but
-    /// SetWindowPos was coalesced away or never issued.</description></item>
+    /// SetWindowPos was never issued, or was issued with the wrong insert-after.</description></item>
     /// <item><description><b>spec updated, bit now CORRECT</b> — it landed after the poll
     /// exhausted. That is a lost wakeup / late apply, not a missing one, and it is the one case a
-    /// longer budget would actually have fixed — worth knowing, because the 1.4s budget already
-    /// failed once and that argues against this branch being the usual cause.</description></item>
+    /// longer budget would actually have fixed.</description></item>
     /// </list>
     /// </summary>
     internal static (string Tag, string Text) LevelMismatchVerdict(bool specTookUpdate, bool bitNowCorrect)
@@ -358,44 +544,92 @@ internal static class Phase4WindowingFixtures
             return ("late-apply",
                 "The bit is CORRECT now, so the apply landed after the poll exhausted — a late " +
                 "apply / lost wakeup rather than a missing one. This is the only branch a longer " +
-                "budget would fix, and 1.4s already failed once, so treat a repeat here as a " +
-                "signal to re-examine that.");
+                "budget would fix.");
 
         return ("apply-missing",
             "Reactor's spec DID take the update, but the native bit still has not followed — " +
-            "the SetWindowPos apply is the suspect (coalesced away, or never issued).");
+            "Reactor's SetWindowPos apply is the suspect (never issued, or issued with the wrong " +
+            "insert-after). For the Topmost half, the fixture's own SetWindowPos, issued after the " +
+            "poll, did take, or no foreign foreground owner could be confirmed.");
     }
 
     /// <summary>
-    /// Emits a TAP comment carrying <see cref="LevelMismatchVerdict"/>'s diagnosis, so the NEXT
-    /// full-run occurrence answers the question instead of costing another investigation. This
-    /// fixture only fails in the full ~6100-check run (0/40 across two narrow scopes), so a
-    /// reproduction is expensive and the failure needs to carry its own diagnosis.
+    /// Emits a TAP comment carrying <see cref="LevelMismatchVerdict"/>'s diagnosis, so the next
+    /// occurrence answers the question instead of costing another investigation.
     ///
     /// <para>Written as a TAP comment rather than folded into the check name so
     /// <c>WindowLevel_RuntimeFlip_Topmost</c> stays greppable for flake tracking.</para>
     /// </summary>
-    private static void ReportLevelMismatch(ReactorWindow win, WindowLevel requested, bool expectTopmostBit)
+    /// <param name="specTookUpdate">Whether <c>win.Spec.Level</c> equals <paramref name="requested"/>.</param>
+    /// <param name="bitSet">
+    /// WS_EX_TOPMOST re-read after the poll gave up and before any probe that could change it.
+    /// If it is correct by then, the apply was merely late.
+    /// </param>
+    private static void ReportLevelMismatch(
+        ReactorWindow win, WindowLevel requested, bool expectTopmostBit, bool specTookUpdate, bool bitSet)
     {
-        var specLevel = win.Spec.Level;
-        // Re-read AFTER the poll gave up — if it is correct now, the apply was merely late.
-        bool bitSet = (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
         var (tag, verdict) = LevelMismatchVerdict(
-            specTookUpdate: specLevel == requested,
+            specTookUpdate: specTookUpdate,
             bitNowCorrect: bitSet == expectTopmostBit);
 
         Console.WriteLine(
             $"# WindowLevel_RuntimeFlip diagnostic (issue #927) [{tag}]: requested={requested}, " +
-            $"spec.Level={specLevel}, WS_EX_TOPMOST={(bitSet ? "set" : "clear")}, " +
+            $"spec.Level={win.Spec.Level}, WS_EX_TOPMOST={(bitSet ? "set" : "clear")}, " +
             $"expected {(expectTopmostBit ? "set" : "clear")}. {verdict}");
     }
 
     /// <summary>
-    /// Exhaustively covers the three-way verdict in <see cref="LevelMismatchVerdict"/>. That
-    /// branch only executes when <c>WindowLevel_RuntimeFlip</c> actually fails — ~25% of full
-    /// runs, and 0/40 under a filter — so without this fixture the diagnostic a future triager
-    /// will act on is never exercised in CI. Four checks cover the whole 2x2 input domain, so
-    /// collapsing any branch into another fails at least one of them.
+    /// Pure skip-or-fail decision for the Topmost half once the poll gave up, split out so
+    /// <see cref="WindowLevelVerdictBranches"/> can cover it without reproducing the refusal.
+    /// Skips only when Reactor's spec took the update, the bit is still clear, the fixture's own
+    /// SetWindowPos was refused too, and another process was positively identified as owning
+    /// the foreground. Every other combination is a Reactor failure.
+    /// </summary>
+    internal static bool ShouldSkipRefusedTopmost(
+        bool specTookUpdate, bool bitSet, bool osGranted, bool foregroundIsForeign)
+        => specTookUpdate && !bitSet && !osGranted && foregroundIsForeign;
+
+    /// <summary>
+    /// True only when the foreground lookup succeeded and named a different, nonzero process.
+    /// A null foreground window (common during activation changes or with no interactive
+    /// foreground) or a failed <c>GetWindowThreadProcessId</c> is unknown, not foreign.
+    /// </summary>
+    internal static bool IsForeignForeground(nint foregroundHwnd, uint lookupThreadId, uint foregroundPid, uint selfPid)
+        => foregroundHwnd != 0 && lookupThreadId != 0 && foregroundPid != 0 && foregroundPid != selfPid;
+
+    /// <summary>
+    /// Issues the same <c>SetWindowPos(HWND_TOPMOST)</c> Reactor does and reports whether the bit
+    /// took. False means Windows refused the request for this process. Leaves the window topmost
+    /// when it succeeds.
+    /// </summary>
+    /// <param name="foregroundIsForeign">See <see cref="IsForeignForeground"/>, measured at probe time.</param>
+    private static bool OsGrantsTopmost(ReactorWindow win, out bool foregroundIsForeign)
+    {
+        nint foregroundHwnd = Native.ForegroundWindow();
+        uint foregroundPid = 0;
+        uint lookupThreadId = foregroundHwnd == 0
+            ? 0
+            : Native.WindowProcessId(foregroundHwnd, out foregroundPid);
+        foregroundIsForeign = IsForeignForeground(
+            foregroundHwnd, lookupThreadId, foregroundPid, (uint)Environment.ProcessId);
+        nint hwnd = Hwnd(win);
+        bool ok = Native.MakeTopmost(hwnd, out int error);
+        bool granted = (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
+        Console.WriteLine(
+            $"# WindowLevel_RuntimeFlip OS probe (issue #927): direct SetWindowPos(HWND_TOPMOST) " +
+            $"returned {ok} (error {error}), WS_EX_TOPMOST {(granted ? "set" : "still clear")}, " +
+            $"foreground hwnd {foregroundHwnd} pid {foregroundPid} (foreign={foregroundIsForeign}), " +
+            $"this pid {Environment.ProcessId}");
+        return granted;
+    }
+
+    /// <summary>
+    /// Exhaustively covers the three-way verdict in <see cref="LevelMismatchVerdict"/>, the
+    /// skip decision in <see cref="ShouldSkipRefusedTopmost"/> and the foreground classification
+    /// in <see cref="IsForeignForeground"/>. They only execute when
+    /// <c>WindowLevel_RuntimeFlip</c> doesn't see the bit follow, so without this fixture they
+    /// are never exercised in CI. The verdict checks cover the whole 2x2 input domain, and the
+    /// skip checks pin the one skipping combination plus each single-input flip away from it.
     /// </summary>
     internal class WindowLevelVerdictBranches(Harness h) : SelfTestFixtureBase(h)
     {
@@ -415,6 +649,29 @@ internal static class Phase4WindowingFixtures
             H.Check("WindowLevelVerdict_ApplyMissing",
                 LevelMismatchVerdict(specTookUpdate: true, bitNowCorrect: false).Tag == "apply-missing");
 
+            H.Check("WindowLevelSkip_RefusedWhileBackgroundSkips",
+                ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsForeign: true));
+            H.Check("WindowLevelSkip_SpecStaleFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: false, bitSet: false, osGranted: false, foregroundIsForeign: true));
+            H.Check("WindowLevelSkip_LateApplyFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: true, osGranted: false, foregroundIsForeign: true));
+            H.Check("WindowLevelSkip_OsGrantedFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: true, foregroundIsForeign: true));
+            H.Check("WindowLevelSkip_RefusedWithoutForeignForegroundFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsForeign: false));
+
+            const uint self = 100, other = 200;
+            H.Check("WindowLevelForeground_ForeignProcess",
+                IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 7, foregroundPid: other, selfPid: self));
+            H.Check("WindowLevelForeground_SelfIsNotForeign",
+                !IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 7, foregroundPid: self, selfPid: self));
+            H.Check("WindowLevelForeground_NullWindowIsUnknown",
+                !IsForeignForeground(foregroundHwnd: 0, lookupThreadId: 0, foregroundPid: 0, selfPid: self));
+            H.Check("WindowLevelForeground_FailedLookupIsUnknown",
+                !IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 0, foregroundPid: other, selfPid: self));
+            H.Check("WindowLevelForeground_ZeroPidIsUnknown",
+                !IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 7, foregroundPid: 0, selfPid: self));
+
             return Task.CompletedTask;
         }
     }
@@ -430,6 +687,43 @@ internal static class Phase4WindowingFixtures
         public const long WS_EX_APPWINDOW = 0x00040000;
         public const long WS_EX_TOPMOST = 0x00000008;
         public const uint GW_HWNDNEXT = 2;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private static readonly nint HWND_TOPMOST = -1;
+
+        // Same call and flags as ReactorWindow.ApplyWindowLevel(AlwaysOnTop).
+        public static bool MakeTopmost(nint hWnd, out int error)
+        {
+            bool ok = SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            error = ok ? 0 : Marshal.GetLastWin32Error();
+            return ok;
+        }
+
+        public static void MakeNotTopmost(nint hWnd)
+            => _ = SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+        private static readonly nint HWND_NOTOPMOST = -2;
+
+        public static nint ForegroundWindow() => GetForegroundWindow();
+
+        public const uint WM_ACTIVATEAPP = 0x001C;
+
+        [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+        public static extern nint SendMessage(nint hWnd, uint msg, nuint wParam, nint lParam);
+
+        public static uint WindowProcessId(nint hWnd, out uint processId)
+            => GetWindowThreadProcessId(hWnd, out processId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern nint GetForegroundWindow();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
         public static nint GetWindowLongPtr(nint hWnd, int nIndex)
             => IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex) : GetWindowLong32(hWnd, nIndex);
