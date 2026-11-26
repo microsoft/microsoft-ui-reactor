@@ -51,7 +51,7 @@ Yoga/Flex layout math.
   across rent/return (issue #114). Each type has two lanes (spec 066 §7): a
   control whose composition visual was taken permanently refuses the facade
   transforms and the XAML implicit transitions, so `Return` puts it in the
-  visual lane (after the §7.3 visual reset) by the native `ReactorState.VisualTaken`
+  visual lane (after the §7.3 visual reset) by the native `CompositionState.VisualTaken`
   marker, and only a mount that takes the visual at mount and carries no setters or
   mount callbacks rents from it. Flag:
   - new event wiring on a poolable control that bypasses the one-time

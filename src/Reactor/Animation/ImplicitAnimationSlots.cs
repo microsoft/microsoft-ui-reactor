@@ -198,8 +198,7 @@ internal static class ImplicitAnimationSlots
 
     internal static void Claim(UIElement element, string key, ImplicitFeature feature, int slot, object value)
     {
-        var state = Reconciler.GetOrCreateReactorState(element);
-        var claims = state.ImplicitClaims ??= new();
+        var claims = Reconciler.GetOrCreateCompositionState(element).ImplicitClaims ??= new();
         claims.Add(new Sink(element, claims), key, feature, slot, value);
     }
 
@@ -217,7 +216,7 @@ internal static class ImplicitAnimationSlots
     /// <summary>Drops every claim and the keys they published on the visual.</summary>
     internal static void ReleaseAll(UIElement element)
     {
-        if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState { ImplicitClaims: { } claims } state)
+        if (Reconciler.GetCompositionState(element) is not { ImplicitClaims: { } claims } state)
             return;
         state.ImplicitClaims = null;
         claims.ReleaseAll(new Sink(element, claims));
@@ -230,7 +229,7 @@ internal static class ImplicitAnimationSlots
     internal static bool PublishedToVisual(UIElement element) => Claims(element)?.PublishedToVisual == true;
 
     internal static ImplicitAnimationClaims? Claims(UIElement element)
-        => (element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims;
+        => Reconciler.GetCompositionState(element)?.ImplicitClaims;
 
     private readonly struct Sink(UIElement element, ImplicitAnimationClaims claims) : IImplicitAnimationSink
     {
