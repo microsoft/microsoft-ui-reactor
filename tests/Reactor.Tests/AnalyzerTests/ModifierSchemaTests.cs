@@ -129,28 +129,62 @@ public class ModifierSchemaTests
         var byValue = new HashSet<string>(StringComparer.Ordinal);
         foreach (var method in methods)
         {
-            // Value guards: `m.X != oldM?.X`, or a resolved local (`resolvedMargin != oldM?.Margin`).
-            foreach (var compare in method.DescendantNodes().OfType<BinaryExpressionSyntax>()
-                         .Where(b => b.IsKind(SyntaxKind.NotEqualsExpression)))
-            {
-                var (old, current) = OldField(compare.Right) is { } r ? (r, compare.Left) : (OldField(compare.Left), compare.Right);
-                if (old is not null && (Field(current) == old || current is IdentifierNameSyntax)) byValue.Add(old);
-            }
+            var initializers = method.DescendantNodes().OfType<VariableDeclaratorSyntax>()
+                .Where(v => v.Initializer is not null)
+                .GroupBy(v => v.Identifier.Text, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First().Initializer!.Value, StringComparer.Ordinal);
+            string? Seeded(ExpressionSyntax e) =>
+                Field(e) ?? (e is IdentifierNameSyntax id && initializers.TryGetValue(id.Identifier.Text, out var init) ? Field(init) : null);
 
-            var locals = method.DescendantNodes().OfType<VariableDeclaratorSyntax>()
-                .Where(v => v.Initializer is not null && Field(v.Initializer.Value) is not null)
-                .ToDictionary(v => v.Identifier.Text, v => Field(v.Initializer!.Value)!, StringComparer.Ordinal);
-            foreach (var argument in method.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                         .Where(i => ReconcilerSource.InvokedName(i) == "ReferenceEquals")
-                         .SelectMany(i => i.ArgumentList.Arguments))
+            // A comparison counts only as the guard of the write it protects: it sits in an `if`
+            // condition (or in a local that condition reads, like `marginInlineChanged`) whose
+            // then-branch writes the slot's receiver property, or returns early. A ReferenceEquals
+            // elsewhere, such as BorderBrush's interaction-state branch, guards no write.
+            foreach (var guard in method.DescendantNodes().OfType<IfStatementSyntax>())
             {
-                var name = Field(argument.Expression)
-                    ?? (argument.Expression is IdentifierNameSyntax id && locals.TryGetValue(id.Identifier.Text, out var seeded) ? seeded : null);
-                if (name is not null) byReference.Add(name);
+                var condition = guard.Condition.DescendantNodesAndSelf()
+                    .Concat(guard.Condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+                        .Select(id => initializers.GetValueOrDefault(id.Identifier.Text))
+                        .OfType<ExpressionSyntax>()
+                        .SelectMany(init => init.DescendantNodesAndSelf()))
+                    .ToList();
+
+                // Value guards: `m.X != oldM?.X`, or a resolved local (`resolvedMargin != oldM?.Margin`).
+                foreach (var compare in condition.OfType<BinaryExpressionSyntax>().Where(b => b.IsKind(SyntaxKind.NotEqualsExpression)))
+                {
+                    var (old, current) = OldField(compare.Right) is { } r ? (r, compare.Left) : (OldField(compare.Left), compare.Right);
+                    if (old is not null && (Field(current) == old || current is IdentifierNameSyntax) && Protects(guard.Statement, old))
+                        byValue.Add(old);
+                }
+                foreach (var argument in condition.OfType<InvocationExpressionSyntax>()
+                             .Where(i => ReconcilerSource.InvokedName(i) == "ReferenceEquals")
+                             .SelectMany(i => i.ArgumentList.Arguments))
+                {
+                    if (Seeded(argument.Expression) is { } name && Protects(guard.Statement, name))
+                        byReference.Add(name);
+                }
             }
+        }
+
+        static bool Protects(StatementSyntax then, string slot)
+        {
+            if (then is ReturnStatementSyntax or BlockSyntax { Statements: [ReturnStatementSyntax] }) return true;
+            var properties = (ModifierSchema.Find(slot)?.ReceiversWith(ReceiverRole.Apply).Select(r => r.Property) ?? [])
+                .Append(slot).ToHashSet(StringComparer.Ordinal);
+            return then.DescendantNodesAndSelf().Any(node => node switch
+            {
+                AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax target } => properties.Contains(target.Name.Identifier.Text),
+                AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } => properties.Contains(target.Identifier.Text),
+                InvocationExpressionSyntax call => ReconcilerSource.InvokedName(call) is { } invoked
+                    && invoked.StartsWith("Set", StringComparison.Ordinal) && properties.Contains(invoked[3..]),
+                // A hand-coded writer that takes the new value: `ApplyDeclaredOpacity(fe, m.Opacity.Value, …)`.
+                ArgumentSyntax argument => argument.Expression.DescendantNodesAndSelf().OfType<ExpressionSyntax>().Any(e => Field(e) == slot),
+                _ => false,
+            });
         }
         Assert.Contains("Background", byReference);   // positive controls: direct, and through a local
         Assert.Contains("Foreground", byReference);
+        Assert.Contains("BorderBrush", byReference);  // the write branch's guard, not the interaction-state branch
         Assert.Contains("Width", byValue);            // positive controls: both bags, and a resolved local
         Assert.Contains("HelpText", byValue);
         Assert.Contains("Margin", byValue);
