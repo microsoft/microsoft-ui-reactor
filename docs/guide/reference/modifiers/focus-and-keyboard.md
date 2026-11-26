@@ -92,18 +92,6 @@ Declared in `FocusTrapElementExtensions`.
 | --- | --- | --- |
 | `handle` | [`FocusTrapHandle`](../hooks/hook-types.md#focustraphandle) |  |
 
-## `GetFocus`
-
-Gets the FocusAttached metadata from an element.
-
-```csharp
-FocusAttached? GetFocus<T>(this T el) where T : Element
-```
-
-Declared in `FocusExtensions`.
-
-**Applies to:** any element.
-
 ## `IsTabStop`
 
 ```csharp
