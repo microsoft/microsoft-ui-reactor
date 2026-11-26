@@ -164,4 +164,33 @@ public sealed partial class Reconciler
             else if (fe is WinUI.TextBlock fwTb) fwTb.ClearValue(WinUI.TextBlock.FontWeightProperty);
         }
     }
+
+    /// <summary>IsEnabled and CornerRadius.</summary>
+    private static void ApplyIsEnabledAndCornerRadiusModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
+        // The reset arm re-tests the type under its own variable: reaching the else only proves the
+        // set condition was false, which every non-Control satisfies, and dropping the modifier
+        // must not clear a value a non-Control carries on its own (issue #986).
+        if (m.IsEnabled.HasValue && m.IsEnabled != oldM?.IsEnabled && fe is WinUI.Control enCtrl)
+            enCtrl.IsEnabled = m.IsEnabled.Value;
+        else if (!m.IsEnabled.HasValue && oldM?.IsEnabled.HasValue == true && fe is WinUI.Control enCtrl2)
+            enCtrl2.ClearValue(WinUI.Control.IsEnabledProperty);
+
+        if (m.CornerRadius.HasValue && m.CornerRadius != oldM?.CornerRadius)
+        {
+            if (fe is WinUI.Control crCtrl) crCtrl.CornerRadius = m.CornerRadius.Value;
+            else if (fe is WinUI.Border crBdr) crBdr.CornerRadius = m.CornerRadius.Value;
+            else if (fe is WinUI.Grid crGrid) crGrid.CornerRadius = m.CornerRadius.Value;
+            else if (fe is WinUI.StackPanel crStack) crStack.CornerRadius = m.CornerRadius.Value;
+            else if (fe is WinUI.RelativePanel crRelative) crRelative.CornerRadius = m.CornerRadius.Value;
+        }
+        else if (!m.CornerRadius.HasValue && oldM?.CornerRadius.HasValue == true)
+        {
+            if (fe is WinUI.Control crCtrl) crCtrl.ClearValue(WinUI.Control.CornerRadiusProperty);
+            else if (fe is WinUI.Border crBdr) crBdr.ClearValue(WinUI.Border.CornerRadiusProperty);
+            else if (fe is WinUI.Grid crGrid) crGrid.ClearValue(WinUI.Grid.CornerRadiusProperty);
+            else if (fe is WinUI.StackPanel crStack) crStack.ClearValue(WinUI.StackPanel.CornerRadiusProperty);
+            else if (fe is WinUI.RelativePanel crRelative) crRelative.ClearValue(WinUI.RelativePanel.CornerRadiusProperty);
+        }
+    }
 }
