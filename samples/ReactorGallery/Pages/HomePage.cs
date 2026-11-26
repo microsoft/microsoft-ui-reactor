@@ -15,12 +15,11 @@ class HomePage : Component<Action<string>>
             .GroupBy(c => c.Category)
             .OrderBy(g => g.Key)
             .Select(g => new ControlInfo(
-                g.Key,
+                ControlRegistry.CategoryDisplayName(g.Key),
                 // "9 controls" is wrong for Fundamentals and Design, which hold framework
                 // topics and guidance. One predicate, shared with the shell and the header.
                 $"{g.Count()} {(ControlRegistry.IsControlCategory(g.Key) ? "controls" : "topics")}",
                 g.Key,
-                g.First().IconGlyph,
                 g.Key.ToLowerInvariant().Replace(" ", "-"),
                 g.First().ImageFile))
             .ToArray();
@@ -35,9 +34,7 @@ class HomePage : Component<Action<string>>
                 // ── Hero section ────────────────────────────────────────
                 Border(
                     VStack(12,
-                        TextBlock("Reactor WinUI Gallery")
-                            .ApplyStyle("TitleTextBlockStyle")
-                            .Bold(),
+                        Title("Reactor WinUI Gallery"),
                         TextBlock("A showcase of WinUI controls built entirely with Reactor — a declarative,\ncomponent-based UI framework for WinUI 3.")
                             .Foreground(Theme.SecondaryText)
                             .TextWrapping(TextWrapping.Wrap)

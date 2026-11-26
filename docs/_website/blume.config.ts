@@ -4,28 +4,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "blume";
 import { script } from "blume/analytics";
 
-import { DEFAULT_SITE_BASE, LATEST_ALIAS, MAIN_VERSION } from "./scripts/publish.mjs";
+import { siteSettings } from "./scripts/site-env.mjs";
 
-// One build per published version. scripts/publish.mjs sets these; a local
-// `npm run dev` sets none and gets a plain site at the root, whose version
-// menu links to the published docs, and no banner.
-//
-//   DOCS_SITE           origin the site is served from
-//   DOCS_BASE           path the build is served under, e.g. /microsoft-ui-reactor/main
-//   DOCS_VERSION        the version this build is for: "main" or a release like 0.1.0-preview.19
-//   DOCS_ALIAS          "latest" when this build is the copy served at /latest/
-//   DOCS_VERSIONS_FILE  versions.json (mike's format) listing every published version
-const env = process.env;
-const site = env.DOCS_SITE || "https://microsoft.github.io";
-const base = env.DOCS_BASE?.replace(/\/+$/, "") || undefined;
-const version = env.DOCS_VERSION || undefined;
-const alias = env.DOCS_ALIAS || undefined;
-
-// The site root: the folder that holds every version, and redirects to latest/.
-const siteRoot = base && version ? base.slice(0, base.lastIndexOf("/") + 1) : `${DEFAULT_SITE_BASE}/`;
-const latestUrl = `${site}${siteRoot}`;
-const versionUrl = (id: string) => `${site}${siteRoot}${id}/`;
-
+// One build per published version. scripts/publish.mjs sets the DOCS_*
+// variables; scripts/site-env.mjs documents them and derives the settings.
 interface PublishedVersion {
   version: string;
   title?: string;
@@ -35,41 +17,10 @@ interface PublishedVersion {
 const readJson = <T>(file: string | undefined, fallback: T): T =>
   file && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as T) : fallback;
 
-const published = readJson<PublishedVersion[]>(env.DOCS_VERSIONS_FILE, []);
-
-// The version menu, in versions.json order like mike's: main, then releases
-// newest first, with the release that holds "latest" linking to /latest/.
-// This list is the one the build was made with; public/js/version-menu.js
-// rebuilds it from the live versions.json, so older builds list newer
-// releases too, and opens the same page in the version you pick.
-const isLatest = (entry: PublishedVersion) => entry.aliases?.includes(LATEST_ALIAS) ?? false;
-const versionTag = (entry: PublishedVersion) =>
-  isLatest(entry) ? LATEST_ALIAS : entry.version === MAIN_VERSION ? "unreleased" : undefined;
-const entries = version && !published.some((entry) => entry.version === version)
-  ? [{ version, aliases: alias ? [alias] : [] }, ...published]
-  : published;
-const versionItems = version
-  ? entries.map((entry) => ({
-      label: entry.version,
-      tag: versionTag(entry),
-      path: entry.version === version ? "/" : versionUrl(isLatest(entry) ? LATEST_ALIAS : entry.version),
-    }))
-  : [
-      { label: "Local", tag: "this build", path: "/" },
-      { label: "Latest release", tag: LATEST_ALIAS, path: versionUrl(LATEST_ALIAS) },
-      { label: MAIN_VERSION, tag: "unreleased", path: versionUrl(MAIN_VERSION) },
-    ];
-
-let banner: { content: string; link: { href: string; text: string } } | undefined;
-if (version && alias !== "latest") {
-  banner = {
-    content:
-      version === "main"
-        ? "You're reading the docs for the unreleased main branch."
-        : `You're reading the docs for version ${version}.`,
-    link: { href: latestUrl, text: "Go to the latest release" },
-  };
-}
+const { site, base, version, siteRoot, banner, selectors } = siteSettings(
+  process.env,
+  readJson<PublishedVersion[]>(process.env.DOCS_VERSIONS_FILE, [])
+);
 
 // Written by scripts/sync.mjs: every page whose MkDocs URL changed.
 const redirects = readJson<{ from: string; to: string }[]>(
@@ -127,7 +78,7 @@ export default defineConfig({
       { label: "How it works", path: "/how-it-works" },
     ],
     actions: changelogLinks,
-    selectors: [{ kind: "version", label: "Version", items: versionItems }],
+    selectors,
   },
   footer: {
     copyright: "© Microsoft Corporation. Released under the MIT License.",

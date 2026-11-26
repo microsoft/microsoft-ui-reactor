@@ -30,7 +30,7 @@
     { "from": "/reference/hooks/FocusTrap", "to": "/reference/modifiers/focus-and-keyboard#focustrap" },
     { "from": "/reference/hooks/FocusTrapElementExtensions", "to": "/reference/modifiers/focus-and-keyboard" },
     { "from": "/reference/hooks/FocusTrapHandle", "to": "/reference/hooks/hook-types#focustraphandle" },
-    { "from": "/reference/hooks/GetFocus", "to": "/reference/modifiers/focus-and-keyboard#getfocus" },
+    { "from": "/reference/hooks/GetFocus", "to": "/reference/hooks/focus-helpers#getfocus" },
     { "from": "/reference/hooks/IHookDispatcher", "to": "/reference/hooks/hook-types#ihookdispatcher" },
     { "from": "/reference/hooks/InfiniteHookState", "to": "/reference/hooks/UseInfiniteResource" },
     { "from": "/reference/hooks/IsActive", "to": "/reference/hooks/hook-types#focustraphandle" },

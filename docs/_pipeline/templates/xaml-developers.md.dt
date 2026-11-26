@@ -15,7 +15,9 @@ tier: comprehensive
 
 If you know XAML, you already know most of Reactor. Reactor renders the same
 WinUI controls, with the same layout panels, theme resources and input events.
-What changes is how you describe them. In XAML you split a page across markup,
+What changes is how you describe them.
+
+In XAML you split a page across markup,
 bindings, converters, styles and code-behind. In Reactor you write one C#
 component. Its `Render()` method returns the UI for the current state. When the
 state changes, Reactor runs `Render()` again and updates only the controls that

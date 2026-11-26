@@ -659,7 +659,9 @@ internal sealed class MetadataModelReader
         };
 
         if (kind is not (ApiTypeKind.Enum or ApiTypeKind.Delegate or ApiTypeKind.Interface or ApiTypeKind.Struct or ApiTypeKind.RecordStruct)
-            && !def.BaseType.IsNil && baseName is not ("System.Object" or null))
+            // A constructed generic base (`: Component<TProps>`) is a TypeSpecification,
+            // which has no simple name, so a null baseName still has a base to decode.
+            && !def.BaseType.IsNil && baseName != "System.Object")
         {
             var ctx = Context(def, default);
             var baseRef = DecodeHandle(def.BaseType, ctx);
@@ -825,7 +827,8 @@ internal sealed class MetadataModelReader
             bool isStatic = (f.Attributes & FieldAttributes.Static) != 0;
             bool isReadOnly = (f.Attributes & FieldAttributes.InitOnly) != 0;
             var constant = isConst ? ConstantText(f.GetDefaultValue(), t) : null;
-            var mods = isConst ? "const " : (isStatic ? "static " : string.Empty) + (isReadOnly ? "readonly " : string.Empty);
+            var mods = isConst ? "const " : (isStatic ? "static " : string.Empty) + (isReadOnly ? "readonly " : string.Empty)
+                + (IsRequired(f.GetCustomAttributes()) ? "required " : string.Empty);
             type.Members.Add(new ApiMember
             {
                 DocId = "F:" + typeStem + "." + name,
@@ -905,14 +908,15 @@ internal sealed class MetadataModelReader
             bases.Add(TRefFormat.CSharp(iref, TypeAnnotations.None));
         }
         if (bases.Count > 0) sb.Append(" : ").Append(string.Join(", ", bases));
-        sb.Append(Constraints(def.GetGenericParameters().Skip(type.DeclaringType?.TypeParameters.Count ?? 0), ctx));
+        sb.Append(Constraints(def.GetGenericParameters().Skip(type.DeclaringType?.TypeParameters.Count ?? 0), ctx,
+            NullableContext(def.GetCustomAttributes(), h) ?? 0));
         return sb.ToString();
     }
 
     private bool IsReadOnlyStruct(TypeDefinition def) =>
         def.GetCustomAttributes().Any(ca => AttributeName(_md.GetCustomAttribute(ca)) == "System.Runtime.CompilerServices.IsReadOnlyAttribute");
 
-    private string Constraints(IEnumerable<GenericParameterHandle> parameters, GenericNames ctx)
+    private string Constraints(IEnumerable<GenericParameterHandle> parameters, GenericNames ctx, byte context)
     {
         var sb = new StringBuilder();
         foreach (var gh in parameters)
@@ -921,9 +925,16 @@ internal sealed class MetadataModelReader
             var items = new List<string>();
             var attrs = gp.Attributes & GenericParameterAttributes.SpecialConstraintMask;
             bool isStruct = (attrs & GenericParameterAttributes.NotNullableValueTypeConstraint) != 0;
-            if ((attrs & GenericParameterAttributes.ReferenceTypeConstraint) != 0) items.Add("class");
+            bool isClass = (attrs & GenericParameterAttributes.ReferenceTypeConstraint) != 0;
+            if (isClass) items.Add("class");
             if (isStruct) items.Add("struct");
-            foreach (var ch in gp.GetConstraints())
+            var constraintHandles = gp.GetConstraints();
+            // Roslyn writes `notnull` as a not-annotated (1) flag on a type parameter
+            // that has no other constraint. With `class` or a constraint type the same
+            // flag only describes that constraint, so it isn't `notnull` there.
+            if (!isClass && !isStruct && constraintHandles.Count == 0 && TypeParameterNullability(gp, context) == 1)
+                items.Add("notnull");
+            foreach (var ch in constraintHandles)
             {
                 var c = _md.GetGenericParameterConstraint(ch);
                 var cref = DecodeHandle(c.Type, ctx);
@@ -935,6 +946,18 @@ internal sealed class MetadataModelReader
                 sb.Append(" where ").Append(_md.GetString(gp.Name)).Append(" : ").Append(string.Join(", ", items));
         }
         return sb.ToString();
+    }
+
+    /// <summary>The nullable flag of a type parameter: its own <c>[Nullable]</c>, else
+    /// the context of the method or type that declares it.</summary>
+    private byte TypeParameterNullability(GenericParameter gp, byte context)
+    {
+        if (FindAttribute(gp.GetCustomAttributes(), "System.Runtime.CompilerServices.NullableAttribute") is { } ca)
+        {
+            var blob = _md.GetBlobReader(ca.Value);
+            if (blob.Length == 5 && blob.ReadUInt16() == 1) return blob.ReadByte();
+        }
+        return context;
     }
 
     private List<string> ConstraintDocIds(GenericParameterHandle gh, GenericNames ctx)
@@ -1005,7 +1028,7 @@ internal sealed class MetadataModelReader
         var typeParamText = methodTypeParams.Count > 0 ? "<" + string.Join(", ", methodTypeParams) + ">" : string.Empty;
         var paramList = string.Join(", ", ps.Select(FormatParam));
         var shortParams = string.Join(", ", ps.Select(p => p.Type));
-        var constraints = Constraints(m.GetGenericParameters(), ctx);
+        var constraints = Constraints(m.GetGenericParameters(), ctx, context);
         string signature, shortSig, displayName;
         ApiMemberKind kind;
         if (asDelegate)
@@ -1013,7 +1036,7 @@ internal sealed class MetadataModelReader
             kind = ApiMemberKind.Method;
             var ownTypeParams = type.TypeParameters.Skip(type.DeclaringType?.TypeParameters.Count ?? 0).ToList();
             var tp = ownTypeParams.Count > 0 ? "<" + string.Join(", ", ownTypeParams) + ">" : string.Empty;
-            signature = "public delegate " + returnText + " " + type.Name + tp + "(" + paramList + ")" + Constraints(def.GetGenericParameters(), typeCtx);
+            signature = "public delegate " + returnText + " " + type.Name + tp + "(" + paramList + ")" + Constraints(def.GetGenericParameters(), typeCtx, typeContext ?? 0);
             shortSig = type.Name;
             displayName = type.Name;
         }
@@ -1078,7 +1101,7 @@ internal sealed class MetadataModelReader
             IsStatic = isStatic,
             IsExtension = isExtension,
             ExtendedTypeDocIds = extended,
-            ObsoleteMessage = ObsoleteMessage(m.GetCustomAttributes()),
+            ObsoleteMessage = isCtor ? ConstructorObsoleteMessage(m.GetCustomAttributes()) : ObsoleteMessage(m.GetCustomAttributes()),
         };
     }
 
@@ -1111,7 +1134,7 @@ internal sealed class MetadataModelReader
             Kind = ApiMemberKind.Property,
             Name = indexer ? "Item" : name,
             DeclaringType = type,
-            Signature = Access(accessor.Attributes) + MethodModifiers(accessor.Attributes, null) + typeText + " " + displayName + "  // " + accessorsText,
+            Signature = Access(accessor.Attributes) + MethodModifiers(accessor.Attributes, null) + (IsRequired(p.GetCustomAttributes()) ? "required " : string.Empty) + typeText + " " + displayName + "  // " + accessorsText,
             ShortSignature = displayName,
             Params = ps,
             ReturnType = typeText,
@@ -1203,8 +1226,10 @@ internal sealed class MetadataModelReader
         if (value is null)
         {
             if (c.TypeCode == ConstantTypeCode.String) return "\"\"";
-            // `CancellationToken ct = default` is stored as a null class constant.
-            return target is NamedTRef { IsValueType: true } vt && !(vt.Namespace == "System" && vt.Path is [ "Nullable`1" ])
+            // `CancellationToken ct = default` and `T value = default` are both stored as
+            // a null class constant. Only a reference type or Nullable<T> can be `null`.
+            return target is GenParamTRef
+                   || target is NamedTRef { IsValueType: true } vt && !(vt.Namespace == "System" && vt.Path is [ "Nullable`1" ])
                 ? "default" : "null";
         }
 
@@ -1350,6 +1375,41 @@ internal sealed class MetadataModelReader
         try { return blob.ReadSerializedString() ?? string.Empty; }
         catch (BadImageFormatException) { return string.Empty; }
     }
+
+    // The text Roslyn puts in the [Obsolete] it adds to every constructor of a type
+    // with required members. Matching it exactly keeps a real [Obsolete] the author
+    // wrote (Roslyn then adds none of its own).
+    private const string RequiredMembersObsoleteText =
+        "Constructors of types with required members are not supported in this version of your compiler.";
+
+    /// <summary>
+    /// The obsolete message of a constructor, minus the marker Roslyn adds to
+    /// constructors of types with required members. That marker, paired with
+    /// <c>[CompilerFeatureRequired("RequiredMembers")]</c>, only stops compilers that
+    /// predate required members; it is not a deprecation.
+    /// </summary>
+    private string? ConstructorObsoleteMessage(CustomAttributeHandleCollection attrs)
+    {
+        var message = ObsoleteMessage(attrs);
+        return message == RequiredMembersObsoleteText && RequiresCompilerFeature(attrs, "RequiredMembers") ? null : message;
+    }
+
+    private bool RequiresCompilerFeature(CustomAttributeHandleCollection attrs, string feature)
+    {
+        foreach (var h in attrs)
+        {
+            var ca = _md.GetCustomAttribute(h);
+            if (AttributeName(ca) != "System.Runtime.CompilerServices.CompilerFeatureRequiredAttribute") continue;
+            var blob = _md.GetBlobReader(ca.Value);
+            if (blob.Length < 3 || blob.ReadUInt16() != 1) continue;
+            try { if (blob.ReadSerializedString() == feature) return true; }
+            catch (BadImageFormatException) { }
+        }
+        return false;
+    }
+
+    private bool IsRequired(CustomAttributeHandleCollection attrs) =>
+        FindAttribute(attrs, "System.Runtime.CompilerServices.RequiredMemberAttribute") is not null;
 
     private byte? NullableContext(CustomAttributeHandleCollection attrs, TypeDefinitionHandle? owner)
     {

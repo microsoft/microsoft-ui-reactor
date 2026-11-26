@@ -2,7 +2,7 @@
 
 Navigation views, tabs, pivots, breadcrumbs and the title bar.
 
-Each factory method returns an element record. Call them through `using static Microsoft.UI.Reactor.Factories;`.
+Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.
 
 **Learn more:** [Navigation](../../navigation.md)
 
@@ -90,7 +90,7 @@ NavigationViewItemData NavItemHeader(string content)
 Creates a navigation host that renders the current route's content. Automatically provides the navigation handle via context so child components can retrieve it with `UseNavigation<TRoute>()`. Use `with { }` to set Transition, CacheMode, and CacheSize.
 
 ```csharp
-NavigationHostElement NavigationHost<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, Element> routeMap)
+NavigationHostElement NavigationHost<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, Element> routeMap) where TRoute : notnull
 ```
 
 **Returns:** [`NavigationHostElement`](../elements/navigation.md#navigationhostelement).

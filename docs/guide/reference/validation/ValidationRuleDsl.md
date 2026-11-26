@@ -28,11 +28,26 @@ public static void Evaluate(this ValidationRuleElement rule, ValidationContext c
 | --- | --- | --- |
 | `ctx` | [`ValidationContext`](ValidationContext.md) |  |
 
+### `EvaluateAsync`
+
+Evaluates the async validation rule against a ValidationContext.
+
+The previous verdict is kept while the check is in flight and replaced once, at the end. Clearing first would raise [`ValidationContext.Changed`](ValidationContext.md#changed) twice per evaluation for an already-failing rule, and would briefly report the field as valid in between.
+
+Overlapping evaluations are ordered by a generation token taken before the predicate is awaited. Without it, a slow failing check started first could resolve after a fast passing one and reinstate an error the newer run had already cleared.
+
+```csharp
+public static Task EvaluateAsync(this ValidationRuleElement rule, ValidationContext ctx, CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ctx` | [`ValidationContext`](ValidationContext.md) |  |  |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
 ## Factories
 
 - [`ValidationRule`](../factories/forms.md#validationrule)
 - [`ValidationRuleAsync`](../factories/forms.md#validationruleasync)
-
-## Modifiers
-
-- [`EvaluateAsync`](../modifiers/forms.md#evaluateasync)

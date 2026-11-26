@@ -260,21 +260,12 @@ internal static class TierLint
     {
         var lines = body.Replace("\r\n", "\n").Split('\n');
         var words = 0;
-        string? fence = null;
+        var fence = new MarkdownFence();
         foreach (var raw in lines)
         {
+            if (fence.InCode(raw)) continue;
             var line = raw.TrimStart();
-            if (fence is not null)
-            {
-                if (line.StartsWith(fence)) fence = null;
-                continue;
-            }
-            if (line.StartsWith("```") || line.StartsWith("~~~"))
-            {
-                fence = line[..3];
-                continue;
-            }
-            if (Regex.IsMatch(line, @"^#{2,6}(\s|$)")) break;
+            if (SectionHeading.IsMatch(line)) break;
             if (line.StartsWith("# ") || line.StartsWith(">")) continue;
             words += line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         }
@@ -288,4 +279,6 @@ internal static class TierLint
     }
 
     private static readonly Regex LinkPattern = new(@"\[[^\]]+\]\([^)]+\)", RegexOptions.Compiled);
+
+    private static readonly Regex SectionHeading = new(@"^#{2,6}(\s|$)", RegexOptions.Compiled);
 }

@@ -2,7 +2,9 @@
 # Visual Studio and VS Code extensions
 
 Reactor has two editor extensions. Both are named **Reactor Preview**, and both
-show your running app next to the code. Each one starts the app with
+show your running app next to the code.
+
+Each one starts the app with
 `dotnet watch` and devtools turned on, so edits reach the preview as described
 in [Hot reload and live preview](hot-reload.md). The Visual Studio extension
 embeds the real app window. The VS Code extension shows screenshots of it.

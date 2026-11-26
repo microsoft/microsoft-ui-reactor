@@ -128,6 +128,8 @@ categories:
     intro: >-
       Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to
       build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`.
+      A few factories live on other classes, such as `ValidationRuleDsl`; their sections
+      name the `using static` they need.
     guide-pages: [controls, layout, cheat-sheet]
 
   - id: modifiers

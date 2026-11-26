@@ -229,12 +229,9 @@ internal static class NativeDockingReliabilityFixtures
             model?.Close(pane);
             H.Check("Reliability_Effect_PendingQueued",
                 model is { } m && m.Pending.Count == 1);
-            // Force a sub-host re-render. Harness.Render's idle-wait
-            // targets the primary host; the sub-host's bumpTick from
-            // OnMutationQueued queues a render that needs an external
-            // nudge to run. A `with`-clone of the controlled element
-            // changes the props reference, which the reconciler treats
-            // as a prop-change re-render. The drain then flushes Pending.
+            // Force a sub-host re-render. A `with`-clone of the controlled
+            // element changes the props reference, which the reconciler
+            // treats as a prop-change re-render. The drain then flushes Pending.
             host.Mount(_ => managerEl with { });
             await Harness.Render();
             H.Check("Reliability_Effect_PendingDrained",

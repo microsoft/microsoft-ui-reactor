@@ -30,7 +30,7 @@ public sealed class DocsSiteScriptsTests
     /// quietly reduced while the xUnit gate stays green. Raising it as cases are
     /// added is optional; lowering it is a decision.
     /// </summary>
-    private const int MinimumCases = 37;
+    private const int MinimumCases = 50;
 
     /// <summary>
     /// Ceiling for the node subprocess. The suites run in a few seconds, so this
@@ -42,7 +42,7 @@ public sealed class DocsSiteScriptsTests
     public async Task Docs_site_script_cases_pass()
     {
         var repoRoot = FindRepoRoot();
-        var testScripts = new[] { "sync.test.mjs", "publish.test.mjs" }
+        var testScripts = new[] { "sync.test.mjs", "publish.test.mjs", "redirect-pages.test.mjs" }
             .Select(name => Path.Join(repoRoot, "docs", "_website", "scripts", name))
             .ToArray();
 

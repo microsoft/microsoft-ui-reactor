@@ -744,4 +744,198 @@ internal static class TransitionTests
             H.Check("KeyedMapSkipArms_SuffixCallbackRefreshed", clicked == "b1", clicked ?? "<none>");
         }
     }
+
+    internal enum ExitWrapper
+    {
+        /// <summary>The exit is declared on the element itself.</summary>
+        Direct,
+        /// <summary>The exit is declared on the element a legacy <see cref="ModifiedElement"/> wraps.</summary>
+        Modified,
+        /// <summary>The exit is declared on a keyed <c>Memo</c>, which mounts its factory output directly (#1663).</summary>
+        Memo,
+        /// <summary>As <see cref="Memo"/>, but the Memo's key changes, so its control is replaced rather than removed.</summary>
+        MemoReplaced,
+        /// <summary>The keyed Memo gains its exit on an update that keeps its key, then is removed.</summary>
+        MemoExitAdded,
+        /// <summary>The keyed Memo drops its exit on an update that keeps its key, so removal is immediate.</summary>
+        MemoExitDropped,
+        /// <summary>An enter-only keyed Memo wraps a keyed Memo that declares the exit, on the same control.</summary>
+        MemoNested,
+        /// <summary>A flyout decorator with a fade exit wraps a keyed Memo with a scale exit: the outer flyout's fade plays.</summary>
+        FlyoutOverMemo,
+        /// <summary>A keyed Memo with a fade exit wraps a flyout whose target has a scale exit: the outer Memo's fade plays.</summary>
+        MemoOverFlyout,
+        /// <summary>A flyout with a fade exit wraps a keyed Memo with a scale exit that wraps another flyout: the outermost fade plays.</summary>
+        FlyoutMemoFlyout,
+        /// <summary>As <see cref="Memo"/>, then the pooled control is rented by a plain element, whose removal is immediate.</summary>
+        MemoPooledReuse,
+    }
+
+    /// <summary>
+    /// An exit <c>.Transition()</c> keeps the control in the tree while it fades out, whichever
+    /// layer sharing the control declared it (#1663, #1665). Direct and <see cref="ModifiedElement"/>
+    /// declarations are the positive controls; <see cref="ExitWrapper.MemoExitDropped"/> is the
+    /// negative one, proving the Memo's exit is read from its current declaration.
+    /// </summary>
+    internal sealed class WrapperExitTransition(Harness h, ExitWrapper wrapper) : SelfTestFixtureBase(h)
+    {
+        private static readonly Animation.Transition FadeExit = Animation.Transition.Exit(Animation.Transition.Fade);
+
+        private Element Target(bool exit, int memoMs = 600)
+        {
+            var inner = Border(null).Width(100).Height(40);
+            Element Declare(Element e) => exit ? e.Transition(FadeExit, Curve.Linear(600)) : e;
+            return wrapper switch
+            {
+                ExitWrapper.Direct => Declare(inner),
+                ExitWrapper.Modified => new ModifiedElement(Declare(inner), new ElementModifiers { Margin = new Microsoft.UI.Xaml.Thickness(2) }),
+                ExitWrapper.MemoNested => Memo("outer", () => Declare(Memo("inner", () => inner)))
+                    .Transition(Animation.Transition.Enter(Animation.Transition.Fade), Curve.Linear(30)),
+                ExitWrapper.FlyoutOverMemo => Flyout(
+                        Memo("k", () => inner).Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+                        TextBlock("flyout"))
+                    .Transition(FadeExit, Curve.Linear(600)),
+                ExitWrapper.MemoOverFlyout => Memo("k", () => Flyout(
+                        inner.Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+                        TextBlock("flyout")))
+                    .Transition(FadeExit, Curve.Linear(memoMs)),
+                ExitWrapper.FlyoutMemoFlyout => Flyout(
+                        Memo("k", () => Flyout(inner, TextBlock("inner flyout")))
+                            .Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+                        TextBlock("outer flyout"))
+                    .Transition(FadeExit, Curve.Linear(600)),
+                _ => Declare(Memo("k", () => inner)),
+            };
+        }
+
+        public override async Task RunAsync()
+        {
+            var name = "WrapperExit_" + wrapper;
+            bool exitsAtMount = wrapper is not ExitWrapper.MemoExitAdded;
+            using var reconciler = new Reconciler();
+            var initial = VStack(Target(exitsAtMount));
+            var panel = (StackPanel)reconciler.Mount(initial, static () => { })!;
+            H.SetContent(panel);
+            await Harness.Render();
+            var control = panel.Children[0];
+            try
+            {
+                var current = initial;
+                if (wrapper is ExitWrapper.MemoExitAdded or ExitWrapper.MemoExitDropped or ExitWrapper.MemoOverFlyout)
+                {
+                    // MemoOverFlyout retimes its exit, so the update re-records it over the flyout.
+                    var retimed = VStack(wrapper is ExitWrapper.MemoOverFlyout ? Target(true, memoMs: 650) : Target(!exitsAtMount));
+                    reconciler.Update(current, retimed, panel, static () => { });
+                    current = retimed;
+                    H.Check(name + "_UpdateKeptControl", panel.Children.Count == 1 && ReferenceEquals(panel.Children[0], control));
+                }
+
+                bool replace = wrapper is ExitWrapper.MemoReplaced;
+                var next = replace ? VStack(Memo("other", static () => TextBlock("replacement"))) : VStack();
+                reconciler.Update(current, next, panel, static () => { });
+
+                if (wrapper is ExitWrapper.MemoExitDropped)
+                {
+                    H.Check(name + "_RemovedAtOnce", !reconciler.IsExiting(control) && panel.Children.Count == 0,
+                        $"exiting={reconciler.IsExiting(control)} count={panel.Children.Count}");
+                    return;
+                }
+
+                H.Check(name + "_ExitInFlight", reconciler.IsExiting(control) && panel.Children.Contains(control),
+                    $"exiting={reconciler.IsExiting(control)} count={panel.Children.Count}");
+                H.Check(name + "_FadeStarted", reconciler.IsExiting(control)
+                    && ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Opacity") is not null);
+                if (wrapper is ExitWrapper.FlyoutOverMemo or ExitWrapper.MemoOverFlyout or ExitWrapper.FlyoutMemoFlyout)
+                    H.Check(name + "_OuterExitWins",
+                        ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Scale") is null);
+                if (replace)
+                    H.Check(name + "_ReplacementVisible", panel.Children.Count == 2
+                        && panel.Children[0] is TextBlock { Text: "replacement" }
+                        && ReferenceEquals(panel.Children[1], control));
+
+                var completed = await Harness.WaitFor(() => !reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
+                H.Check(name + "_ExitCompleted", completed && !panel.Children.Contains(control)
+                    && panel.Children.Count == (replace ? 1 : 0));
+
+                if (wrapper is ExitWrapper.MemoPooledReuse)
+                {
+                    // The exit took the visual, so the pooled Border sits in the visual lane, which
+                    // a mount that takes the visual at mount (an enter transition) rents from.
+                    var plain = VStack(Border(null).Width(100).Height(40)
+                        .Transition(Animation.Transition.Enter(Animation.Transition.Fade), Curve.Linear(30)));
+                    reconciler.Update(next, plain, panel, static () => { });
+                    H.Check(name + "_Rented", panel.Children.Count == 1 && ReferenceEquals(panel.Children[0], control));
+                    reconciler.Update(plain, VStack(), panel, static () => { });
+                    H.Check(name + "_RenterRemovedAtOnce", !reconciler.IsExiting(control) && panel.Children.Count == 0,
+                        $"exiting={reconciler.IsExiting(control)} count={panel.Children.Count}");
+                }
+            }
+            finally
+            {
+                H.SetContent(null);
+                reconciler.UnmountChild(panel);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A resource refresh walks a keyed Memo's subtree, updating the Memo against itself. The Memo
+    /// still wraps the flyout afterwards, so its fade exit, not the flyout target's scale exit,
+    /// plays on removal (#1663). With <paramref name="replaceTarget"/> the refresh remounts the
+    /// target, so the Memo's exit is re-recorded on a fresh control; with <paramref name="nested"/>
+    /// an outer keyed Memo without an exit wraps it.
+    /// </summary>
+    internal sealed class MemoExitAfterResourceRefresh(Harness h, bool replaceTarget, bool nested) : SelfTestFixtureBase(h)
+    {
+        private sealed record RemountingBox : Element;
+
+        private static Border NewBox() => new() { Width = 100, Height = 40 };
+
+        public override async Task RunAsync()
+        {
+            var name = "MemoExitRefresh" + (replaceTarget ? "Replaced" : "") + (nested ? "Nested" : "");
+            var parent = new Border();
+            H.SetContent(parent);
+            using var host = new Hosting.ReactorHost(H.Window) { ContentTarget = parent };
+            using var isolation = ThemeResourceListeners.IsolateForTest(host);
+            // Every update hands back a new control, as a handler that always remounts does.
+            host.Reconciler.RegisterType<RemountingBox, Border>(static (_, _, _) => NewBox(), static (_, _, _, _, _) => NewBox());
+            var scaleExit = Animation.Transition.Exit(Animation.Transition.Scale(0.5f));
+            var fadeExit = Animation.Transition.Exit(Animation.Transition.Fade);
+            bool show = true;
+            host.Mount(_ =>
+            {
+                Element target = replaceTarget ? new RemountingBox() : Border(null).Width(100).Height(40);
+                Element memo = Memo("memo", () => Flyout(target.Transition(scaleExit, Curve.Linear(600)), TextBlock("flyout")))
+                    .Transition(fadeExit, Curve.Linear(600));
+                return VStack(!show ? null : nested ? Memo("outer", () => memo) : memo);
+            });
+            await host.WaitForIdleAsync();
+            var panel = (StackPanel)parent.Child;
+            var mounted = panel.Children[0];
+            try
+            {
+                Theme.NotifyResourcesChanged();
+                await host.WaitForIdleAsync();
+                var control = panel.Children.Count == 1 ? panel.Children[0] : null;
+                H.Check(name + (replaceTarget ? "_RefreshReplacedControl" : "_RefreshKeptControl"),
+                    control is not null && ReferenceEquals(control, mounted) != replaceTarget);
+                if (control is null) return;
+
+                show = false;
+                host.RequestRender();
+                await host.WaitForIdleAsync();
+                var visual = ElementCompositionPreview.GetElementVisual(control);
+                H.Check(name + "_ExitInFlight", host.Reconciler.IsExiting(control) && panel.Children.Contains(control),
+                    $"exiting={host.Reconciler.IsExiting(control)} count={panel.Children.Count}");
+                H.Check(name + "_MemoFadeWins", visual.TryGetAnimationController("Opacity") is not null
+                    && visual.TryGetAnimationController("Scale") is null);
+                await Harness.WaitFor(() => !host.Reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
+            }
+            finally
+            {
+                H.SetContent(null);
+            }
+        }
+    }
 }

@@ -46,11 +46,16 @@ Every page declares one tier. The `dotnet run --project tools/Reactor.DocPipelin
 enforces the structural checklist below. Pick the tier the page is *meant*
 to be; do not mark a page Comprehensive that doesn't meet the bar.
 
+Every tier also opens with a page summary: the first paragraph after the `#`
+title is plain prose, has no links, and is at most 420 characters. The docs
+site shows it as the page subtitle, and `npm run site` in `docs/_website`
+fails a page that has none (`reference/` pages are exempt).
+
 | Tier | Structural minimum | When to use |
 |------|---------------------|-------------|
 | `stub` | front-matter + title + one paragraph | Placeholder for surface visibility while you draft. "Coming soon" content. |
 | `solid` | ≥3 resolved `snippet=` refs, ≥1 `screenshot://`, a Markdown reference table, `## Tips`, `## Next Steps` with ≥3 links | Default bar for any new page. Code-first, working examples, modifier table. |
-| `comprehensive` | All solid checks plus a short link-free intro right after the `#` title (the site subtitle), an ≥80-word mental-model lead before the first `##`, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
+| `comprehensive` | All solid checks plus an ≥80-word mental-model lead before the first `##`, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
 
 Stub example:
 
@@ -547,9 +552,11 @@ these rules:
   the anchor.
 
 **Topic order for sequential navigation:** see the full 64-page index in
-the "Topic Ideas" table at the bottom of this file. Authors should always
-trust the `order:` value in each template's front-matter as the source of
-truth; the bottom-of-file index is a snapshot of the spec-041 §7.1 layout.
+the "Topic Ideas" table at the bottom of this file. The `order:` value in each
+template's front-matter drives Previous/Next links and the topic index; the
+bottom-of-file index is a snapshot of the spec-041 §7.1 layout. The docs site
+sidebar is separate: a page's group, position and label there come from
+`docs/_website/nav.json`, so a new page also needs an entry in it.
 
 ---
 

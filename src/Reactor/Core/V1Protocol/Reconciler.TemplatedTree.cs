@@ -12,7 +12,7 @@ namespace Microsoft.UI.Reactor.Core;
 // members (this is a pure same-class move, not a lifecycle extraction) because
 // the subsystem's teardown uses core helpers: TemplatedTreeViewHandler clears
 // the `_typedTreeListControls` CWT subscription marker, and
-// FindTypedTreeListControl/FindDescendantListView live in Reconciler.cs.
+// FindTypedTreeListControl/FindDescendantListView live in Reconciler.Unmount.cs.
 // TemplatedTreeViewHandler delegates here via
 // ctx.Reconciler.MountTemplatedTreeView / UpdateTemplatedTreeView.
 public sealed partial class Reconciler

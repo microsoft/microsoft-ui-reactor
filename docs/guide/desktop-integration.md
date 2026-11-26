@@ -5,7 +5,9 @@ A desktop app does more than draw inside its windows. It can put an icon in
 the notification area, show progress on its taskbar button, offer shortcuts in
 a jump list, and start when the user opens a file or a link. It also shows
 the standard file dialogs and moves data through the clipboard and drag and
-drop. Reactor wraps most of these shell surfaces in small, typed APIs. Some
+drop.
+
+Reactor wraps most of these shell surfaces in small, typed APIs. Some
 APIs are hooks that follow a component's lifetime, such as `UseTrayIcon`.
 Others are plain methods that you call from an event handler, such as
 `PickFileAsync`. A few surfaces, like the clipboard, have no Reactor wrapper,

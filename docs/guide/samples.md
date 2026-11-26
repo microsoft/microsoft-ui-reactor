@@ -1,11 +1,14 @@
 
 # Samples
 
-The repository has more than 30 sample apps in its
-[`samples/`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples)
+The repository has more than 30 sample apps in its `samples/`
 folder. Some are small and show one feature. Others are full apps with many
 components, real data and saved settings. Every sample is a normal .NET project
-that you start with `dotnet run`. This page lists the samples by group, says
+that you start with `dotnet run`.
+
+This page lists the samples in the
+[`samples/`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples)
+folder by group, says
 what each one shows, and gives the command that runs it.
 
 ![The samples in a suggested order: start with ReactorGallery, TodoApp and StylingGallery, then the feature demos, then the full apps. The windowing, interop, charting, animation and performance, and Native AOT samples can be picked by topic](images/samples/sample-map.svg)

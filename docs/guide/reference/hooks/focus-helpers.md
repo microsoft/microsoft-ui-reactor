@@ -52,6 +52,31 @@ public string FieldName  // get, init
 public FocusManager Manager  // get, init
 ```
 
+## `FocusExtensions`
+
+Fluent extensions for attaching focus management to elements. Uses .Set() to capture the WinUI control reference during mount/update.
+
+```csharp
+public static class FocusExtensions
+```
+
+Namespace: `Microsoft.UI.Reactor.Hooks`.
+
+### Methods
+
+#### `GetFocus`
+
+Gets the FocusAttached metadata from an element.
+
+```csharp
+public static FocusAttached? GetFocus<T>(this T el) where T : Element
+```
+
+### Modifiers
+
+- [`Focus`](../modifiers/input.md#focus)
+- [`FocusMeta`](../modifiers/focus-and-keyboard.md#focusmeta)
+
 ## `FocusManager`
 
 Manages focus for a set of registered form fields. Supports programmatic focus control, enter-to-advance, and field ordering.

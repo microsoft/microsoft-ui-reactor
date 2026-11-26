@@ -3,7 +3,7 @@
 Maps URI patterns to route constructors for deep linking. Patterns use `/segment/{param:type}` syntax where type is `int` or `string`.
 
 ```csharp
-public sealed class DeepLinkMap<TRoute>
+public sealed class DeepLinkMap<TRoute> where TRoute : notnull
 ```
 
 Namespace: `Microsoft.UI.Reactor.Navigation`.

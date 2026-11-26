@@ -18,7 +18,9 @@ tier: comprehensive
 
 Most apps have code that is not UI: a data store, a settings file, an HTTP
 client, a clock, a logger. Components need to reach that code, and tests need
-to replace it with fakes. Reactor does not ship a dependency injection
+to replace it with fakes.
+
+Reactor does not ship a dependency injection
 container, and `ReactorApp` has no service-provider hook. You do not need one.
 Reactor's context system already passes values down the element tree to any
 component that asks for them. You can put a single service in a context. Or

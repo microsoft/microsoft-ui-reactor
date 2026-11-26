@@ -15,6 +15,7 @@ import {
   updateVersions,
   validateVersion,
 } from "./publish.mjs";
+import { siteSettings } from "./site-env.mjs";
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reactor-docs-publish-test-"));
 after(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -244,6 +245,37 @@ describe("publish into a gh-pages checkout", () => {
     assert.equal(git(pages, "rev-parse", "HEAD"), head);
   });
 
+  test("a failed sync stops before any build or write", () => {
+    const pages = makePages("sync-failed");
+    const f = fakes("sync-failed");
+    f.sync = () => ({ errors: ["docs/guide/x.md is not in nav.json"], warnings: [] });
+    const head = git(pages, "rev-parse", "HEAD");
+
+    assert.throws(() => publish({ pages, version: "main", ...f }), /x\.md is not in nav\.json/);
+
+    assert.equal(f.builds.length, 0);
+    assert.equal(git(pages, "status", "--porcelain"), "");
+    assert.equal(git(pages, "rev-parse", "HEAD"), head);
+  });
+
+  test("--push sends the commit to origin", () => {
+    const remote = path.join(scratch, "push", "remote.git");
+    fs.mkdirSync(remote, { recursive: true });
+    git(scratch, "init", "--quiet", "--bare", remote);
+    const remoteHead = () => git(scratch, `--git-dir=${remote}`, "rev-parse", "gh-pages");
+    const pages = makePages("push");
+    git(pages, "branch", "--quiet", "-M", "gh-pages");
+    git(pages, "remote", "add", "origin", remote);
+    git(pages, "push", "--quiet", "origin", "gh-pages");
+    const f = fakes("push");
+
+    publish({ pages, version: "main", ...f });
+    assert.notEqual(remoteHead(), git(pages, "rev-parse", "HEAD"));
+
+    publish({ pages, version: "main", push: true, ...f });
+    assert.equal(remoteHead(), git(pages, "rev-parse", "HEAD"));
+  });
+
   test("--lenient builds without strict mode, for old tags", () => {
     const pages = makePages("lenient");
     const f = fakes("lenient");
@@ -287,5 +319,77 @@ describe("command line", () => {
     assert.throws(() => parseArgs(["--version", "main"]), /required/);
     assert.throws(() => parseArgs(["--pages", "--version", "main"]), /--pages needs a value/);
     assert.throws(() => parseArgs(["--pages", "p", "--version", "main", "--alias", "x"]), /Unknown argument/);
+  });
+});
+
+describe("release tags", () => {
+  const workflow = fs.readFileSync(path.join(import.meta.dirname, "..", "..", "..", ".github", "workflows", "docs.yml"), "utf8");
+  const sorts = workflow.split("\n").filter((line) => line.includes("--sort=-v:refname") && !line.trim().startsWith("#"));
+
+  test("docs.yml picks the newest tag the way versions.json orders them", () => {
+    assert.equal(sorts.length, 2, "the publish and backfill steps each pick the newest tag");
+    for (const line of sorts) assert.match(line, /git -c versionsort\.suffix=- tag --list 'v\*' --sort=-v:refname/);
+
+    const repo = path.join(scratch, "tags");
+    fs.mkdirSync(repo, { recursive: true });
+    git(repo, "init", "--quiet");
+    git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "--allow-empty", "-m", "x");
+    const tags = ["0.1.0-preview.9", "0.1.0-preview.18", "0.1.0-rc.1", "0.1.0"];
+    for (const tag of tags) git(repo, "tag", `v${tag}`);
+
+    const newest = git(repo, "-c", "versionsort.suffix=-", "tag", "--list", "v*", "--sort=-v:refname").split("\n")[0];
+    assert.equal(newest, `v${[...tags].sort(compareVersions)[0]}`);
+    // Without the suffix setting, git ranks the release below its prereleases.
+    assert.notEqual(git(repo, "tag", "--list", "v*", "--sort=-v:refname").split("\n")[0], newest);
+  });
+});
+
+describe("site settings", () => {
+  const published = [entry("main", [], "main (development)"), entry("0.1.0-preview.19", ["latest"]), entry("0.1.0-preview.18")];
+  const url = (id) => `https://microsoft.github.io${BASE}/${id}/`;
+
+  test("a local build has no banner and a menu that links to the published docs", () => {
+    const s = siteSettings({}, published);
+    assert.equal(s.siteRoot, `${BASE}/`);
+    assert.equal(s.base, undefined);
+    assert.equal(s.version, undefined);
+    assert.equal(s.banner, undefined);
+    assert.deepEqual(s.selectors[0].items, [
+      { label: "Local", tag: "this build", path: "/" },
+      { label: "Latest release", tag: "latest", path: url("latest") },
+      { label: "main", tag: "unreleased", path: url("main") },
+    ]);
+  });
+
+  test("main lists versions in versions.json order and warns it is unreleased", () => {
+    const s = siteSettings({ DOCS_BASE: `${BASE}/main/`, DOCS_VERSION: "main" }, published);
+    assert.equal(s.base, `${BASE}/main`);
+    assert.equal(s.siteRoot, `${BASE}/`);
+    assert.deepEqual(s.selectors[0].items, [
+      { label: "main", tag: "unreleased", path: "/" },
+      { label: "0.1.0-preview.19", tag: "latest", path: url("latest") },
+      { label: "0.1.0-preview.18", tag: undefined, path: url("0.1.0-preview.18") },
+    ]);
+    assert.match(s.banner.content, /unreleased main/);
+    assert.equal(s.banner.link.href, `https://microsoft.github.io${BASE}/`);
+  });
+
+  test("the latest copy has no banner and selects itself", () => {
+    const s = siteSettings({ DOCS_BASE: `${BASE}/latest`, DOCS_VERSION: "0.1.0-preview.19", DOCS_ALIAS: "latest" }, published);
+    assert.equal(s.banner, undefined);
+    assert.equal(s.selectors[0].items.find((i) => i.label === "0.1.0-preview.19").path, "/");
+  });
+
+  test("an older release selects itself and points readers to latest", () => {
+    const s = siteSettings({ DOCS_BASE: `${BASE}/0.1.0-preview.18`, DOCS_VERSION: "0.1.0-preview.18" }, published);
+    const items = s.selectors[0].items;
+    assert.equal(items.find((i) => i.label === "0.1.0-preview.18").path, "/");
+    assert.equal(items.find((i) => i.label === "0.1.0-preview.19").path, url("latest"));
+    assert.match(s.banner.content, /version 0\.1\.0-preview\.18/);
+  });
+
+  test("a version missing from versions.json is listed first", () => {
+    const s = siteSettings({ DOCS_BASE: `${BASE}/0.1.0-preview.20`, DOCS_VERSION: "0.1.0-preview.20" }, published);
+    assert.deepEqual(s.selectors[0].items[0], { label: "0.1.0-preview.20", tag: undefined, path: "/" });
   });
 });

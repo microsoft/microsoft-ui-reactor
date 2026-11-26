@@ -5,7 +5,9 @@ Reactor asks you to think about UI in a new way. You don't create controls
 and then change them one property at a time. Instead, you write a function
 that describes what the screen should look like for the current state. When
 the state changes, Microsoft.UI.Reactor (Reactor) runs that function again
-and updates the real WinUI controls for you. This page explains that model:
+and updates the real WinUI controls for you.
+
+This page explains that model:
 components, elements, hooks, the render cycle, data flow, keys, and effects.
 Then it builds a small filterable product list step by step, so you can see
 how the ideas fit together. The steps follow React's

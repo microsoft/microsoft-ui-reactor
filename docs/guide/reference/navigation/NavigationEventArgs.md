@@ -3,7 +3,7 @@
 Event args fired after a successful navigation.
 
 ```csharp
-public sealed record NavigationEventArgs<TRoute>(TRoute Route, TRoute PreviousRoute, NavigationMode Mode, NavigateOptions? Options = null)
+public sealed record NavigationEventArgs<TRoute>(TRoute Route, TRoute PreviousRoute, NavigationMode Mode, NavigateOptions? Options = null) where TRoute : notnull
 ```
 
 Namespace: `Microsoft.UI.Reactor.Navigation`.

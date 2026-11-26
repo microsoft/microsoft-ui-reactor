@@ -90,8 +90,6 @@ Namespace: `Microsoft.UI.Reactor.Data`.
 public FieldDescriptor()
 ```
 
-> **Obsolete.** Constructors of types with required members are not supported in this version of your compiler.
-
 ### Properties
 
 #### `AsyncValidators`
@@ -147,7 +145,7 @@ public Func<object, Action<object>, Element>? Editor  // get, init
 The CLR type of this field's value.
 
 ```csharp
-public Type FieldType  // get, init
+public required Type FieldType  // get, init
 ```
 
 #### `Filterable`
@@ -179,7 +177,7 @@ public Func<object?, string>? FormatValue  // get, init
 Gets the current value from the owner object.
 
 ```csharp
-public Func<object, object?> GetValue  // get, init
+public required Func<object, object?> GetValue  // get, init
 ```
 
 #### `IsReadOnly`
@@ -211,7 +209,7 @@ public double? MinWidth  // get, init
 Field name (used as key in accessors and Compose dictionary).
 
 ```csharp
-public string Name  // get, init
+public required string Name  // get, init
 ```
 
 #### `Order`

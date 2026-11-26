@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
@@ -9,6 +10,125 @@ namespace ToolkitCompatibility;
 
 internal static class TextScalingChecks
 {
+    internal static void CheckBoundedTargets(FrameworkElement control, string name)
+    {
+        Program.Check(control.GetType().FullName == $"CommunityToolkit.WinUI.Controls.{name}",
+            $"Text-scale subject does not match {name}.");
+        var targets = new List<(Native.TextBlock Text, string Role)>();
+
+        void AddText(DependencyObject scope, string role, string expected, params object?[] excluded)
+        {
+            var excludedText = excluded.OfType<DependencyObject>()
+                .SelectMany(CompatibilityRoot.Descendants).OfType<Native.TextBlock>().ToHashSet();
+            var text = TextScalingTargets.SelectOne(role, expected,
+                CompatibilityRoot.Descendants(scope).OfType<Native.TextBlock>(), t => t.Text, excludedText);
+            Program.Results.Note($"Text-scale target={role}; expected='{expected}'; type={text.GetType().Name}");
+            targets.Add((text, role));
+        }
+
+        void AddHeader(DependencyObject scope, string role, object? header, params object?[] excluded)
+        {
+            var value = TextScalingTargets.RequireTarget<string>(role, header);
+            AddText(scope, role, value, excluded);
+        }
+
+        static DependencyObject Content(object? value, string role) =>
+            TextScalingTargets.RequireTarget<DependencyObject>(role, value);
+
+        switch (control)
+        {
+            case Wct.SettingsExpander expander:
+                Program.Check(expander.IsExpanded, "Text-scale specimen requires the initial expanded state.");
+                TextScalingTargets.RequireCount("SettingsExpander items", 1, expander.Items.Count);
+                var childCard = TextScalingTargets.RequireTarget<Wct.SettingsCard>(
+                    "SettingsExpander/Item[0]", expander.Items[0]);
+                AddHeader(expander, "Header", expander.Header, childCard, expander.Content, expander.HeaderIcon);
+                AddHeader(childCard, "Item[0]/Header", childCard.Header,
+                    childCard.Description, childCard.Content, childCard.HeaderIcon);
+                break;
+            case Wct.Segmented segmented:
+                string[] choices = ["List", "Grid", "Details"];
+                TextScalingTargets.RequireCount("Segmented items", choices.Length, segmented.Items.Count);
+                for (int i = 0; i < choices.Length; i++)
+                {
+                    Program.Check(Equals(segmented.Items[i], choices[i]), "Segmented initial item identity changed.");
+                    AddText(Content(segmented.ContainerFromIndex(i), $"Item[{i}]"), $"Item[{i}]", choices[i]);
+                }
+                break;
+            case Wct.HeaderedContentControl headered:
+                var content = Content(headered.Content, "Content");
+                AddHeader(headered, "Header", headered.Header, content);
+                AddText(content, "Content", "initial-label");
+                break;
+            case Wct.HeaderedItemsControl items:
+                TextScalingTargets.RequireCount("HeaderedItemsControl items", 1, items.Items.Count);
+                var item = Content(items.Items[0], "Item[0]");
+                AddHeader(items, "Header", items.Header, item);
+                AddText(item, "Item[0]", "initial-label");
+                break;
+            case Wct.HeaderedTreeView tree:
+                var nodes = CompatibilityRoot.Descendants(tree).OfType<Native.TreeViewItem>().ToArray();
+                TextScalingTargets.RequireCount("HeaderedTreeView nodes", 2, nodes.Length);
+                AddHeader(tree, "Header", tree.Header, nodes);
+                foreach (var label in new[] { "initial-label", "node-0" })
+                {
+                    var node = TextScalingTargets.SelectOne($"Node[{label}]", label, nodes,
+                        n => CompatibilityRoot.Descendants(n).OfType<Native.TextBlock>()
+                            .Any(t => t.Text == label) ? label : "");
+                    AddText(node, $"Node[{label}]", label);
+                }
+                break;
+            case Wct.LayoutTransformControl transformed:
+                Program.Check(transformed.Transform is RotateTransform { Angle: 0 },
+                    "Text-scale specimen covers only the initial unrotated child.");
+                AddText(Content(transformed.Child, "Child"), "Child", "initial-label");
+                break;
+            case Wct.ConstrainedBox constrained:
+                AddText(Content(constrained.Content, "Content"), "Content", "initial-label");
+                break;
+            case Wct.UniformGrid or Wct.WrapPanel or Wct.StaggeredPanel:
+                var panel = (Native.Panel)control;
+                TextScalingTargets.RequireCount($"{name} children", 6, panel.Children.Count);
+                for (int i = 0; i < panel.Children.Count; i++)
+                {
+                    string key = $"tile-{i}";
+                    Program.Check(Reconciler.GetElementTag(panel.Children[i])?.Key == key,
+                        $"{name}: initial child key/order differs at {i}.");
+                    AddText(panel.Children[i], $"Tile[{key}]", i == 0 ? "initial-label" : key);
+                }
+                break;
+            case Wct.DockPanel dock:
+                string[] keys = ["edge", "bottom", "last"];
+                string[] labels = ["initial-label", "bottom", "last"];
+                TextScalingTargets.RequireCount("DockPanel children", keys.Length, dock.Children.Count);
+                for (int i = 0; i < keys.Length; i++)
+                {
+                    Program.Check(Reconciler.GetElementTag(dock.Children[i])?.Key == keys[i],
+                        $"DockPanel: initial child key/order differs at {i}.");
+                    AddText(dock.Children[i], $"Child[{keys[i]}]", labels[i]);
+                }
+                break;
+            default:
+                throw new UnsupportedTextShapeException($"{name}: no bounded plain-text selector is implemented.");
+        }
+
+        Program.Check(targets.Count > 0 && targets.Select(t => t.Text).Distinct().Count() == targets.Count,
+            "Text-scale target list is empty or reuses the same TextBlock for multiple roles.");
+        // Text assigned through TextBlock.Text may be exposed as one implicit Run.
+        foreach (var (text, role) in targets)
+        {
+            TextScalingTargets.RequirePlainText(role, text.Inlines,
+                inline => inline is Microsoft.UI.Xaml.Documents.Run run &&
+                run.Text == text.Text && run.FontFamily.Source == text.FontFamily.Source &&
+                run.FontSize == text.FontSize && run.FontWeight.Weight == text.FontWeight.Weight &&
+                run.FontStyle == text.FontStyle && run.FontStretch == text.FontStretch &&
+                run.CharacterSpacing == text.CharacterSpacing && run.Language == text.Language);
+        }
+        control.UpdateLayout();
+        foreach (var (text, role) in targets) CheckText(text, role);
+        Program.Results.Note($"Bounded plain-text targets checked={targets.Count}; initial specimen only; appearance-review=pending.");
+    }
+
     internal static void Check(FrameworkElement control)
     {
         Program.Check(control is Wct.SettingsCard, "Text-scaling subject is not the expected Toolkit SettingsCard.");

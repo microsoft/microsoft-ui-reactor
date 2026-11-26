@@ -15,7 +15,9 @@ tier: solid
 
 Devtools let you look inside a running Reactor app and control it. They come
 in the `Microsoft.UI.Reactor.Devtools` NuGet package, and they only work in a
-build where you turn them on. There are two parts. The in-app dev menu adds a
+build where you turn them on.
+
+There are two parts. The in-app dev menu adds a
 button to your window with debug overlays and your own debug commands. The MCP
 server lets `mur devtools` and AI agents read the visual tree and hook state,
 take screenshots, and click or type into the app.

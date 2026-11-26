@@ -22,14 +22,12 @@ Namespace: `Microsoft.UI.Reactor.Navigation`. Inherits from [`NavigationTransiti
 public ConnectedTransition()
 ```
 
-> **Obsolete.** Constructors of types with required members are not supported in this version of your compiler.
-
 ### Properties
 
 #### `AnimationKey`
 
 ```csharp
-public string AnimationKey  // get, init
+public required string AnimationKey  // get, init
 ```
 
 ## `DrillInTransition`

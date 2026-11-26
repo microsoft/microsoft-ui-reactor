@@ -189,10 +189,19 @@ internal static class ReferencePlanner
             }
             if (modifiersCategory is not null && m.Kind == ApiMemberKind.Method && m.IsExtension
                 && m.ReturnType is { } rt && rt != "void"
-                && m.ExtendedTypeDocIds.Any(id => id == elementBaseDocId || IsElement(id) || IsRichText(id)))
+                && m.ExtendedTypeDocIds.Any(id => id == elementBaseDocId || IsElement(id) || IsRichText(id))
+                && ReturnsChainable(m))
                 return Role.Modifier;
             return Role.None;
         }
+
+        // A modifier returns an element (or rich-text block) so the call can be
+        // chained: the receiver's own type (`T Margin<T>(this T el)`), or an element
+        // type. `Task EvaluateAsync(this Element …)` or a query such as
+        // `GetValidation` stays on its declaring type's page.
+        bool ReturnsChainable(ApiMember m) =>
+            (m.Params.Count > 0 && m.Params[0].Type.TrimEnd('?') == m.ReturnType!.TrimEnd('?'))
+            || m.ReturnDocId is { } r && (r == elementBaseDocId || IsElement(r) || IsRichText(r));
 
         foreach (var t in model.Types)
         {

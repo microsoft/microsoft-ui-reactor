@@ -2,7 +2,9 @@
 # Diagnostics
 
 This page shows how to read Reactor's diagnostics from a running app,
-including a Release build. It is the debug-and-measure step of the
+including a Release build.
+
+It is the debug-and-measure step of the
 [Developer tools](dev-tooling.md) loop. It is not about adding new events.
 
 Sometimes Microsoft.UI.Reactor (Reactor) catches an exception or a failed

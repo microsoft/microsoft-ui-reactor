@@ -64,8 +64,6 @@ Namespace: `Microsoft.UI.Reactor.Controls.Validation`. Inherits from [`Element`]
 
 **Created by:** [`ValidationRule`](../factories/forms.md#validationrule), [`ValidationRuleAsync`](../factories/forms.md#validationruleasync)
 
-**Modifiers:** [`EvaluateAsync`](../modifiers/forms.md#evaluateasync)
-
 | Property | Type | Default | Description |
 | --- | --- | --- | --- |
 | `AsyncPredicate` | `Func<Task<bool>>?` |  | Optional async predicate for rules that require I/O. When set, takes precedence over the sync Predicate. |

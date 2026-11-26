@@ -3,7 +3,7 @@
 Public API for controlling navigation. Wraps a `NavigationStack` with a safe, read-heavy interface. Obtained via `UseNavigation` hook.
 
 ```csharp
-public sealed class NavigationHandle<TRoute>
+public sealed class NavigationHandle<TRoute> where TRoute : notnull
 ```
 
 Namespace: `Microsoft.UI.Reactor.Navigation`.

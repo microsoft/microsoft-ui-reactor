@@ -391,7 +391,10 @@ Before versioning, pages lived at unversioned paths such as
 exist — every page now sits under a version directory — so the publish workflow copies
 `docs/_site-root/404.html` to the published site root, where GitHub Pages serves it for
 unmatched paths. It forwards those legacy paths to the same page under `latest`, preserving
-any query string and anchor.
+any query string and anchor. When a Blume build holds `latest`, a page whose route changed in
+the move (`getting-started` is now `get-started/quickstart`) is served by a redirect page
+from `blume.config.ts`'s `redirects`. Astro writes those as meta-refresh pages, which drop the
+anchor, so `scripts/redirect-pages.mjs` adds a script that carries it over after every build.
 
 It deliberately does **not** forward a path that already starts with a published version or
 alias (`latest`, `main`, or anything beginning with a digit): those are genuine 404s inside a

@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 internal sealed class ReferenceRenderer
 {
     private const string FactoriesKindSentence =
-        "Each factory method returns an element record. Call them through `using static Microsoft.UI.Reactor.Factories;`.";
+        "Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.";
     private const string ModifiersKindSentence =
         "Modifiers are extension methods that return a changed copy of the element, so you can chain them.";
     private const string ElementsKindSentence =
@@ -408,9 +408,15 @@ internal sealed class ReferenceRenderer
 
             var declaredIn = overloads.Select(o => o.DeclaringType)
                 .Where(t => t.DocId != ReferencePlanner.FactoriesDocId)
-                .Select(t => t.Name).Distinct(StringComparer.Ordinal).ToList();
+                .DistinctBy(t => t.DocId, StringComparer.Ordinal).ToList();
             if (declaredIn.Count > 0)
-                w.Add($"Declared in {string.Join(", ", declaredIn.Select(DocMarkdown.CodeSpan))}.");
+            {
+                var names = string.Join(", ", declaredIn.Select(t => DocMarkdown.CodeSpan(t.Name)));
+                // A factory outside `Factories` isn't reachable through its `using static`.
+                w.Add(factories
+                    ? $"Declared in {names}. Call it through {string.Join(" or ", declaredIn.Select(t => DocMarkdown.CodeSpan($"using static {t.Namespace}.{t.DisplayName};")))}."
+                    : $"Declared in {names}.");
+            }
             w.Add(ObsoleteNote(overloads.Select(o => o.ObsoleteMessage).FirstOrDefault(m => m is not null), "method"));
 
             if (differ)

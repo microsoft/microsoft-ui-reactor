@@ -32,7 +32,8 @@ tier: solid
 # {{REPLACE_ME: human-readable title}}
 
 {{REPLACE_ME: one-to-three sentence orientation paragraph that frames the
-topic and names the primary API surface the page covers.}}
+topic and names the primary API surface the page covers. Plain prose, no
+links, at most 420 characters: the docs site shows it as the page subtitle.}}
 
 ## {{REPLACE_ME: first concept heading}}
 

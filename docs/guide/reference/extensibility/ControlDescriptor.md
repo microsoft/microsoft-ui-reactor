@@ -130,7 +130,7 @@ public ControlDescriptor<TElement, TControl> CoercingOneWay<TValue>(Func<TElemen
 §14 Phase 3-final — `.CollectionDiffControlled`. Two-way bound prop whose value is an [`IReadOnlyList`](https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1) on the element side and an `IList<TItem>` on the control side. Each Update applies a keyed hash-set diff and emits per-element `Add`/`Remove` ops inside `ChangeEchoSuppressor.BeginSuppress`. Used by CalendarView for `SelectedDates`; reusable for any control with a typed `IObservableVector<T>` two-way slot.
 
 ```csharp
-public ControlDescriptor<TElement, TControl> CollectionDiffControlled<TPayload, TItem, TKey, TDelegate>(Func<TElement, IReadOnlyList<TItem>> get, Func<TControl, IList<TItem>> getVector, Func<TItem, TKey> key, Action<TControl, TDelegate> subscribe, Func<TElement, Delegate?> callbackPresent, TDelegate trampoline, Func<TPayload, bool> slotIsNull, Action<TPayload, TDelegate> setSlot, IEqualityComparer<TKey>? keyComparer = null) where TPayload : class, new() where TDelegate : Delegate
+public ControlDescriptor<TElement, TControl> CollectionDiffControlled<TPayload, TItem, TKey, TDelegate>(Func<TElement, IReadOnlyList<TItem>> get, Func<TControl, IList<TItem>> getVector, Func<TItem, TKey> key, Action<TControl, TDelegate> subscribe, Func<TElement, Delegate?> callbackPresent, TDelegate trampoline, Func<TPayload, bool> slotIsNull, Action<TPayload, TDelegate> setSlot, IEqualityComparer<TKey>? keyComparer = null) where TPayload : class, new() where TKey : notnull where TDelegate : Delegate
 ```
 
 **Parameters**
