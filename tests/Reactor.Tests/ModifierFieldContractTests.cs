@@ -475,28 +475,35 @@ public class ModifierFieldContractTests
     /// the first (a new instance for reference types). Throws for a type it doesn't know, so a
     /// new field type fails loudly here rather than being skipped.
     /// </summary>
+    /// <remarks>
+    /// For value types the first sample is the type's default (<c>false</c>, <c>0</c>,
+    /// <c>Thickness(0)</c>, …), so the unset rows compare "not set" against a set default. A
+    /// comparer that collapsed the nullable (<c>GetValueOrDefault()</c>) would equate the two and
+    /// fail those rows; with a non-default first sample it would pass every row.
+    /// </remarks>
     private static (object V1, object V2, Func<object> Fresh) Samples(Type type)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
 
         if (type.IsEnum)
         {
-            var values = Enum.GetValues(type).Cast<object>().Distinct().Take(2).ToArray();
-            return (values[0], values[1], () => values[0]);
+            var zero = Enum.ToObject(type, 0);
+            var other = Enum.GetValues(type).Cast<object>().First(v => !v.Equals(zero));
+            return (zero, other, () => zero);
         }
-        if (type == typeof(bool)) return (true, false, () => true);
-        if (type == typeof(int)) return (1, 2, () => 1);
-        if (type == typeof(double)) return (1.5, 2.5, () => 1.5);
-        if (type == typeof(float)) return (1.5f, 2.5f, () => 1.5f);
+        if (type == typeof(bool)) return (false, true, () => false);
+        if (type == typeof(int)) return (0, 2, () => 0);
+        if (type == typeof(double)) return (0.0, 2.5, () => 0.0);
+        if (type == typeof(float)) return (0f, 2.5f, () => 0f);
         if (type == typeof(string)) return ("a", "b", () => new string('a', 1));
-        if (type == typeof(Thickness)) return (new Thickness(1), new Thickness(2), () => new Thickness(1));
-        if (type == typeof(CornerRadius)) return (new CornerRadius(1), new CornerRadius(2), () => new CornerRadius(1));
+        if (type == typeof(Thickness)) return (new Thickness(0), new Thickness(2), () => new Thickness(0));
+        if (type == typeof(CornerRadius)) return (new CornerRadius(0), new CornerRadius(2), () => new CornerRadius(0));
         if (type == typeof(global::System.Numerics.Vector3))
-            return (new global::System.Numerics.Vector3(1), new global::System.Numerics.Vector3(2), () => new global::System.Numerics.Vector3(1));
+            return (global::System.Numerics.Vector3.Zero, new global::System.Numerics.Vector3(2), () => global::System.Numerics.Vector3.Zero);
         if (type == typeof(global::System.Numerics.Vector2))
-            return (new global::System.Numerics.Vector2(1), new global::System.Numerics.Vector2(2), () => new global::System.Numerics.Vector2(1));
+            return (global::System.Numerics.Vector2.Zero, new global::System.Numerics.Vector2(2), () => global::System.Numerics.Vector2.Zero);
         if (type == typeof(global::Windows.UI.Text.FontWeight))
-            return (new global::Windows.UI.Text.FontWeight(400), new global::Windows.UI.Text.FontWeight(700), () => new global::Windows.UI.Text.FontWeight(400));
+            return (default(global::Windows.UI.Text.FontWeight), new global::Windows.UI.Text.FontWeight(700), () => default(global::Windows.UI.Text.FontWeight));
         if (type == typeof(Element)) return (TextBlock("a"), TextBlock("b"), () => TextBlock("a"));
         if (type == typeof(ElementRef)) return (new ElementRef(), new ElementRef(), () => new ElementRef());
         if (type == typeof(IReadOnlyList<ElementRef>))
