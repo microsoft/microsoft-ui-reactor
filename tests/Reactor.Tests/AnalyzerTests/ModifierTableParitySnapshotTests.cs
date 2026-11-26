@@ -38,7 +38,7 @@ public class ModifierTableParitySnapshotTests
         "FontStretch | - | - | - | - | RichTextBlockElement,RichTextParagraph,RichTextRun,RichTextHyperlink",
         "FontStyle | - | - | - | - | TextBlockElement,RichTextBlockElement",
         "FontWeight | Control,TextBlock | - | - | - | RichTextBlockElement",
-        "Foreground | Control,TextBlock | Control,TextBlock,RichTextBlock | - | - | RichTextBlockElement",
+        "Foreground | Control,TextBlock,RichTextBlock,IconElement | - | - | - | RichTextBlockElement",
         "Height | - | - | - | poolReset | -",
         "HorizontalAlignment | - | - | - | poolReset | -",
         "HorizontalContentAlignment | - | - | - | - | -",

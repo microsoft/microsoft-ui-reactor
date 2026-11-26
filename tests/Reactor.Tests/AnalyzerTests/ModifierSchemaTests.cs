@@ -92,7 +92,7 @@ public class ModifierSchemaTests
 
         // In the frozen order, the only non-marker entries after the handler wiring are lifecycle/ref slots.
         var order = ModifierApplyOrderTests.FrozenOrder;
-        var afterHandlers = order.Skip(Array.IndexOf(order, "→ApplyEventHandlers")).Where(o => !o.StartsWith('→'));
+        var afterHandlers = order.Skip(Array.IndexOf(order, "→ModifierEvents.ApplyEventHandlers")).Where(o => !o.StartsWith('→'));
         Assert.All(afterHandlers, name => Assert.Equal(ApplyShape.Behavior, ModifierSchema.Find(name)!.Shape));
     }
 
@@ -100,16 +100,38 @@ public class ModifierSchemaTests
     public void Write_Equality_Matches_The_Apply_Arm_Guards()
     {
         // Brush and FontFamily arms guard with ReferenceEquals (spec 067 §6.6); everything else
-        // with value comparison. Read the guards out of the apply family and the accessibility arms.
-        var methods = ReconcilerSource.ApplyModifiersFamily().Concat(ReconcilerSource.Methods("ApplyAccessibilityModifiers"));
-        var byReference = methods
-            .SelectMany(m => m.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            .Where(i => ReconcilerSource.InvokedName(i) == "ReferenceEquals")
-            .SelectMany(i => i.ArgumentList.Arguments)
-            .Select(a => a.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "m" } } access ? access.Name.Identifier.Text : null)
-            .Where(name => name is not null)
-            .ToHashSet(StringComparer.Ordinal);
-        Assert.Contains("Background", byReference);   // positive control
+        // with value comparison. Read the guards out of the apply family, the accessibility arms
+        // and ForegroundModifier.Apply (#1687), following locals seeded from `m.X`.
+        var root = Microsoft.UI.Reactor.Cli.Pack.RepoRootFinder.FindRepoRoot()!;
+        var foreground = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree
+            .ParseText(global::System.IO.File.ReadAllText(global::System.IO.Path.Join(root, "src", "Reactor", "Core", "ForegroundModifier.cs")),
+                cancellationToken: TestContext.Current.CancellationToken)
+            .GetRoot(TestContext.Current.CancellationToken)
+            .DescendantNodes().OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.Text == "Apply");
+        var methods = ReconcilerSource.ApplyModifiersFamily()
+            .Concat(ReconcilerSource.Methods("ApplyAccessibilityModifiers"))
+            .Concat(foreground);
+
+        static string? Field(ExpressionSyntax e) =>
+            e is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "m" } } access ? access.Name.Identifier.Text : null;
+
+        var byReference = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var method in methods)
+        {
+            var locals = method.DescendantNodes().OfType<VariableDeclaratorSyntax>()
+                .Where(v => v.Initializer is not null && Field(v.Initializer.Value) is not null)
+                .ToDictionary(v => v.Identifier.Text, v => Field(v.Initializer!.Value)!, StringComparer.Ordinal);
+            foreach (var argument in method.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                         .Where(i => ReconcilerSource.InvokedName(i) == "ReferenceEquals")
+                         .SelectMany(i => i.ArgumentList.Arguments))
+            {
+                var name = Field(argument.Expression)
+                    ?? (argument.Expression is IdentifierNameSyntax id && locals.TryGetValue(id.Identifier.Text, out var seeded) ? seeded : null);
+                if (name is not null) byReference.Add(name);
+            }
+        }
+        Assert.Contains("Background", byReference);   // positive controls: direct, and through a local
+        Assert.Contains("Foreground", byReference);
 
         // Arms that always reconcile (flyouts, rich tooltip) have no change guard, and behaviour /
         // reference-edge slots are not property arms.
@@ -157,8 +179,14 @@ public class ModifierSchemaTests
     [Fact]
     public void Slot_Order_Matches_The_Frozen_Apply_Order()
     {
-        // Property slots of the main bag, in schema order, against the arms ApplyModifiers reads.
-        var frozenMain = ModifierApplyOrderTests.FrozenOrder.Where(o => !o.StartsWith('→') && o != "Accessibility").ToList();
+        // Property slots of the main bag, in schema order, against the arms ApplyModifiers reads. A
+        // handoff marker stands for the slot whose hand-coded method it calls
+        // (→ForegroundModifier.Apply is the Foreground arm since #1687).
+        var byMethod = ModifierSchema.Slots.Where(s => s.HandCodedMethod?.Contains('.') == true)
+            .ToDictionary(s => "→" + s.HandCodedMethod, s => s.Name, StringComparer.Ordinal);
+        var frozenMain = ModifierApplyOrderTests.FrozenOrder
+            .Select(o => byMethod.TryGetValue(o, out var slot) ? slot : o)
+            .Where(o => !o.StartsWith('→') && o != "Accessibility").ToList();
         var schemaMain = ModifierSchema.Slots.Where(s => frozenMain.Contains(s.Name)).Select(s => s.Name).ToList();
         Assert.True(schemaMain.SequenceEqual(frozenMain),
             "ModifierSchema.Slots order differs from ApplyModifiers:\n  schema: " + string.Join(", ", schemaMain)

@@ -595,7 +595,7 @@ remaining-owner semantics would be a behaviour change.
 The `ThemeRef` overloads of `Background`, `Foreground` and `BorderBrush` go through
 `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568-580`), not `ApplyModifiers`, and
 their reach differs: `Foreground` reaches `RichTextBlock` on the theme path but not on the plain
-brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`; since layer 1, `ModifierTable.ThemeGate` derives it from the Foreground slot's `Theme`-role receivers). In the
+brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`). Since #1687 the plain write and the `ThemeRef` path share `ForegroundModifier.GetProperty` and reach the same receivers, so no slot has a separate theme gate today; `ModifierTable.ThemeGate` still derives one from `Theme`-role receivers if they ever differ. In the
 schema that is a receiver row with the `Theme` role but not the `Apply` role, so it never widens
 the plain write, and layer 2 generates `GetDependencyPropertyName`'s modifier rows from the
 `Theme`-role rows. The pool reach is a third, separate set (`RichTextBlock.Foreground` is cleared
