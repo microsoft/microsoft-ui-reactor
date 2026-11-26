@@ -5,6 +5,7 @@ import path from "node:path";
 import { after, describe, test } from "node:test";
 import vm from "node:vm";
 
+import { legacyFragmentScript } from "./legacy-fragments.mjs";
 import { keepFragment, keepFragments } from "./redirect-pages.mjs";
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reactor-docs-redirects-test-"));
@@ -59,5 +60,40 @@ describe("redirect pages", () => {
     assert.deepEqual(result, { patched: 1, missing: ["/hooks"] });
     const html = fs.readFileSync(path.join(dist, "getting-started", "index.html"), "utf8");
     assert.equal(navigate(html, { hash: "#one-file-no-project" }), "/get-started/quickstart#one-file-no-project");
+  });
+});
+
+describe("legacy home-page fragments", () => {
+  const load = ({ hash, search = "", ids = [] }) => {
+    const page = { went: null, listeners: {} };
+    page.location = { hash, search, replace: (url) => (page.went = url) };
+    vm.runInNewContext(legacyFragmentScript("/microsoft-ui-reactor/latest/get-started"), {
+      location: page.location,
+      document: { readyState: "complete", getElementById: (id) => (ids.includes(id) ? {} : null) },
+      addEventListener: (type, fn) => (page.listeners[type] = fn),
+      decodeURIComponent,
+    });
+    return page;
+  };
+  const run = (options) => load(options).went;
+
+  test("a section the home page lacks goes to the same section on /get-started", () => {
+    assert.equal(
+      run({ hash: "#minimal-project-setup", search: "?q=1" }),
+      "/microsoft-ui-reactor/latest/get-started?q=1#minimal-project-setup"
+    );
+  });
+
+  test("the home page's own anchors and a bare root stay put", () => {
+    assert.equal(run({ hash: "#guides-title", ids: ["guides-title"] }), null);
+    assert.equal(run({ hash: "" }), null);
+  });
+
+  test("a fragment set after the page loaded is forwarded too", () => {
+    const page = load({ hash: "" });
+    assert.equal(page.went, null);
+    page.location.hash = "#why-reactor";
+    page.listeners.hashchange();
+    assert.equal(page.went, "/microsoft-ui-reactor/latest/get-started#why-reactor");
   });
 });

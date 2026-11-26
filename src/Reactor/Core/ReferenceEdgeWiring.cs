@@ -21,12 +21,12 @@ using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 
 namespace Microsoft.UI.Reactor.Core;
 
-// Reconciler partial: Reference edges (LabeledBy, DescribedBy, ...) for controls and modifiers.
-public sealed partial class Reconciler
+// Reference edges (LabeledBy, DescribedBy, ...) for controls and modifiers.
+internal static class ReferenceEdgeWiring
 {
     internal static ReferenceEdge GetOrCreateReferenceEdge(FrameworkElement ctrl, int slot)
     {
-        var state = GetOrCreateReactorState(ctrl);
+        var state = Reconciler.GetOrCreateReactorState(ctrl);
         state.ReferenceEdges ??= new ReferenceEdgeBag();
         if (!state.ReferenceEdges.Edges.TryGetValue(slot, out var edge))
         {
@@ -39,7 +39,7 @@ public sealed partial class Reconciler
 
     internal static ReferenceListEdge GetOrCreateReferenceListEdge(FrameworkElement ctrl, int slot)
     {
-        var state = GetOrCreateReactorState(ctrl);
+        var state = Reconciler.GetOrCreateReactorState(ctrl);
         state.ReferenceEdges ??= new ReferenceEdgeBag();
         if (!state.ReferenceEdges.ListEdges.TryGetValue(slot, out var edge))
         {
@@ -125,7 +125,7 @@ public sealed partial class Reconciler
 
     internal static void TeardownReferenceEdges(FrameworkElement ctrl)
     {
-        if (ctrl.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
+        if (ctrl.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState state)
             return;
         // A deferred .LabeledBy("id") that never resolved is reference state too: a retained,
         // unpooled control must not keep reporting it after unmount.
@@ -163,7 +163,7 @@ public sealed partial class Reconciler
         state.ReferenceEdges = null;
     }
 
-    private static void ApplyModifierReferenceEdges(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    internal static void ApplyModifierReferenceEdges(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         WireModifierScalarReference(
             fe,
@@ -284,7 +284,7 @@ public sealed partial class Reconciler
     }
 
     [global::System.Diagnostics.Conditional("DEBUG")]
-    private static void AssertTypedRefMatch(Microsoft.UI.Reactor.Input.ElementRef r, FrameworkElement fe)
+    internal static void AssertTypedRefMatch(Microsoft.UI.Reactor.Input.ElementRef r, FrameworkElement fe)
     {
         // Spec 033 §3 — typed refs (ElementRef<T>) record their expected concrete
         // type on the inner untyped ref. When a typed ref is bound to an element

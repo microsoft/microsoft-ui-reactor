@@ -147,7 +147,7 @@ internal static class TemplateParser
         return body.TrimEnd('\r', '\n') + newline + newline + block + newline;
     }
 
-    private static readonly Regex SectionHeading = new(@"^#{2,6}(\s|$)", RegexOptions.Compiled);
+    private static readonly Regex SectionHeading = new(@"^ {0,3}#{2,6}(\s|$)", RegexOptions.Compiled);
 
     /// <summary>
     /// Build the styled WinUI-reference blockquote. Host name is derived from

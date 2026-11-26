@@ -253,8 +253,8 @@ internal static class TierLint
 
     /// <summary>
     /// Counts prose words before the first section heading (level 2 or
-    /// deeper). The page title (<c># </c>), blockquotes, and fenced code are
-    /// skipped, so the lead may sit either above or below the title.
+    /// deeper). The page title (<c># </c>), blockquotes, fenced code and
+    /// indented code are skipped, so the lead may sit either above or below the title.
     /// </summary>
     internal static bool HasMentalModelLead(string body)
     {
@@ -264,8 +264,10 @@ internal static class TierLint
         foreach (var raw in lines)
         {
             if (fence.InCode(raw)) continue;
+            if (SectionHeading.IsMatch(raw)) break;
+            // Four or more spaces of indent is an indented code block, not prose.
+            if (raw.StartsWith("    ") || raw.StartsWith('\t')) continue;
             var line = raw.TrimStart();
-            if (SectionHeading.IsMatch(line)) break;
             if (line.StartsWith("# ") || line.StartsWith(">")) continue;
             words += line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         }
@@ -280,5 +282,5 @@ internal static class TierLint
 
     private static readonly Regex LinkPattern = new(@"\[[^\]]+\]\([^)]+\)", RegexOptions.Compiled);
 
-    private static readonly Regex SectionHeading = new(@"^#{2,6}(\s|$)", RegexOptions.Compiled);
+    private static readonly Regex SectionHeading = new(@"^ {0,3}#{2,6}(\s|$)", RegexOptions.Compiled);
 }

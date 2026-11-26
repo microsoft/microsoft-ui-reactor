@@ -512,10 +512,10 @@ public abstract record Element
     internal static bool ExtrasEqual(Element a, Element b)
     {
         if (a.Extensions is null && b.Extensions is null) return true;
-        return (a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default)
-            && AttachedEqual(a.Attached, b.Attached)
+        return AttachedEqual(a.Attached, b.Attached)
             && ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)
-            && ResourceOverridesEqual(a.ResourceOverrides, b.ResourceOverrides);
+            && ResourceOverridesEqual(a.ResourceOverrides, b.ResourceOverrides)
+            && (a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default);
     }
 
     internal static bool ShallowEquals(Element a, Element b)
@@ -529,9 +529,9 @@ public abstract record Element
         // provably null on both sides, so the structural comparisons below are
         // guaranteed to pass. Skip them (and their null-deref property GETs) for
         // the common no-extras leaf.
-        if (!(a.Extensions is null && b.Extensions is null))
+        bool hasExtras = !(a.Extensions is null && b.Extensions is null);
+        if (hasExtras)
         {
-            if (!(a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default)) return false;
             if (!AttachedEqual(a.Attached, b.Attached)) return false;
             if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
             // Issue #675 — compare ResourceOverrides for symmetry with ThemeBindings: a
@@ -541,6 +541,15 @@ public abstract record Element
             if (!ContextValuesEqual(a.ContextValues, b.ContextValues)) return false;
         }
 
+        // Animations compare last (issue #1702): equal declarations rebuilt on every render
+        // compare by value, which reads WinUI transitions and brushes, so an element whose own
+        // properties changed declines before paying for that.
+        return OwnPropsShallowEqual(a, b)
+            && (!hasExtras || (a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default));
+    }
+
+    private static bool OwnPropsShallowEqual(Element a, Element b)
+    {
         return (a, b) switch
         {
             (TextBlockElement ta, TextBlockElement tb) =>
@@ -1194,14 +1203,7 @@ public abstract record Element
     /// style fluent chains. Unwrap the underlying Color for the common
     /// SolidColorBrush case and fall back to ReferenceEquals for everything else.
     /// </summary>
-    private static bool BrushesEqual(Brush? a, Brush? b)
-    {
-        if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
-        if (a is SolidColorBrush sa && b is SolidColorBrush sb)
-            return sa.Color == sb.Color && sa.Opacity == sb.Opacity;
-        return false;
-    }
+    private static bool BrushesEqual(Brush? a, Brush? b) => BrushHelper.BrushesEqual(a, b);
 
     /// <summary>
     /// Structural transform comparison. D3PathTranslated allocates a fresh
@@ -1437,7 +1439,7 @@ public abstract record Element
     /// them keeps the skip-path perf lever intact (grid cells use only routed
     /// handlers). The latent staleness this creates — a skipped element keeping a
     /// previous-render gesture/drag closure — is closed on the skip path itself by
-    /// <see cref="Reconciler.RefreshGestureDragStateOnSkip"/> (#721), which refreshes
+    /// <see cref="GestureDispatch.RefreshGestureDragStateOnSkip"/> (#721), which refreshes
     /// the cached dispatch closures WITHOUT re-subscribing the trampolines, so the
     /// latest closure fires while no in-flight gesture is re-armed.
     /// </summary>
@@ -1860,7 +1862,9 @@ internal readonly struct ExtrasSlot : global::System.IEquatable<ExtrasSlot>
 
 /// <summary>
 /// Animation declarations compared together when deciding whether an element can skip an update.
-/// Record equality includes every field; arrays and native objects retain their existing equality semantics.
+/// Record equality includes every field. Modifiers rebuild these on every render, so each
+/// declaration type compares by value (issue #1702), and an array field is held in a
+/// <see cref="Animation.ValueArray{T}"/> to compare its elements.
 /// </summary>
 internal readonly record struct AnimationExtras
 {
@@ -1871,7 +1875,7 @@ internal readonly record struct AnimationExtras
     internal Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
     internal Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
     internal Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
-    internal Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+    internal Microsoft.UI.Reactor.Animation.ValueArray<Microsoft.UI.Reactor.Animation.KeyframeEntry> KeyframeAnimations { get; init; }
     internal Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
     internal string? ConnectedAnimationKey { get; init; }
 }
@@ -2003,8 +2007,8 @@ public record ElementExtras
     /// </summary>
     public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations
     {
-        get => Animations.KeyframeAnimations;
-        init => Animations = Animations with { KeyframeAnimations = value };
+        get => Animations.KeyframeAnimations.Items;
+        init => Animations = Animations with { KeyframeAnimations = new(value) };
     }
 
     /// <summary>
@@ -2723,6 +2727,24 @@ public record ImplicitTransitions
     public Vector3Transition? Scale { get; init; }
     public Vector3Transition? Translation { get; init; }
     public BrushTransition? Background { get; init; }
+
+    /// <summary>
+    /// Compares each channel's transition by its settings, so a transition rebuilt with the same
+    /// duration on every render compares equal (issue #1702).
+    /// </summary>
+    /// <remarks>Reads the WinUI transitions, so call it on the UI thread that created them.</remarks>
+    public virtual bool Equals(ImplicitTransitions? other)
+        => ReferenceEquals(this, other)
+            || (other is not null && EqualityContract == other.EqualityContract
+                && Animation.AnimationEquality.ImplicitTransitionEqual(Opacity, other.Opacity)
+                && Animation.AnimationEquality.ImplicitTransitionEqual(Rotation, other.Rotation)
+                && Animation.AnimationEquality.ImplicitTransitionEqual(Scale, other.Scale)
+                && Animation.AnimationEquality.ImplicitTransitionEqual(Translation, other.Translation)
+                && Animation.AnimationEquality.ImplicitTransitionEqual(Background, other.Background));
+
+    /// <summary>Hashes which channels are set, without reading the WinUI transitions.</summary>
+    public override int GetHashCode() => HashCode.Combine(EqualityContract,
+        Opacity is null, Rotation is null, Scale is null, Translation is null, Background is null);
 }
 
 /// <summary>
@@ -2735,6 +2757,21 @@ public record ThemeTransitions
 {
     public Microsoft.UI.Xaml.Media.Animation.Transition[]? Children { get; init; }
     public Microsoft.UI.Xaml.Media.Animation.Transition[]? ItemContainer { get; init; }
+
+    /// <summary>
+    /// Compares the transitions in order by type and settings, so transitions rebuilt on every
+    /// render compare equal (issue #1702). A transition type Reactor doesn't know, and a
+    /// <c>ContinuumNavigationTransitionInfo</c>, compare by reference.
+    /// </summary>
+    /// <remarks>Reads the WinUI transitions, so call it on the UI thread that created them.</remarks>
+    public virtual bool Equals(ThemeTransitions? other)
+        => ReferenceEquals(this, other)
+            || (other is not null && EqualityContract == other.EqualityContract
+                && Animation.AnimationEquality.ThemeTransitionsEqual(Children, other.Children)
+                && Animation.AnimationEquality.ThemeTransitionsEqual(ItemContainer, other.ItemContainer));
+
+    /// <summary>Hashes the transition counts, without reading the WinUI transitions.</summary>
+    public override int GetHashCode() => HashCode.Combine(EqualityContract, Children?.Length ?? -1, ItemContainer?.Length ?? -1);
 }
 // Note: Transition is in Microsoft.UI.Xaml.Media.Animation (not imported by default in Element.cs)
 
@@ -5215,7 +5252,7 @@ public record NavigationHostElement(
 // DisplayModeChanged/Expanding/Collapsed events are bespoke — in Element.NavigationView.cs.
 // Every event is Excluded or named off-convention so the generator leaves it alone: all
 // NavigationView events must share the single V1.NavigationViewEventPayload, because a control
-// holds exactly one event-payload box (Reconciler.GetOrCreateControlEventPayload). Replaces
+// holds exactly one event-payload box (ModifierEvents.GetOrCreateControlEventPayload). Replaces
 // NavigationViewDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.NavigationView), Exclude = new[] { "BackRequested", "ItemInvoked", "DisplayModeChanged" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("MenuItems")]
@@ -6309,7 +6346,7 @@ public partial record TeachingTipElement(
                 return;
             }
 
-            var payload = global::Microsoft.UI.Reactor.Core.Reconciler
+            var payload = global::Microsoft.UI.Reactor.Core.ModifierEvents
                 .GetOrCreateControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(tip);
             payload.MountOpenWanted = true;
             if (payload.MountOpenLoadedHandler is not null) return;
@@ -6322,7 +6359,7 @@ public partial record TeachingTipElement(
 
                 // Re-read rather than trust the closure: a falling edge or an unmount may have
                 // disarmed this tip while it was still unparented.
-                var state = global::Microsoft.UI.Reactor.Core.Reconciler
+                var state = global::Microsoft.UI.Reactor.Core.ModifierEvents
                     .TryGetControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(loaded);
                 if (state is null) return;
                 state.MountOpenLoadedHandler = null;
@@ -6342,7 +6379,7 @@ public partial record TeachingTipElement(
         /// payload probe: a tip that never armed must not be forced to allocate state here.</summary>
         internal static void Cancel(WinUI.TeachingTip tip)
         {
-            var payload = global::Microsoft.UI.Reactor.Core.Reconciler
+            var payload = global::Microsoft.UI.Reactor.Core.ModifierEvents
                 .TryGetControlEventPayload<global::Microsoft.UI.Reactor.Core.V1Protocol.TeachingTipEventPayload>(tip);
             if (payload is null) return;
             payload.MountOpenWanted = false;

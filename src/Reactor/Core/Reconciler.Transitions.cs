@@ -517,7 +517,7 @@ public sealed partial class Reconciler
         if (parent is not WinUI.Panel panel) return;
         foreach (var child in panel.Children)
         {
-            if (child.GetValue(ReactorAttached.StateProperty) is ReactorState state) state.StaggerDelay = null;
+            if (GetCompositionState(child) is { } state) state.StaggerDelay = null;
             if (!ElementPool.IsVisualTaken(child)) continue;
             SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(child), TimeSpan.Zero);
         }
@@ -528,7 +528,7 @@ public sealed partial class Reconciler
 
     /// <summary>The stagger delay recorded for <paramref name="child"/>, or null when no parent staggers it.</summary>
     internal static TimeSpan? StaggerDelayOf(UIElement child)
-        => (child.GetValue(ReactorAttached.StateProperty) as ReactorState)?.StaggerDelay;
+        => GetCompositionState(child)?.StaggerDelay;
 
     private static void SetStaggerDelayOnKeys(Visual visual, TimeSpan delay)
     {
@@ -564,7 +564,7 @@ public sealed partial class Reconciler
         var parent = (control as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(control);
         if (!ReferenceEquals(parent, stagger.Panel)) return;
         var delay = TimeSpan.FromTicks(stagger.Delay.Ticks * _updatingChildIndex);
-        GetOrCreateReactorState(control).StaggerDelay = delay;
+        GetOrCreateCompositionState(control).StaggerDelay = delay;
         if (ElementPool.IsVisualTaken(control))
             SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(control), delay);
     }
@@ -578,7 +578,7 @@ public sealed partial class Reconciler
             var child = panel.Children[i];
             var visual = AnimationHelper.GetElementVisual(child);
             var delay = TimeSpan.FromTicks(config.Delay.Ticks * i);
-            GetOrCreateReactorState(child).StaggerDelay = delay;
+            GetOrCreateCompositionState(child).StaggerDelay = delay;
             SetStaggerDelayOnKeys(visual, delay);
         }
     }
