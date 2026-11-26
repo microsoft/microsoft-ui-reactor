@@ -1,6 +1,9 @@
+using System.Diagnostics.Tracing;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Hosting;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -250,6 +253,26 @@ internal static class Phase4WindowingFixtures
 
         private static int Warnings => Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests);
 
+        private const string TraceProbeOperation = "SelfTest.WindowLevelRefusedTopmost.Probe";
+
+        private static int CountWarnings(ReactorEvent[] events, string operation)
+        {
+            int count = 0;
+            foreach (var e in events)
+            {
+                if (!string.Equals(e.EventName, "Warning", StringComparison.Ordinal)) continue;
+                foreach (var p in e.Payload)
+                {
+                    if (p is string s && string.Equals(s, operation, StringComparison.Ordinal))
+                    {
+                        count++;
+                        break;
+                    }
+                }
+            }
+            return count;
+        }
+
         // Drops win back to Normal (a real, never-refused HWND_NOTOPMOST), then requests
         // AlwaysOnTop with the next apply refused. True when the refusal took.
         private static async Task<bool> RefuseAlwaysOnTop(ReactorWindow win, WindowSpec spec)
@@ -290,27 +313,58 @@ internal static class Phase4WindowingFixtures
                 bool winInactive = await Harness.WaitFor(() => !win.IsActive && other.IsActive, maxPasses: 25, perPassMs: 40);
 
                 int warningsBefore = Warnings;
-                win.RefuseTopmostForTests = 1;
-                win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
-                await win.Host.WaitForIdleAsync();
-                H.Check("WindowLevel_RefusedTopmost_Simulated", win.RefuseTopmostForTests == 0 && !TopmostBit(win));
-                H.Check("WindowLevel_RefusedTopmost_Warns", Warnings == warningsBefore + 1);
+                var captured = new List<ReactorEvent>();
+                var gate = new Lock();
+                using (ReactorTrace.Subscribe(e => { lock (gate) { captured.Add(e); } }, EventLevel.Warning))
+                {
+                    // Positive control: proves this subscription can see a DiagnosticLog warning at all.
+                    DiagnosticLog.Warning(LogCategory.Hosting, TraceProbeOperation, "probe");
 
-                // An unrelated spec change re-applies the level. Still refused, it must not warn again.
-                win.RefuseTopmostForTests = 1;
-                win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Retitled" });
-                await win.Host.WaitForIdleAsync();
-                H.Check("WindowLevel_RefusedTopmost_WarnsOnce",
-                    win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 1);
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_Simulated", win.RefuseTopmostForTests == 0 && !TopmostBit(win));
+                    H.Check("WindowLevel_RefusedTopmost_Warns", Warnings == warningsBefore + 1);
+
+                    // An unrelated spec change re-applies the level. Still refused, it must not warn again.
+                    win.RefuseTopmostForTests = 1;
+                    win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Retitled" });
+                    await win.Host.WaitForIdleAsync();
+                    H.Check("WindowLevel_RefusedTopmost_WarnsOnce",
+                        win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 1);
+                }
+
+                ReactorEvent[] events;
+                lock (gate) { events = captured.ToArray(); }
+                if (CountWarnings(events, TraceProbeOperation) == 0)
+                {
+                    // NativeAOT defaults EventSourceSupport to false, so no subscriber sees anything.
+                    H.Skip("WindowLevel_RefusedTopmost_WarningLogged",
+                        "EventSource delivered no warnings, not even the probe, so the log can't be observed here");
+                }
+                else
+                {
+                    H.Check("WindowLevel_RefusedTopmost_WarningLogged", CountWarnings(events, "ReactorWindow.WindowLevel") == 1);
+                }
 
                 // The app gaining the foreground reaches every top-level window as WM_ACTIVATEAPP,
                 // even when no Reactor window activates. Sending it doesn't activate win.
                 _ = Native.SendMessage(Hwnd(win), Native.WM_ACTIVATEAPP, 1, 0);
                 CheckReapplied("WindowLevel_RefusedTopmost_ReappliedOnActivateApp", win, TopmostBit(win));
 
-                // Once granted, the warning re-arms: the next refusal warns again.
+                // A grant re-arms the warning even though the level never changed: demote the
+                // window natively, then refuse the next apply while Spec.Level stays AlwaysOnTop.
+                bool granted = TopmostBit(win);
+                Native.MakeNotTopmost(Hwnd(win));
+                win.RefuseTopmostForTests = 1;
+                win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Regranted" });
+                await win.Host.WaitForIdleAsync();
+                H.Check("WindowLevel_RefusedTopmost_WarningRearmsAfterGrant",
+                    granted && win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 2);
+
+                // Leaving AlwaysOnTop re-arms it too.
                 bool refusedAgain = await RefuseAlwaysOnTop(win, spec);
-                H.Check("WindowLevel_RefusedTopmost_WarningRearms", refusedAgain && Warnings == warningsBefore + 2);
+                H.Check("WindowLevel_RefusedTopmost_WarningRearmsOnLevelChange", refusedAgain && Warnings == warningsBefore + 3);
 
                 // Another window activating reapplies the refused one, which stays inactive.
                 // win is still refused here, and opening `third` activates it.
@@ -619,6 +673,11 @@ internal static class Phase4WindowingFixtures
             error = ok ? 0 : Marshal.GetLastWin32Error();
             return ok;
         }
+
+        public static void MakeNotTopmost(nint hWnd)
+            => _ = SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+        private static readonly nint HWND_NOTOPMOST = -2;
 
         public static nint ForegroundWindow() => GetForegroundWindow();
 
