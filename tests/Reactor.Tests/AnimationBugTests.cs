@@ -146,7 +146,7 @@ public class AnimationBugTests
     [Fact]
     public void ApplyInteractionStates_Registers_GotFocus_Handler()
     {
-        var gotFocusMethod = typeof(Reconciler).GetMethod("OnInteractionGotFocus",
+        var gotFocusMethod = typeof(InteractionStateApplier).GetMethod("OnInteractionGotFocus",
             global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
         Assert.NotNull(gotFocusMethod);
     }
@@ -154,7 +154,7 @@ public class AnimationBugTests
     [Fact]
     public void ApplyInteractionStates_Registers_LostFocus_Handler()
     {
-        var lostFocusMethod = typeof(Reconciler).GetMethod("OnInteractionLostFocus",
+        var lostFocusMethod = typeof(InteractionStateApplier).GetMethod("OnInteractionLostFocus",
             global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
         Assert.NotNull(lostFocusMethod);
     }
@@ -162,7 +162,7 @@ public class AnimationBugTests
     [Fact]
     public void InteractionState_Enum_Has_Focused_Value()
     {
-        var enumType = typeof(Reconciler).GetNestedType("InteractionState",
+        var enumType = typeof(InteractionStateApplier).GetNestedType("InteractionState",
             global::System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(enumType);
         Assert.True(Enum.IsDefined(enumType!, "Focused"));
@@ -250,7 +250,7 @@ public class AnimationBugTests
     [Fact]
     public void GotFocus_Handler_Signature_Matches_RoutedEvent()
     {
-        var method = typeof(Reconciler).GetMethod("OnInteractionGotFocus",
+        var method = typeof(InteractionStateApplier).GetMethod("OnInteractionGotFocus",
             global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!;
         var parameters = method.GetParameters();
         Assert.Equal(2, parameters.Length);
@@ -261,7 +261,7 @@ public class AnimationBugTests
     [Fact]
     public void LostFocus_Handler_Signature_Matches_RoutedEvent()
     {
-        var method = typeof(Reconciler).GetMethod("OnInteractionLostFocus",
+        var method = typeof(InteractionStateApplier).GetMethod("OnInteractionLostFocus",
             global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!;
         var parameters = method.GetParameters();
         Assert.Equal(2, parameters.Length);

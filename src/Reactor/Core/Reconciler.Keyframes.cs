@@ -815,7 +815,7 @@ public sealed partial class Reconciler
             CancelOpacityRestart(state);
             state.ResetForPool();
         }
-        ClearInteractionStates(uie, restoreBrushes: true);
+        InteractionStateApplier.ClearInteractionStates(uie, restoreBrushes: true);
     }
 
     private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)

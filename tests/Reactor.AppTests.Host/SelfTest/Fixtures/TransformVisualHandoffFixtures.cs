@@ -125,9 +125,9 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
             switch (feature)
             {
                 case "InteractionStates":
-                    Reconciler.SimulatePointerOverForTests(target, isOver: true);
+                    InteractionStateApplier.SimulatePointerOverForTests(target, isOver: true);
                     await CheckPose(name + "_HoverIn", stage, declared with { Scale = new Vector3(2, 2, 1) });
-                    Reconciler.SimulatePointerOverForTests(target, isOver: false);
+                    InteractionStateApplier.SimulatePointerOverForTests(target, isOver: false);
                     await CheckPose(name + "_HoverOut", stage, declared);
                     break;
 
@@ -219,9 +219,9 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
                 H.SetContent(stage);
                 await Settle();
                 var target = (Border)stage.Children[0];
-                Reconciler.SimulatePointerOverForTests(target, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(target, isOver: true);
                 await CheckPose(name + "_HoverIn", stage, Pose.Identity with { Scale = new Vector3(2, 2, 1) });
-                Reconciler.SimulatePointerOverForTests(target, isOver: false);
+                InteractionStateApplier.SimulatePointerOverForTests(target, isOver: false);
                 await CheckPose(name + "_HoverOut", stage, Declared("Scale"));
             }
             catch (Exception ex)

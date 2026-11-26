@@ -121,10 +121,10 @@
         "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
         "src/Reactor/Core/Reconciler.Context.cs",
         "src/Reactor/Core/Reconciler.Keyframes.cs",
-        "src/Reactor/Core/Reconciler.InteractionStates.cs",
+        "src/Reactor/Core/InteractionStateApplier.cs",
         "src/Reactor/Core/Reconciler.CompositionState.cs"
       ],
-      "description": "Reconciler partials \u2014 per-control state, pooling, teardown, context replay, per-control composition state"
+      "description": "Reconciler partials and helpers \u2014 per-control state, pooling, teardown, context replay, per-control composition state, interaction states"
     },
     {
       "id": "lifecycle-batch-1",
@@ -1363,12 +1363,12 @@
       "files": [
         "src/Reactor/Core/Reconciler.Keyframes.cs",
         "src/Reactor/Core/Reconciler.Transitions.cs",
-        "src/Reactor/Core/Reconciler.InteractionStates.cs",
+        "src/Reactor/Core/InteractionStateApplier.cs",
         "src/Reactor/Core/Reconciler.CompositionState.cs",
         "src/Reactor/Core/Reconciler.ConnectedAnimations.cs",
         "src/Reactor/Core/Reconciler.ExitTransitions.cs"
       ],
-      "description": "Reconciler partials \u2014 animations, transitions, interaction states"
+      "description": "Reconciler partials and helpers \u2014 animations, transitions, interaction states"
     },
     {
       "id": "general-batch-35",
