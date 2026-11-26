@@ -237,7 +237,7 @@ public sealed partial class Reconciler
         bool defer = ShouldDeferOpacityWrite(element, state);
         var previous = state.DeclaredOpacity;
         state.DeclaredOpacity = (value, defer && (previous.Deferred || previous.Value != value));
-        state.DeferredModifierResets &= ~AnimateProperty.Opacity;
+        if (state.Composition is { } composition) composition.DeferredModifierResets &= ~AnimateProperty.Opacity;
 
         // XAML pushes a changed local value to the visual on its next frame (#1669).
         // Hold the declaration until the keyframe releases opacity to preserve its controller.
@@ -250,7 +250,7 @@ public sealed partial class Reconciler
         if (state.OpacityKeyframe is not { ReplayedWithoutOpacity: false } playback) return false;
         var current = ElementCompositionPreview.GetElementVisual(element).TryGetAnimationController("Opacity");
         return Equals(current, playback.Controller)
-            || (current is null && Equals(state.OpacityRestart?.Controller, playback.Controller));
+            || (current is null && Equals(state.Composition?.OpacityRestart?.Controller, playback.Controller));
     }
 
     // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
@@ -285,25 +285,25 @@ public sealed partial class Reconciler
         var a11y = m.Accessibility;
         var oldA11y = oldM?.Accessibility;
         if (a11y is not null || oldA11y is not null)
-            ApplyAccessibilityModifiers(fe, oldA11y, a11y);
+            AccessibilityApplier.ApplyAccessibilityModifiers(fe, oldA11y, a11y);
 
         ApplyTypographyModifiers(fe, oldM, m);
 
         // ── Declarative event handlers ────────────────────────────
         // Detach previous handler (if any) before attaching new one.
         // Handlers are stored in Tag via a wrapper so we can find them for detach.
-        ApplyEventHandlers(fe, oldM, m);
+        ModifierEvents.ApplyEventHandlers(fe, oldM, m);
 
         // Gesture recognizers (.OnPan / .OnPinch / .OnRotate)
-        ApplyGestureHandlers(fe, oldM, m);
+        GestureDispatch.ApplyGestureHandlers(fe, oldM, m);
 
         // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
-        ApplyDragDropHandlers(fe, oldM, m);
+        DragDropDispatch.ApplyDragDropHandlers(fe, oldM, m);
 
         ApplyLifecycleCallbackModifiers(fe, oldM, m);
         ApplyRefModifier(fe, oldM, m);
 
-        ApplyModifierReferenceEdges(fe, oldM, m);
+        ReferenceEdgeWiring.ApplyModifierReferenceEdges(fe, oldM, m);
     }
 
     /// <summary>RequestedTheme.</summary>
@@ -598,7 +598,7 @@ public sealed partial class Reconciler
         // BorderBrush / BorderThickness (Control, Border, and concrete panels)
         if (!ReferenceEquals(m.BorderBrush, oldM?.BorderBrush)
             && _reconcilingElement?.InteractionStates is not null
-            && _interactionTrackers.TryGetValue(fe, out var borderTracker)
+            && GetCompositionState(fe)?.InteractionTracker is { } borderTracker
             && borderTracker.BorderBrushOverrideApplied)
         {
             // Keep the active interaction brush while updating what hover-out restores.
@@ -875,7 +875,7 @@ public sealed partial class Reconciler
             // Record it before SetCurrent, whose CurrentChanged dispatch can throw.
             if (!ReferenceEquals(newRef.Current, fe)) TrackProducerRef(fe, newRef);
             newRef.SetCurrent(fe);
-            AssertTypedRefMatch(newRef, fe);
+            ReferenceEdgeWiring.AssertTypedRefMatch(newRef, fe);
         }
     }
 }

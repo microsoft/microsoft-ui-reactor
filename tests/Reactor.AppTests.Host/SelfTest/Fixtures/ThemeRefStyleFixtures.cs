@@ -731,7 +731,7 @@ internal static class ThemeRefStyleFixtures
             await Harness.Render();
             var themed = H.FindText("trs-pool-themed");
             H.Check("ThemeRefStyle_Pool_Themed", themed is not null && ColorOf(themed.Foreground) == LightColor
-                && Reconciler.HasThemeStyleMarkerForTests(themed));
+                && ThemeBindingApplier.HasThemeStyleMarkerForTests(themed));
 
             setPhase!(1);
             await Harness.Render();
@@ -742,7 +742,7 @@ internal static class ThemeRefStyleFixtures
             H.Check("ThemeRefStyle_Pool_SameInstanceRented", plain is not null && ReferenceEquals(plain, themed));
             H.Check("ThemeRefStyle_Pool_StyleCleared", plain is not null && plain.Style is null && ColorOf(plain.Foreground) != LightColor,
                 $"fg={ColorOf(plain?.Foreground)}");
-            H.Check("ThemeRefStyle_Pool_MarkerCleared", plain is not null && !Reconciler.HasThemeStyleMarkerForTests(plain));
+            H.Check("ThemeRefStyle_Pool_MarkerCleared", plain is not null && !ThemeBindingApplier.HasThemeStyleMarkerForTests(plain));
         });
     }
 

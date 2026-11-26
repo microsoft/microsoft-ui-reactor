@@ -120,7 +120,7 @@ public void Return(FrameworkElement element)
     // The lane follows the native control's marker, whichever wrapper reached it (#1643).
     var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
     // A renter returned before it loaded must not stay on the window's layout list.
-    if (state is not null) StopOpacitySync(element, state);
+    if (state?.Composition is { } composition) StopOpacitySync(element, composition);
     if (state?.PoolExcluded == true)
     {
         if (state.ReleaseWhenExcluded)
@@ -130,7 +130,7 @@ public void Return(FrameworkElement element)
         }
         return;
     }
-    var lanes = state?.VisualTaken == true ? _visualPools : _pools;
+    var lanes = state?.Composition?.VisualTaken == true ? _visualPools : _pools;
 
     if (!lanes.TryGetValue(type, out var stack))
     {
