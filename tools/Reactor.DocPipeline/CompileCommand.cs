@@ -586,8 +586,8 @@ internal static partial class CompileCommand
                 Console.Error.WriteLine(
                     "Reference generation was skipped for want of an input (see above), so no page " +
                     "under docs/guide/reference was written. That is a failure in --ci mode: pass " +
-                    "--skip-reference to skip the phase deliberately, or build src/Reactor so " +
-                    "Microsoft.UI.Reactor.xml exists.");
+                    "--skip-reference to skip the phase deliberately, or build src/Reactor and " +
+                    "src/Reactor.Advanced so their XML doc files exist.");
                 return 1;
             }
             if (hasErrors && ci)
@@ -957,11 +957,12 @@ internal static partial class CompileCommand
     }
 
     /// <summary>
-    /// Locate the most recently built <c>Microsoft.UI.Reactor.xml</c> (see
-    /// <see cref="FindReactorXml"/>) and generate the whole API reference
-    /// from it and the <c>Microsoft.UI.Reactor.dll</c> next to it. Returns
-    /// <c>null</c> when the map or the XML file is missing — typical on a first
-    /// compile before <c>dotnet build src/Reactor</c> has run. The caller decides
+    /// Locate the most recently built XML doc file of every assembly in
+    /// <see cref="ReferenceAssemblies"/> (see <see cref="FindAssemblyXml"/>) and
+    /// generate the whole API reference from them and the DLLs next to them,
+    /// merged into one model (issue #1721). Returns <c>null</c> when the map or
+    /// any XML file is missing — typical on a first compile before
+    /// <c>dotnet build src/Reactor.Advanced</c> has run. The caller decides
     /// whether that is a failure (it is under <c>--ci</c>). A missing DLL beside
     /// an XML file is an error finding, and nothing is written or pruned.
     /// </summary>
@@ -989,42 +990,52 @@ internal static partial class CompileCommand
                     TierLintSeverity.Error) });
         }
 
-        var choice = FindReactorXml(repoRoot);
-        if (choice is null)
+        // Every assembly the reference documents (issue #1721). All of them are
+        // required: generating from a subset would prune the pages of the
+        // missing one as stale, so a missing input skips the whole phase.
+        var inputs = new List<ReferenceGen.ReferenceInput>();
+        var staleFindings = new List<ReferenceGen.RefGenFinding>();
+        foreach (var assembly in ReferenceAssemblies)
         {
-            Console.WriteLine("  (Microsoft.UI.Reactor.xml not found — run `dotnet build src/Reactor` first)");
-            return null;
+            var choice = FindAssemblyXml(repoRoot, assembly);
+            if (choice is null)
+            {
+                Console.WriteLine(
+                    $"  ({assembly.AssemblyName}.xml not found — run `dotnet build src/{assembly.ProjectDir}` first)");
+                return null;
+            }
+
+            // Issue #1068: name the input. Selection used to be by configuration
+            // order, so a stale Debug build silently won over a fresh Release one
+            // and the regenerated pages looked like a legitimate diff. Newest-wins
+            // fixes the choice; printing it is what makes a future recurrence
+            // diagnosable instead of invisible.
+            var xmlPath = choice.Value.Path;
+            Console.WriteLine(
+                $"  XML: {Rel(repoRoot, xmlPath)} " +
+                $"({Stamp(choice.Value.WriteUtc)}, newest of {choice.Value.CandidateCount} candidate(s))");
+
+            // The public surface (signatures, kinds, base types, parameter
+            // defaults) comes from the assembly built beside the XML file. The XML
+            // file alone cannot tell element records from other records, so a run
+            // without the assembly would rewrite the pages and prune the area pages
+            // as stale. Fail before writing or pruning anything instead.
+            var dllPath = Path.ChangeExtension(xmlPath, ".dll");
+            if (!File.Exists(dllPath))
+            {
+                var message =
+                    $"{assembly.AssemblyName}.dll not found next to {Rel(repoRoot, xmlPath)}. The reference is built " +
+                    "from the assembly and the XML file together, so no page under docs/guide/reference was " +
+                    $"written or deleted. Run `dotnet build src/{assembly.ProjectDir}` and compile again.";
+                return new ReferenceGen.ReferenceGenResult(
+                    Array.Empty<ReferenceGen.ReferencePage>(),
+                    new[] { new ReferenceGen.RefGenFinding(
+                        "REACTOR_DOC_REFGEN_003", message, Rel(repoRoot, dllPath), TierLintSeverity.Error) });
+            }
+
+            inputs.Add(new ReferenceGen.ReferenceInput(xmlPath, dllPath));
+            if (BuildStaleXmlFinding(repoRoot, xmlPath, assembly) is { } stale) staleFindings.Add(stale);
         }
-
-        // Issue #1068: name the input. Selection used to be by configuration
-        // order, so a stale Debug build silently won over a fresh Release one
-        // and the regenerated pages looked like a legitimate diff. Newest-wins
-        // fixes the choice; printing it is what makes a future recurrence
-        // diagnosable instead of invisible.
-        var xmlPath = choice.Value.Path;
-        Console.WriteLine(
-            $"  XML: {Rel(repoRoot, xmlPath)} " +
-            $"({Stamp(choice.Value.WriteUtc)}, newest of {choice.Value.CandidateCount} candidate(s))");
-
-        // The public surface (signatures, kinds, base types, parameter
-        // defaults) comes from the assembly built beside the XML file. The XML
-        // file alone cannot tell element records from other records, so a run
-        // without the assembly would rewrite the pages and prune the area pages
-        // as stale. Fail before writing or pruning anything instead.
-        var dllPath = Path.ChangeExtension(xmlPath, ".dll");
-        if (!File.Exists(dllPath))
-        {
-            var message =
-                $"Microsoft.UI.Reactor.dll not found next to {Rel(repoRoot, xmlPath)}. The reference is built " +
-                "from the assembly and the XML file together, so no page under docs/guide/reference was " +
-                "written or deleted. Run `dotnet build src/Reactor` and compile again.";
-            return new ReferenceGen.ReferenceGenResult(
-                Array.Empty<ReferenceGen.ReferencePage>(),
-                new[] { new ReferenceGen.RefGenFinding(
-                    "REACTOR_DOC_REFGEN_003", message, Rel(repoRoot, dllPath), TierLintSeverity.Error) });
-        }
-
-        var staleFinding = BuildStaleXmlFinding(repoRoot, xmlPath);
 
         // ── Spec §10.4.1 — guide ↔ reference links ────────────────────────
         // Scan every template for <!-- ref:Member --> markers so each
@@ -1055,9 +1066,8 @@ internal static partial class CompileCommand
 
         var generator = new ReferenceGen.ReferenceGenerator();
         var result = generator.Generate(
-            xmlPath,
+            inputs,
             map,
-            dllPath: dllPath,
             templateIds: templateIds,
             reverseIndex: reverseIndex,
             guideTitle: id => templateTitles.TryGetValue(id, out var title) ? title : null);
@@ -1075,9 +1085,7 @@ internal static partial class CompileCommand
         {
             Findings = result.Findings
                 .Concat(lintFindings)
-                .Concat(staleFinding is null
-                    ? Array.Empty<ReferenceGen.RefGenFinding>()
-                    : new[] { staleFinding })
+                .Concat(staleFindings)
                 .ToList(),
         };
 
@@ -1157,14 +1165,33 @@ internal static partial class CompileCommand
     /// the caller print the choice without walking <c>bin</c> a second time.
     /// </para>
     /// </remarks>
-    internal static (string Path, DateTime WriteUtc, int CandidateCount)? FindReactorXml(string repoRoot)
+    internal static (string Path, DateTime WriteUtc, int CandidateCount)? FindReactorXml(string repoRoot) =>
+        FindAssemblyXml(repoRoot, CoreAssembly);
+
+    /// <summary>
+    /// <see cref="FindReactorXml"/> for any assembly the reference documents:
+    /// the newest <c>&lt;AssemblyName&gt;.xml</c> under its project's <c>bin</c>.
+    /// </summary>
+    internal static (string Path, DateTime WriteUtc, int CandidateCount)? FindAssemblyXml(
+        string repoRoot, ReferenceAssembly assembly)
     {
-        var candidates = EnumerateReactorXmlCandidates(repoRoot).ToList();
+        var candidates = EnumerateReactorXmlCandidates(repoRoot, assembly).ToList();
         var chosen = SelectNewest(candidates);
         return chosen is null
             ? null
             : (chosen, File.GetLastWriteTimeUtc(chosen), candidates.Count);
     }
+
+    /// <summary>A project whose public API the reference documents.</summary>
+    /// <param name="ProjectDir">The folder under <c>src</c>, for example <c>Reactor</c>.</param>
+    /// <param name="AssemblyName">The assembly name, which is also the XML file name.</param>
+    internal sealed record ReferenceAssembly(string ProjectDir, string AssemblyName);
+
+    internal static readonly ReferenceAssembly CoreAssembly = new("Reactor", "Microsoft.UI.Reactor");
+    internal static readonly ReferenceAssembly AdvancedAssembly = new("Reactor.Advanced", "Microsoft.UI.Reactor.Advanced");
+
+    /// <summary>Every assembly in the API reference, core first (issue #1721).</summary>
+    internal static readonly IReadOnlyList<ReferenceAssembly> ReferenceAssemblies = new[] { CoreAssembly, AdvancedAssembly };
 
     /// <summary>
     /// The freshness rule itself, split from discovery so it can be measured:
@@ -1221,12 +1248,13 @@ internal static partial class CompileCommand
     /// build's timestamp and can only win when that build would have won.
     /// </para>
     /// </remarks>
-    internal static IEnumerable<string> EnumerateReactorXmlCandidates(string repoRoot)
+    internal static IEnumerable<string> EnumerateReactorXmlCandidates(string repoRoot, ReferenceAssembly? assembly = null)
     {
-        var binDir = Path.Combine(repoRoot, "src", "Reactor", "bin");
+        assembly ??= CoreAssembly;
+        var binDir = Path.Combine(repoRoot, "src", assembly.ProjectDir, "bin");
         if (!Directory.Exists(binDir)) return Array.Empty<string>();
 
-        return Directory.EnumerateFiles(binDir, "Microsoft.UI.Reactor.xml", new EnumerationOptions
+        return Directory.EnumerateFiles(binDir, assembly.AssemblyName + ".xml", new EnumerationOptions
         {
             RecurseSubdirectories = true,
             // A locked or permission-denied subtree is not this command's
@@ -1280,9 +1308,11 @@ internal static partial class CompileCommand
     /// postdates the build.
     /// </para>
     /// </remarks>
-    internal static ReferenceGen.RefGenFinding? BuildStaleXmlFinding(string repoRoot, string xmlPath)
+    internal static ReferenceGen.RefGenFinding? BuildStaleXmlFinding(
+        string repoRoot, string xmlPath, ReferenceAssembly? assembly = null)
     {
-        var newest = FindNewestReactorSource(repoRoot);
+        assembly ??= CoreAssembly;
+        var newest = FindNewestReactorSource(repoRoot, assembly);
         if (newest is null) return null;
 
         var xmlUtc = File.GetLastWriteTimeUtc(xmlPath);
@@ -1291,10 +1321,10 @@ internal static partial class CompileCommand
 
         return new ReferenceGen.RefGenFinding(
             "REACTOR_DOC_REFGEN_W002",
-            $"Microsoft.UI.Reactor.xml ({Stamp(xmlUtc)}) predates {Rel(repoRoot, sourcePath)} ({Stamp(sourceUtc)}) — " +
+            $"{assembly.AssemblyName}.xml ({Stamp(xmlUtc)}) predates {Rel(repoRoot, sourcePath)} ({Stamp(sourceUtc)}) — " +
             "the reference pages under docs/guide/reference/ are being generated from a build that " +
             "is older than the source it documents, so an edited <summary> will not appear (and a " +
-            "deleted one will come back). Run `dotnet build src/Reactor` and re-run this command.",
+            $"deleted one will come back). Run `dotnet build src/{assembly.ProjectDir}` and re-run this command.",
             Rel(repoRoot, xmlPath),
             TierLintSeverity.Warning);
     }
@@ -1312,9 +1342,9 @@ internal static partial class CompileCommand
     /// and a plain "strictly newer wins" scan would let enumeration order pick
     /// which file <c>REACTOR_DOC_REFGEN_W002</c> names.
     /// </remarks>
-    internal static (string Path, DateTime WriteUtc)? FindNewestReactorSource(string repoRoot)
+    internal static (string Path, DateTime WriteUtc)? FindNewestReactorSource(string repoRoot, ReferenceAssembly? assembly = null)
     {
-        var chosen = SelectNewest(EnumerateReactorSources(repoRoot));
+        var chosen = SelectNewest(EnumerateReactorSources(repoRoot, assembly));
         return chosen is null ? null : (chosen, File.GetLastWriteTimeUtc(chosen));
     }
 
@@ -1328,9 +1358,9 @@ internal static partial class CompileCommand
     /// same build, so including them would fire the warning after every
     /// successful build and train readers to ignore it.
     /// </remarks>
-    internal static IEnumerable<string> EnumerateReactorSources(string repoRoot)
+    internal static IEnumerable<string> EnumerateReactorSources(string repoRoot, ReferenceAssembly? assembly = null)
     {
-        var srcDir = Path.Combine(repoRoot, "src", "Reactor");
+        var srcDir = Path.Combine(repoRoot, "src", (assembly ?? CoreAssembly).ProjectDir);
         if (!Directory.Exists(srcDir)) return Array.Empty<string>();
 
         return Directory.EnumerateFiles(srcDir, "*.cs", new EnumerationOptions

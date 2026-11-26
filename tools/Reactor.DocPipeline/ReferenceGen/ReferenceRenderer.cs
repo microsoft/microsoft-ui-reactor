@@ -378,6 +378,12 @@ internal sealed class ReferenceRenderer
 
     private string DeclaredOnLine(ApiMember m, PageWriter w)
     {
+        var line = DeclaredOnText(m, w);
+        return PackageNote(m.Package) is { } package ? line + " " + package : line;
+    }
+
+    private string DeclaredOnText(ApiMember m, PageWriter w)
+    {
         if (m.DeclaringType.DocId == ReferencePlanner.RenderContextDocId)
             return $"Declared on {w.Md.Link(m.DeclaringType.DocId)}.";
         if (m.IsExtension && m.ExtendedTypeDocIds.Count > 0)
@@ -409,13 +415,25 @@ internal sealed class ReferenceRenderer
             var declaredIn = overloads.Select(o => o.DeclaringType)
                 .Where(t => t.DocId != ReferencePlanner.FactoriesDocId)
                 .DistinctBy(t => t.DocId, StringComparer.Ordinal).ToList();
+            var package = PackageNote(overloads);
             if (declaredIn.Count > 0)
             {
-                var names = string.Join(", ", declaredIn.Select(t => DocMarkdown.CodeSpan(t.Name)));
+                // Name the package beside each declaring class, since an overload
+                // set can mix core and Advanced overloads (`Set`, for example).
+                var names = string.Join(", ", declaredIn.Select(t =>
+                {
+                    var pkg = overloads.Where(o => o.DeclaringType.DocId == t.DocId).Select(o => o.Package)
+                        .FirstOrDefault(p => p is not null && p != CorePackage);
+                    return DocMarkdown.CodeSpan(t.Name) + (pkg is null ? string.Empty : $" (package {DocMarkdown.CodeSpan(pkg)})");
+                }));
                 // A factory outside `Factories` isn't reachable through its `using static`.
                 w.Add(factories
                     ? $"Declared in {names}. Call it through {string.Join(" or ", declaredIn.Select(t => DocMarkdown.CodeSpan($"using static {t.Namespace}.{t.DisplayName};")))}."
                     : $"Declared in {names}.");
+            }
+            else
+            {
+                w.Add(package);
             }
             w.Add(ObsoleteNote(overloads.Select(o => o.ObsoleteMessage).FirstOrDefault(m => m is not null), "method"));
 
@@ -691,11 +709,31 @@ internal sealed class ReferenceRenderer
     private string NamespaceLine(ApiType t, PageWriter w)
     {
         var sb = new StringBuilder("Namespace: ").Append(DocMarkdown.CodeSpan(t.Namespace)).Append('.');
+        if (PackageNote(t.Package) is { } package)
+            sb.Append(' ').Append(package);
         if (t.DeclaringType is not null)
             sb.Append(" Nested in ").Append(w.Md.Link(t.DeclaringType.DocId)).Append('.');
         if (t.BaseDocId is { } b && b is not ("T:System.Object" or "T:System.ValueType" or "T:System.Enum" or "T:System.MulticastDelegate"))
             sb.Append(" Inherits from ").Append(w.Md.Link(b)).Append('.');
         return sb.ToString();
+    }
+
+    /// <summary>The assembly every page assumes unless it says otherwise.</summary>
+    internal const string CorePackage = "Microsoft.UI.Reactor";
+
+    /// <summary>
+    /// "Package: X." for an API that ships outside the core package (issue #1721),
+    /// so a reader knows which NuGet package to add. Core APIs carry no note.
+    /// </summary>
+    private static string? PackageNote(string? package) =>
+        package is null || package == CorePackage ? null : $"Package: {DocMarkdown.CodeSpan(package)}.";
+
+    /// <summary><see cref="PackageNote(string?)"/> for a set of overloads, which can span packages.</summary>
+    private static string? PackageNote(IEnumerable<ApiMember> overloads)
+    {
+        var packages = overloads.Select(o => o.Package).Where(p => p is not null && p != CorePackage)
+            .Distinct(StringComparer.Ordinal).OrderBy(p => p, StringComparer.Ordinal).ToList();
+        return packages.Count == 0 ? null : $"Package: {string.Join(", ", packages.Select(p => DocMarkdown.CodeSpan(p!)))}.";
     }
 
     private static string? ObsoleteNote(string? message, string what)
@@ -915,7 +953,7 @@ internal sealed class ReferenceRenderer
                 else if (href is not null)
                 {
                     var text = s.Value.Trim();
-                    item = $"[{DocMarkdown.EscapeProse(text.Length > 0 ? text : href)}]({href})";
+                    item = $"[{DocMarkdown.EscapeProse(text.Length > 0 ? text : href)}]({md.Href(href)})";
                 }
                 if (item is not null && !items.Contains(item)) items.Add(item);
             }
@@ -1277,6 +1315,23 @@ internal sealed class ReferenceRenderer
         return anchor is not null ? href + "#" + anchor : href;
     }
 
+    private const string GuideRoot = "docs/guide/";
+
+    /// <summary>
+    /// Doc comments link to guide pages by their repo path (<c>docs/guide/win2d-canvas.md#threading</c>),
+    /// which reads right on GitHub but not from a page under <c>docs/guide/reference</c>.
+    /// Such a link is made relative to <paramref name="page"/>; any other href is kept.
+    /// </summary>
+    internal static string GuideHref(string page, string href)
+    {
+        if (!href.StartsWith(GuideRoot, StringComparison.Ordinal)) return href;
+        var target = href[GuideRoot.Length..];
+        var hash = target.IndexOf('#');
+        return hash < 0
+            ? RelativeHref(page, target, null)
+            : RelativeHref(page, target[..hash], target[(hash + 1)..]);
+    }
+
     // ── Sidebar fragment ──────────────────────────────────────────────────
 
     /// <summary>
@@ -1372,7 +1427,7 @@ internal sealed class ReferenceRenderer
         {
             _owner = owner;
             Page = page;
-            Md = new DocMarkdown(c => owner.Resolve(c, page));
+            Md = new DocMarkdown(c => owner.Resolve(c, page), href => GuideHref(page.RelativePath, href));
         }
 
         public PlannedPage Page { get; }

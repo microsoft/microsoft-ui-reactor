@@ -9,6 +9,7 @@ Item data records and support types for the property grid, masked input and virt
 | Type | Description |
 | --- | --- |
 | [Collection items](collection-items.md) | Records and enums for tree, swipe and items view content. |
+| [Data grid](data-grid.md) | The data grid component, its state, column builders and cell contexts. |
 | [Icon data](icons.md) | Records that describe an icon. |
 | [Masked input](masked-input.md) | The mask engine and formatters behind MaskedTextBox. |
 | [Menu and command bar items](menu-items.md) | Records that describe menu, menu bar, command bar and keyboard accelerator items. |

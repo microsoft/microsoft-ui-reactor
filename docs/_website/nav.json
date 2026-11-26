@@ -275,7 +275,29 @@
       "pages": [{ "file": "reference/hooks/UseDevtools.md", "label": "UseDevtools" }]
     },
     {
-      "dir": "reference/01-hooks/11-(types)",
+      "dir": "reference/01-hooks/11-(docking)",
+      "title": "Docking",
+      "pages": [
+        { "file": "reference/hooks/UseActivePaneKey.md", "label": "UseActivePaneKey" },
+        { "file": "reference/hooks/UseDockHost.md", "label": "UseDockHost" },
+        { "file": "reference/hooks/UseDockLayout.md", "label": "UseDockLayout" },
+        { "file": "reference/hooks/UseDockPanePersisted.md", "label": "UseDockPanePersisted" },
+        { "file": "reference/hooks/UseDockState.md", "label": "UseDockState" },
+        { "file": "reference/hooks/UseIsActivePane.md", "label": "UseIsActivePane" },
+        { "file": "reference/hooks/UsePane.md", "label": "UsePane" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/12-(win2d)",
+      "title": "Win2D drawing",
+      "pages": [
+        { "file": "reference/hooks/UseCanvasResources.md", "label": "UseCanvasResources" },
+        { "file": "reference/hooks/UseDrawCommand.md", "label": "UseDrawCommand" },
+        { "file": "reference/hooks/UseDrawState.md", "label": "UseDrawState" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/13-(types)",
       "title": "Types and options",
       "pages": [
         { "file": "reference/hooks/focus-helpers.md", "label": "Focus helpers" },
@@ -312,7 +334,10 @@
         { "file": "reference/elements/status-and-info.md", "label": "Status and info" },
         { "file": "reference/elements/forms.md", "label": "Forms" },
         { "file": "reference/elements/composition.md", "label": "Composition" },
-        { "file": "reference/elements/interop.md", "label": "Interop" }
+        { "file": "reference/elements/interop.md", "label": "Interop" },
+        { "file": "reference/elements/data-grid.md", "label": "Data grid" },
+        { "file": "reference/elements/docking.md", "label": "Docking" },
+        { "file": "reference/elements/win2d.md", "label": "Win2D canvas" }
       ]
     },
     { "dir": "reference/03-elements/01-(types)", "title": "Types", "glob": "reference/elements/*.md" },
@@ -334,7 +359,10 @@
         { "file": "reference/factories/status-and-info.md", "label": "Status and info" },
         { "file": "reference/factories/forms.md", "label": "Forms" },
         { "file": "reference/factories/composition.md", "label": "Composition" },
-        { "file": "reference/factories/interop.md", "label": "Interop" }
+        { "file": "reference/factories/interop.md", "label": "Interop" },
+        { "file": "reference/factories/data-grid.md", "label": "Data grid" },
+        { "file": "reference/factories/markdown.md", "label": "Markdown" },
+        { "file": "reference/factories/win2d.md", "label": "Win2D canvas" }
       ],
       "glob": "reference/factories/*.md"
     },
@@ -375,7 +403,9 @@
         { "file": "reference/modifiers/shapes.md", "label": "Shapes" },
         { "file": "reference/modifiers/status-and-info.md", "label": "Status and info" },
         { "file": "reference/modifiers/forms.md", "label": "Forms" },
-        { "file": "reference/modifiers/interop.md", "label": "Interop" }
+        { "file": "reference/modifiers/interop.md", "label": "Interop" },
+        { "file": "reference/modifiers/docking.md", "label": "Docking" },
+        { "file": "reference/modifiers/win2d.md", "label": "Win2D canvas" }
       ]
     },
     { "dir": "reference/05-modifiers/03-(types)", "title": "Types", "glob": "reference/modifiers/*.md" },
@@ -489,6 +519,7 @@
       "pages": [
         { "file": "reference/controls/index.md", "label": "Overview" },
         { "file": "reference/controls/collection-items.md", "label": "Collection items" },
+        { "file": "reference/controls/data-grid.md", "label": "Data grid" },
         { "file": "reference/controls/icons.md", "label": "Icon data" },
         { "file": "reference/controls/masked-input.md", "label": "Masked input" },
         { "file": "reference/controls/menu-items.md", "label": "Menu and command bar items" },
@@ -531,6 +562,53 @@
         { "file": "reference/extensibility/ReactorBinding-1.md", "label": "ReactorBinding<TElement>" }
       ],
       "glob": "reference/extensibility/*.md"
+    },
+    {
+      "dir": "reference/19-charting",
+      "title": "Charting",
+      "pages": [
+        { "file": "reference/charting/index.md", "label": "Overview" },
+        { "file": "reference/charting/chart-accessibility.md", "label": "Chart accessibility" },
+        { "file": "reference/charting/d3-data.md", "label": "D3: arrays and statistics" },
+        { "file": "reference/charting/d3-color-and-format.md", "label": "D3: color, format and interpolation" },
+        { "file": "reference/charting/d3-geometry.md", "label": "D3: contours, Delaunay and polygons" },
+        { "file": "reference/charting/d3-layouts.md", "label": "D3: layouts" },
+        { "file": "reference/charting/d3-scales.md", "label": "D3: scales" },
+        { "file": "reference/charting/d3-shapes.md", "label": "D3: shapes" },
+        { "file": "reference/charting/enums.md", "label": "Enums" }
+      ],
+      "glob": "reference/charting/*.md"
+    },
+    {
+      "dir": "reference/20-docking",
+      "title": "Docking",
+      "pages": [
+        { "file": "reference/docking/index.md", "label": "Overview" },
+        { "file": "reference/docking/events.md", "label": "Dock events" },
+        { "file": "reference/docking/diagnostics.md", "label": "Docking diagnostics" },
+        { "file": "reference/docking/strings.md", "label": "Docking strings" },
+        { "file": "reference/docking/layout-model.md", "label": "Layout model" },
+        { "file": "reference/docking/persistence.md", "label": "Layout persistence" },
+        { "file": "reference/docking/native.md", "label": "Native window interop" }
+      ],
+      "glob": "reference/docking/*.md"
+    },
+    {
+      "dir": "reference/21-markdown",
+      "title": "Markdown",
+      "pages": [
+        { "file": "reference/markdown/index.md", "label": "Overview" },
+        { "file": "reference/markdown/delegates.md", "label": "Delegates" },
+        { "file": "reference/markdown/enums.md", "label": "Enums" },
+        { "file": "reference/markdown/parser-details.md", "label": "Parser block and span details" }
+      ],
+      "glob": "reference/markdown/*.md"
+    },
+    {
+      "dir": "reference/22-win2d",
+      "title": "Win2D canvas",
+      "pages": [{ "file": "reference/win2d/index.md", "label": "Overview" }],
+      "glob": "reference/win2d/*.md"
     }
   ]
 }

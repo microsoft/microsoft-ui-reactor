@@ -43,6 +43,17 @@ internal sealed class ApiType
     public ApiMember? PrimaryConstructor { get; set; }
     public string? ObsoleteMessage { get; set; }
 
+    /// <summary>The assembly (and NuGet package) the type ships in, or <c>null</c> when unknown.</summary>
+    public string? Package { get; set; }
+
+    /// <summary>Stamps <paramref name="package"/> on the type and every member it declares.</summary>
+    public void SetPackage(string package)
+    {
+        Package = package;
+        foreach (var m in Members.Concat(EnumValues)) m.Package = package;
+        if (PrimaryConstructor is { } ctor) ctor.Package = package;
+    }
+
     public override string ToString() => DocId;
 }
 
@@ -76,6 +87,10 @@ internal sealed class ApiMember
     /// <summary>The literal value of a constant or enum field.</summary>
     public string? ConstantValue { get; init; }
     public string? ObsoleteMessage { get; init; }
+
+    /// <summary>The assembly (and NuGet package) the member ships in. A partial type
+    /// merged from two assemblies keeps each member's own package.</summary>
+    public string? Package { get; set; }
 
     public override string ToString() => DocId;
 }
@@ -215,8 +230,42 @@ internal sealed class ApiModel
     {
         using var stream = File.OpenRead(assemblyPath);
         using var pe = new PEReader(stream);
-        var reader = new MetadataModelReader(pe.GetMetadataReader());
-        return new ApiModel(reader.ReadTypes(), fromMetadata: true);
+        var md = pe.GetMetadataReader();
+        var reader = new MetadataModelReader(md);
+        var types = reader.ReadTypes();
+        var package = md.GetString(md.GetAssemblyDefinition().Name);
+        foreach (var t in types) t.SetPackage(package);
+        return new ApiModel(types, fromMetadata: true);
+    }
+
+    // ── Several assemblies ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Combines the models of several assemblies into one, so a cref in one
+    /// assembly resolves to a page generated from another (issue #1721). A type
+    /// declared in more than one assembly keeps the first declaration and gains
+    /// the members it lacks from the others; each member keeps its package.
+    /// </summary>
+    public static ApiModel Merge(IReadOnlyList<ApiModel> models)
+    {
+        if (models.Count == 1) return models[0];
+        var types = new Dictionary<string, ApiType>(StringComparer.Ordinal);
+        foreach (var model in models)
+        {
+            foreach (var t in model.Types)
+            {
+                if (!types.TryGetValue(t.DocId, out var existing))
+                {
+                    types[t.DocId] = t;
+                    continue;
+                }
+                var known = existing.Members.Select(m => m.DocId).ToHashSet(StringComparer.Ordinal);
+                existing.Members.AddRange(t.Members.Where(m => known.Add(m.DocId)));
+                var knownValues = existing.EnumValues.Select(m => m.DocId).ToHashSet(StringComparer.Ordinal);
+                existing.EnumValues.AddRange(t.EnumValues.Where(m => knownValues.Add(m.DocId)));
+            }
+        }
+        return new ApiModel(types.Values, models.All(m => m.FromMetadata));
     }
 }
 

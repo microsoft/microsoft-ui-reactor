@@ -13,8 +13,8 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 /// <remarks>
 /// Only the groups whose <c>dir</c> is <c>reference</c> or starts with
 /// <c>reference/</c> are compared, so the rest of <c>nav.json</c> can be
-/// restructured freely. The test needs <c>src/Reactor</c> built. In CI it runs
-/// after the docs compile has built it, and there a missing build is a failure,
+/// restructured freely. The test needs <c>src/Reactor</c> and <c>src/Reactor.Advanced</c> built. In CI it runs
+/// after the docs compile has built them, and there a missing build is a failure,
 /// not a skip.
 /// </remarks>
 public sealed class ReferenceNavTests
@@ -23,18 +23,23 @@ public sealed class ReferenceNavTests
     public void Nav_json_reference_groups_match_the_generated_fragment()
     {
         var root = TestRepo.Root;
-        var choice = CompileCommand.FindReactorXml(root);
-        var dll = choice is null ? null : Path.ChangeExtension(choice.Value.Path, ".dll");
-        if (choice is null || !File.Exists(dll))
+        var inputs = new List<ReferenceInput>();
+        foreach (var assembly in CompileCommand.ReferenceAssemblies)
         {
-            const string why = "This check needs Microsoft.UI.Reactor.xml and .dll under src/Reactor/bin. " +
-                "Run `dotnet build src/Reactor` (or the docs compile) first.";
-            Assert.False(RunningInCi, why);
-            Assert.Skip(why);
+            var choice = CompileCommand.FindAssemblyXml(root, assembly);
+            var dll = choice is null ? null : Path.ChangeExtension(choice.Value.Path, ".dll");
+            if (choice is null || !File.Exists(dll))
+            {
+                var why = $"This check needs {assembly.AssemblyName}.xml and .dll under src/{assembly.ProjectDir}/bin. " +
+                    $"Run `dotnet build src/{assembly.ProjectDir}` (or the docs compile) first.";
+                Assert.False(RunningInCi, why);
+                Assert.Skip(why);
+            }
+            inputs.Add(new ReferenceInput(choice.Value.Path, dll));
         }
 
         var map = ReferenceMap.Load(Path.Join(root, "docs", "_pipeline", "reference-map.yaml"));
-        var result = new ReferenceGenerator().Generate(choice.Value.Path, map, dllPath: dll);
+        var result = new ReferenceGenerator().Generate(inputs, map);
         var generated = JsonNode.Parse(result.NavFragment)!.AsArray().Select(g => g!).ToList();
         Assert.NotEmpty(generated);
         Assert.All(generated, g => Assert.True(IsReferenceGroup(g), $"Fragment group outside reference/: {g.ToJsonString()}"));
