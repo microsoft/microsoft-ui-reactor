@@ -258,10 +258,13 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                     var type = FindComponentType(name);
                     if (type == null) return false;
 
+                    // Pending before /preview answers, so a status read can't see the
+                    // previous component's state as this switch's.
+                    var switchGeneration = renderErrors?.Reset() ?? 0;
                     host.Window.DispatcherQueue.TryEnqueue(() =>
                     {
-                        renderErrors?.Reset();
                         var instance = (Component)Activator.CreateInstance(type)!;
+                        renderErrors?.Arm(switchGeneration);
                         host.Mount(instance);
                         host.Window.Title = $"Preview — {name}";
                     });

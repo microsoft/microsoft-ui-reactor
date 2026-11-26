@@ -216,6 +216,10 @@ internal static class ScreenshotCapture
                             failed++;
                             continue;
                         }
+                        // Wait for the switch to actually render (the request only queues
+                        // it); a timeout is left to the post-capture check, which refuses a
+                        // switch that is still pending.
+                        await WaitForSwitchRendered(http, port, SwitchRenderTimeout);
                         // Let the switch, layout and any entrance transition settle. Same
                         // settle time the old frame-timer capture used.
                         await Task.Delay(1000);
@@ -571,6 +575,43 @@ internal static class ScreenshotCapture
 
     /// <summary>Diagnostic code for a capture refused because the app showed a render error.</summary>
     internal const string RenderErrorDiagnosticCode = "REACTOR_DOC_SHOT_003";
+
+    /// <summary>
+    /// Prefix of the <c>renderError</c> the preview host reports while a component switch has
+    /// not rendered yet (<c>PreviewRenderErrorRecorder.PendingDescription</c>).
+    /// </summary>
+    internal const string PendingRenderErrorPrefix = "Pending:";
+
+    /// <summary>How long a component switch may take to render before capture goes ahead.</summary>
+    private static readonly TimeSpan SwitchRenderTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Polls <c>/status</c> until the last component switch is no longer pending, or
+    /// <paramref name="timeout"/> passes. Never throws for a status problem: the
+    /// post-capture <see cref="CheckRenderError"/> refuses the frame in every such case.
+    /// </summary>
+    internal static async Task WaitForSwitchRendered(HttpClient http, int port, TimeSpan timeout, TimeSpan? pollInterval = null)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        var interval = pollInterval ?? TimeSpan.FromMilliseconds(100);
+        while (true)
+        {
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero) return;
+            try
+            {
+                var renderError = await ReadRenderError(http, port, remaining < ComponentSwitchTimeout ? remaining : ComponentSwitchTimeout);
+                if (renderError is null || !renderError.StartsWith(PendingRenderErrorPrefix, StringComparison.Ordinal))
+                    return;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
+                                          or global::System.Text.Json.JsonException or TaskCanceledException)
+            {
+                return;
+            }
+            await Task.Delay(interval);
+        }
+    }
 
     /// <summary>
     /// Asks the preview host whether the frame just captured can be trusted. Returns <c>null</c>

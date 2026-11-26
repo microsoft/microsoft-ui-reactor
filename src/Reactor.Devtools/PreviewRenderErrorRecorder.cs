@@ -4,33 +4,44 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 /// <summary>
 /// Tracks, for <c>/status</c>, whether the previewed component rendered cleanly since the
-/// preview last switched component. The docs screenshot pipeline reads it after each capture
-/// and refuses to write a frame that shows Reactor's error panel instead of the requested
-/// component.
+/// preview last switched component. The docs screenshot pipeline waits for a switch to stop
+/// being pending, captures, then reads this again and refuses to write a frame that shows
+/// Reactor's error panel instead of the requested component.
 /// </summary>
 /// <remarks>
 /// <para>Fed by <see cref="RenderErrorDispatch.Observer"/>, which sees every error that
-/// replaces content whatever <see cref="RenderErrorHandler"/> the app configured. Written on
-/// the UI thread, read on the capture server's request threads.</para>
-/// <para>A switch is <em>pending</em> until the host completes a render (<see cref="Settle"/>):
-/// the switch only requests a render, and until it happens the window still shows the
-/// previous component, which may be an earlier error panel.</para>
+/// replaces content whatever <see cref="RenderErrorHandler"/> the app configured. Switches
+/// start on the capture server's request thread; errors and renders arrive on the UI
+/// thread.</para>
+/// <para>A switch goes through three steps. <see cref="Reset"/> marks it pending before
+/// <c>/preview</c> answers, so no status read can miss it. <see cref="Arm"/> runs on the UI
+/// thread immediately before the new root is mounted. Only after that does a completed
+/// render (<see cref="Settle"/>) or an error count: until then the window still shows, and
+/// still renders, the outgoing component.</para>
 /// </remarks>
 internal sealed class PreviewRenderErrorRecorder
 {
     internal const string PendingDescription = "Pending: the component switch has not rendered yet.";
 
-    // A private instance, so no recorded description can be mistaken for it.
-    private static readonly string s_pending = new(PendingDescription.AsSpan());
-
-    private string? _state;
+    private readonly Lock _gate = new();
+    private string? _error;
+    private bool _pending;
+    private bool _armed;
+    private int _generation;
 
     /// <summary>
-    /// The first render error since the last <see cref="Reset"/>, <see cref="PendingDescription"/>
-    /// while a switch has not rendered yet, or <c>null</c> when the current component rendered
+    /// The first render error since the last switch, <see cref="PendingDescription"/> while
+    /// that switch has not rendered yet, or <c>null</c> when the current component rendered
     /// cleanly.
     /// </summary>
-    public string? Current => Volatile.Read(ref _state);
+    public string? Current
+    {
+        get
+        {
+            lock (_gate)
+                return _error ?? (_pending ? PendingDescription : null);
+        }
+    }
 
     /// <summary>Creates a recorder and installs it as the process-wide observer.</summary>
     public static PreviewRenderErrorRecorder Install()
@@ -43,23 +54,53 @@ internal sealed class PreviewRenderErrorRecorder
     /// <summary>Reports this recorder on <paramref name="server"/>'s <c>/status</c>.</summary>
     public void AttachTo(PreviewCaptureServer server) => server.GetRenderError = () => Current;
 
-    /// <summary>Keeps the first error; replaces a pending switch.</summary>
-    public void Record(RenderError error)
+    /// <summary>
+    /// Starts a switch: clears the previous component's error and marks the switch pending.
+    /// Returns the switch's generation, for <see cref="Arm"/>.
+    /// </summary>
+    public int Reset()
     {
-        var description = Describe(error);
-        while (true)
+        lock (_gate)
         {
-            var current = Volatile.Read(ref _state);
-            if (current is not null && !ReferenceEquals(current, s_pending)) return;
-            if (ReferenceEquals(Interlocked.CompareExchange(ref _state, description, current), current)) return;
+            _error = null;
+            _pending = true;
+            _armed = false;
+            return ++_generation;
         }
     }
 
-    /// <summary>Called when the preview switches component, before the new one renders.</summary>
-    public void Reset() => Volatile.Write(ref _state, s_pending);
+    /// <summary>
+    /// Called on the UI thread immediately before the switch mounts its root. Ignored when a
+    /// later switch has started since.
+    /// </summary>
+    public void Arm(int generation)
+    {
+        lock (_gate)
+        {
+            if (_pending && generation == _generation)
+                _armed = true;
+        }
+    }
 
-    /// <summary>Called after each completed host render; ends a pending switch.</summary>
-    public void Settle() => Interlocked.CompareExchange(ref _state, null, s_pending);
+    /// <summary>Keeps the first error, ignoring the outgoing component's.</summary>
+    public void Record(RenderError error)
+    {
+        var description = Describe(error);
+        lock (_gate)
+        {
+            if (_pending && !_armed) return;
+            _error ??= description;
+        }
+    }
+
+    /// <summary>Called after each completed host render; ends an armed switch.</summary>
+    public void Settle()
+    {
+        lock (_gate)
+        {
+            if (_armed) _pending = false;
+        }
+    }
 
     internal static string Describe(RenderError error)
     {

@@ -26,21 +26,35 @@ public sealed class PreviewRenderErrorRecorderTests
         var recorder = new PreviewRenderErrorRecorder();
         Assert.Null(recorder.Current);
 
-        // A clean render after a switch settles it.
-        recorder.Reset();
+        // Pending from the moment the switch starts; a render of the outgoing component
+        // (before Arm) neither settles it nor records its errors.
+        var first = recorder.Reset();
+        recorder.Settle();
+        recorder.Record(Error("outgoing"));
         Assert.Equal(PreviewRenderErrorRecorder.PendingDescription, recorder.Current);
+
+        // Once armed, the next completed render settles it.
+        recorder.Arm(first);
         recorder.Settle();
         Assert.Null(recorder.Current);
 
-        // An error replaces the pending switch, and later errors and renders keep it.
-        recorder.Reset();
+        // An error after arming wins over pending, and later errors and renders keep it.
+        var second = recorder.Reset();
+        recorder.Arm(second);
         recorder.Record(Error("first"));
         recorder.Record(Error("second", component: null));
         recorder.Settle();
         Assert.Equal("ComponentRender in Alert: NullReferenceException: first", recorder.Current);
 
-        recorder.Reset();
+        // Arming a superseded switch does nothing: the newer one stays pending.
+        var third = recorder.Reset();
+        var fourth = recorder.Reset();
+        recorder.Arm(third);
+        recorder.Settle();
         Assert.Equal(PreviewRenderErrorRecorder.PendingDescription, recorder.Current);
+        recorder.Arm(fourth);
+        recorder.Settle();
+        Assert.Null(recorder.Current);
     }
 
     [Fact]

@@ -561,7 +561,8 @@ the compile still exited 0 ([issue #989][i989]). Several guards now prevent that
   internal observer on `RenderErrorDispatch` that sees those errors whatever
   `RenderErrorHandler` the app set. Until the switched-to component has completed
   a render, `renderError` reports the switch as pending, because the window still
-  shows the previous component. A non-null value fails that screenshot with
+  shows the previous component. Capture waits up to 10 s for that to clear before
+  taking the frame. A non-null value afterwards fails that screenshot with
   `REACTOR_DOC_SHOT_003` and writes nothing. A `/status` that cannot be read, or
   that lacks the field, fails closed the same way. Errors caught by an
   `ErrorBoundary` never reach the observer, so the error-boundary samples still

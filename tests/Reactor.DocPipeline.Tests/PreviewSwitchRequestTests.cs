@@ -116,12 +116,62 @@ public class PreviewSwitchRequestTests
         Assert.Equal(hint, refusal.Contains("Component<TProps>", StringComparison.Ordinal));
     }
 
-    private sealed class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler
+    /// <summary>
+    /// Capture waits while the switch is pending and stops as soon as it is not, without
+    /// waiting out the timeout.
+    /// </summary>
+    [Fact]
+    public async Task Capture_waits_for_a_pending_switch_to_render()
     {
+        const string pending = """{"renderError":"Pending: the component switch has not rendered yet."}""";
+        using var handler = new StubHandler(HttpStatusCode.OK, pending, pending, """{"renderError":null}""");
+        using var http = new HttpClient(handler, disposeHandler: false);
+
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(10));
+
+        Assert.Equal(3, handler.Requests);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"waited {sw.Elapsed.TotalSeconds:F1}s for a switch that rendered");
+    }
+
+    /// <summary>A switch that never renders is bounded by the timeout.</summary>
+    [Fact]
+    public async Task Capture_stops_waiting_for_a_switch_at_the_timeout()
+    {
+        using var handler = new StubHandler(HttpStatusCode.OK, """{"renderError":"Pending: the component switch has not rendered yet."}""");
+        using var http = new HttpClient(handler, disposeHandler: false);
+
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(10));
+
+        Assert.True(handler.Requests > 1);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"waited {sw.Elapsed.TotalSeconds:F1}s against a 0.3s timeout");
+    }
+
+    /// <summary>Answers <c>/status</c> with each body in turn, repeating the last.</summary>
+    private sealed class StubHandler(HttpStatusCode status, params string[] bodies) : HttpMessageHandler
+    {
+        private readonly List<HttpResponseMessage> _responses = [];
+
+        public int Requests { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Assert.Equal(ScreenshotCapture.StatusUrl(4242), request.RequestUri!.ToString());
-            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+            var body = bodies[Math.Min(Requests++, bodies.Length - 1)];
+            var response = new HttpResponseMessage(status) { Content = new StringContent(body) };
+            _responses.Add(response);
+            return Task.FromResult(response);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                foreach (var response in _responses) response.Dispose();
+                _responses.Clear();
+            }
+            base.Dispose(disposing);
         }
     }
 
