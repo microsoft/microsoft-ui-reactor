@@ -516,7 +516,7 @@ the current set.
 
 ## Next Steps
 
-- **[Reactor vs XAML](reactor-vs-xaml.md)** — Same diagram, but mapped onto the XAML concepts you already know.
+- **[Coming from XAML](xaml-developers.md)** — The XAML concepts you already know, mapped onto Reactor.
 - **[Reactivity Model](reactivity-model.md)** — Zooms into the state-setter → re-render arrow.
 - **[Reconciliation](reconciliation.md)** — Zooms into the diff box.
 - **[Hooks Internals](hooks-internals.md)** — Zooms into the slot table.

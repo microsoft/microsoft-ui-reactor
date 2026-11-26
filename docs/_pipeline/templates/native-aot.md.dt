@@ -1,0 +1,500 @@
+---
+title: "Native AOT"
+app: native-aot
+order: 2.85
+audience: intermediate
+goal: |
+  Show how to publish a Reactor app with Native AOT: why (no JIT, native
+  code, faster startup), how to turn it on (PublishAot, runtime identifiers,
+  publish commands, size options), what Reactor does for AOT (AOT-compatible
+  core, feature switches, lazy control registration and when
+  ReactorApp.RegisterAllBuiltIns() is needed), how to fix reflection and
+  trimming problems in app code and read IL2xxx / IL3xxx warnings, how to
+  keep devtools in an AOT build, and how to troubleshoot a published app.
+  Based on samples/apps/hello-world-aot and hello-world-aot-devtools-on.
+tier: comprehensive
+---
+
+# Native AOT
+
+Native AOT compiles your app to native machine code when you publish it. The
+published app does not use a JIT compiler and does not load the .NET runtime
+host. Your code, Reactor and the .NET libraries you use become one native
+`.exe`.
+
+Reactor is built for this. The core library is marked AOT compatible,
+it builds with zero trimming and AOT warnings, and CI runs the full selftest
+suite as a Native AOT binary on every pull request. Your own code must follow
+the same rules: reflection that the compiler cannot see at build time can fail
+at run time, even when the build is clean.
+
+This page shows how to turn AOT on, what Reactor does for you, how to fix
+reflection in your own code, how to keep devtools in an AOT build, and how to
+troubleshoot a published app.
+
+The page is based on two small samples:
+[`hello-world-aot`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/hello-world-aot)
+(devtools removed) and
+[`hello-world-aot-devtools-on`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/hello-world-aot-devtools-on)
+(devtools kept). For the other ways to ship an app, such as MSIX and
+single-file, see [Packaging](packaging.md).
+
+## Reference
+
+| Setting or API | Where | What it does | When you need it |
+|---|---|---|---|
+| `PublishAot` | Project file | Compiles the app to native code on `dotnet publish`. Also runs the trim and AOT analyzers on every build. | Always |
+| `-r win-x64` / `-r win-arm64` | Publish command | Picks the target. A Native AOT publish needs a runtime identifier. | Always |
+| `-p:Platform=x64` / `-p:Platform=ARM64` | Publish command | Matches the WinUI platform to the runtime identifier. | Always |
+| `InvariantGlobalization` | Project file | Leaves out culture data. Numbers and dates use the invariant culture. | Optional, for size |
+| `OptimizationPreference`, `StackTraceSupport`, `DebugType` | Project file | Make the `.exe` smaller. | Optional, for size |
+| `IlcGenerateMstatFile` | Project file | Writes a `.mstat` file that records what the compiler kept. | Optional, for size checks |
+| `Reactor.DevtoolsSupport` | `RuntimeHostConfigurationOption` | Keeps or removes the devtools code. Off by default in Release. | Only for devtools in AOT |
+| `ReactorApp.RegisterAllBuiltIns()` | Startup code | Registers every built-in control handler. | Only for element records built with `new` |
+| `EventSourceSupport` | Project file | Turns `EventSource` tracing back on. Native AOT turns it off by default. | Only for ETW tracing |
+
+![Native AOT publish flow. The project file sets PublishAot. dotnet build runs the trim and AOT analyzers and reports IL2xxx and IL3xxx warnings. dotnet publish with a win-x64 or win-arm64 runtime identifier runs ILCompiler, which removes unreachable code and produces a native MyApp.exe with no JIT. The Reactor.DevtoolsSupport feature switch is a constant for ILCompiler: when it is off, the devtools code is removed and CI checks the .mstat file for this; when it is on and the Devtools package is referenced, the devtools code is kept.](images/native-aot/publish-flow.svg)
+
+## Why Native AOT
+
+- **No JIT at run time.** The compiler turns your code into machine code
+  when you publish. The app does not compile methods while it starts.
+- **No runtime host.** The app does not load `coreclr.dll` or the other .NET
+  host files. The repo's startup benchmark notes that a non-AOT C# app pays
+  about 70–100 ms of CLR bootstrap cost compared with a pure C++ WinUI app
+  ([`tests/startup_perf/README.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/tests/startup_perf/README.md)).
+  The repo does not publish a measured AOT startup time for a Reactor app, so
+  measure your own.
+- **One native binary for your code.** Your code, Reactor and the .NET
+  libraries become one `.exe`. Files that are not .NET code, such as the
+  Windows App SDK bootstrapper and the app's `.pri` resource file, still ship
+  next to it.
+- **Only the code you use.** The compiler removes code that nothing can
+  reach. CI fails if `hello-world-aot.exe` grows over 13,107,200 bytes
+  (12.5 MiB)
+  ([`tools/Reactor.MstatVerifier`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/tools/Reactor.MstatVerifier)).
+
+The cost is that the app cannot load or generate code at run time. Code that
+finds types or members by reflection only works if the compiler can see
+those types and members at build time. A published app also has no
+[hot reload](hot-reload.md): hot reload needs the JIT, so keep Debug builds on
+JIT for the inner loop.
+
+## Turn on Native AOT
+
+Add `PublishAot` to the app project. This is the project shape of the repo's
+AOT stress benchmark, which publishes with Native AOT in CI:
+
+```xml snippet="source:tests/stress_perf/StressPerf.Reactor/StressPerf.Reactor.csproj#aot-stress-shape"
+```
+
+Set `PublishAot` for every configuration, not only Release. The property only
+changes `dotnet publish`, but it also turns on the trim and AOT analyzers for
+every build, so you see warnings while you write code.
+
+Publish once for each architecture:
+
+```powershell
+dotnet publish -c Release -r win-x64   -p:Platform=x64   -o out/x64
+dotnet publish -c Release -r win-arm64 -p:Platform=ARM64 -o out/arm64
+```
+
+The publish step calls the MSVC linker (`link.exe`). Install the Visual
+Studio C++ build tools and run the publish from a Visual Studio Developer
+Command Prompt or Developer PowerShell. The repo's own AOT instructions in
+[`TESTING.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/TESTING.md)
+do the same.
+
+The two samples in the repo set `PublishAot` only when you pass
+`-p:PublishAotInternal=true`, so a normal build of the whole repo skips the
+slow native compile. CI publishes them like this:
+
+```powershell
+dotnet publish samples/apps/hello-world-aot/HelloWorldAot.csproj -p:PublishAotInternal=true -p:Platform=x64 -r win-x64 -c Release -o out/hello-world-aot
+```
+
+Your own app does not need that property. Set `PublishAot` directly.
+
+The program itself needs nothing special. This is the whole
+`hello-world-aot` app:
+
+```csharp snippet="native-aot/program"
+```
+
+### Make the binary smaller
+
+The `hello-world-aot` sample adds these properties to stay under its CI size
+limit. All of them are optional:
+
+```xml
+<PropertyGroup>
+  <InvariantGlobalization>true</InvariantGlobalization>
+  <StackTraceSupport>false</StackTraceSupport>
+  <OptimizationPreference>Size</OptimizationPreference>
+  <IlcGenerateMstatFile>true</IlcGenerateMstatFile>
+
+  <!-- No managed or native PDB files. The native PDB is about 45 MB. -->
+  <DebugType>none</DebugType>
+  <DebugSymbols>false</DebugSymbols>
+  <NativeDebugSymbols>false</NativeDebugSymbols>
+  <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+
+  <!-- Don't copy .xml and .pdb files next to referenced assemblies. -->
+  <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
+</PropertyGroup>
+```
+
+Know what each one costs:
+
+- `InvariantGlobalization` makes number and date formatting use the
+  invariant culture. Leave it off if your app formats values for the user's
+  locale.
+- `StackTraceSupport=false` removes method names from exception stack
+  traces. Leave it on while you debug a published build.
+- Without symbols you cannot debug the published `.exe` at source level.
+
+## What Reactor does for AOT
+
+- **The core library is AOT compatible.** `Reactor.csproj` sets
+  `IsAotCompatible=true`, and the repo treats trimming and AOT warnings as
+  errors, so a change that adds unsafe reflection cannot merge.
+- **Development code sits behind feature switches.** Devtools code is guarded
+  by the `Reactor.DevtoolsSupport` switch. Release builds set it to `false`
+  with `Trim="true"`, so the compiler treats it as a constant and removes the
+  devtools code. CI publishes `hello-world-aot` and checks its `.mstat` file
+  to prove the devtools types are gone.
+- **Control families stay separate.** The core never references a specific
+  control family, such as charting or docking, directly. An app that never
+  draws a chart does not carry the charting code.
+- **Controls register lazily.** Each factory registers its control handler
+  the first time you call it. A control you never create is never
+  registered, so the compiler can remove it.
+
+### Element records built with `new`
+
+Lazy registration has one catch. If you build an element record with `new`
+instead of its factory, nothing registers its handler:
+
+```csharp snippet="native-aot/direct-record"
+```
+
+The first mount then throws `InvalidOperationException` with the message
+*No handler is registered for element type …*. This happens in JIT builds
+too; it is not specific to AOT. There are two common fixes. Call the
+factory once before the first mount. This registers only that control:
+
+```csharp snippet="native-aot/factory-touch"
+```
+
+Or register the whole built-in catalog at startup:
+
+```csharp snippet="native-aot/register-all"
+```
+
+`ReactorApp.RegisterAllBuiltIns()` is safe to call more than once and
+applies to the whole process. It is an ordinary method, so an app that never
+calls it pays nothing. An app that calls it keeps every built-in control
+handler in the binary, even the ones it never uses. That is why AOT apps that
+only use factories should not call it. The repo's AOT trim test app
+([`tests/aot_trim_proof/Reactor.AotHelloWorld`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/aot_trim_proof/Reactor.AotHelloWorld))
+never calls it.
+
+Use it when much of your code builds records with `new`, for example a hot
+loop that skips factories (see [Hot loops](advanced.md#hot-loops)). For your
+own or third-party controls, register them with
+`ControlRegistry.Register<TElement, TControl>` instead; see
+[Extending Reactor controls](extending-reactor-controls.md). Elements
+generated with `[GenerateReactorWrapper]` register from their static
+constructor, so creating one is enough.
+
+## What works and what doesn't
+
+Most of Reactor works under Native AOT: the reconciler, factories and
+modifiers, hooks, flex layout, theming, animation, commanding, Markdown,
+charting, the built-in WinUI controls, generated localization, and
+unpackaged jump lists.
+
+A few features use reflection that the compiler cannot follow. They build
+without warnings, because the library suppresses the warnings, but they fail
+at run time in an AOT app:
+
+| Feature | Use instead |
+|---|---|
+| `AutoColumns<T>` for a [data grid](data-system.md) | Explicit `Column<T>(...)` columns |
+| `UseObservableTree` on plain objects | `Observable<T>` or an observable collection |
+| PropertyGrid auto-discovery and its array editor | Register editors by hand, or use a JIT build |
+| `FormField(field, value, onChange)`, which picks the editor from a `FieldDescriptor` | `FormField(content, label: ...)` with an editor you choose |
+| Devtools DP discovery (`properties`, `setProperty`) | Inspect a JIT build |
+| `{TemplateBinding}` to private DPs in a third-party assembly with no `.xaml` file | `ReactorApp.RegisterControlAssembly(provider)` |
+
+The full list, with issue links, is in
+[`docs/aot-support.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/aot-support.md).
+
+## Reflection in your own code
+
+The compiler keeps only the code and metadata it can see. Three patterns
+cause most problems in app code. Each comment shows the warning the analyzer
+reports.
+
+### Types found by name
+
+```csharp
+// Avoid: the type name is only known at run time.
+var type = Type.GetType(pageTypeName);   // IL2057
+var page = Activator.CreateInstance(type!);
+```
+
+The compiler cannot know which type the string names, so it may remove the
+type. Name each type in code instead. A dictionary of factories keeps exactly
+the pages it lists:
+
+```csharp snippet="native-aot/page-registry"
+```
+
+### JSON without a source generator
+
+```csharp
+// Avoid: reflection-based serialization.
+var json = JsonSerializer.Serialize(settings);   // IL2026 and IL3050
+```
+
+Reflection-based `System.Text.Json` reads properties at run time and may
+generate code. Use a `JsonSerializerContext`. The source generator writes the
+serializer at build time:
+
+```csharp snippet="native-aot/json-context"
+```
+
+### Members of a generic type
+
+```csharp
+// Avoid: T has no annotation, so the compiler may remove its properties.
+static IEnumerable<string> Names<T>() =>
+    typeof(T).GetProperties().Select(p => p.Name);   // IL2090
+```
+
+Tell the compiler which members to keep with `[DynamicallyAccessedMembers]`.
+The annotation flows to every caller, so each type passed as `T` keeps its
+public properties:
+
+```csharp snippet="native-aot/dam-annotation"
+```
+
+## Read trimming and AOT warnings
+
+Warnings that start with `IL2` come from the trim analyzer. Warnings that
+start with `IL3` come from the AOT analyzer. Each one names a call that may
+fail after trimming or AOT compilation. The ones you see most often:
+
+| Warning | Meaning | Usual fix |
+|---|---|---|
+| `IL2026` | The call has `[RequiresUnreferencedCode]`: it needs code the trimmer may remove. | Use a trim-safe API, such as a source generator. |
+| `IL3050` | The call has `[RequiresDynamicCode]`: it generates code at run time. | Use a trim-safe API, such as a source generator. |
+| `IL2057` | `Type.GetType` gets a string the compiler cannot read. | Name the type in code. |
+| `IL2070`, `IL2090` | Reflection on a `Type` or `T` that has no `[DynamicallyAccessedMembers]` annotation. | Add the annotation. |
+| `IL3000` | `Assembly.Location` is empty in a single-file or AOT app. | Use `AppContext.BaseDirectory`. |
+| `IL2104`, `IL3053` | A package produced warnings. They are folded into one warning per assembly. | Set `<TrimmerSingleWarn>false</TrimmerSingleWarn>` to see each one. |
+
+Work through warnings in this order:
+
+1. Remove the reflection. Name types in code, or use a source generator.
+2. If you need reflection, annotate it with `[DynamicallyAccessedMembers]` so
+   the compiler keeps the members.
+3. If neither works, mark your own method with `[RequiresUnreferencedCode]`
+   or `[RequiresDynamicCode]`. The warning then moves to your callers, where
+   someone can decide.
+
+Do not silence a warning with `[UnconditionalSuppressMessage]` unless you
+have proved the code is safe. A suppressed warning still fails at run time.
+
+## Devtools in AOT builds
+
+By default a Release build has no devtools. The `Reactor.DevtoolsSupport`
+switch is off, the compiler removes the devtools code, and the
+`Microsoft.UI.Reactor.Devtools` package is not referenced. This is what you
+want for a shipped app.
+
+Devtools in an AOT build need three things:
+
+1. The `Microsoft.UI.Reactor.Devtools` package.
+2. The `Reactor.DevtoolsSupport` switch set to `true`.
+3. A `--devtools` argument when the app starts, for example `--devtools run`.
+
+The project file of `hello-world-aot-devtools-on` adds the first two:
+
+```xml
+<ItemGroup>
+  <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+</ItemGroup>
+
+<ItemGroup>
+  <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="{{reactorVersion}}" />
+</ItemGroup>
+```
+
+Its `Program.cs` also calls `ReactorDevtools.EnsureRegistered()`. Reactor
+loads the devtools assembly by name, which the compiler cannot follow. The
+direct call gives the compiler a reference, so it keeps the devtools
+assembly:
+
+```csharp snippet="native-aot/devtools-on"
+```
+
+Set the switch in the project file, not with `AppContext.SetSwitch` in code.
+An AOT build replaces the switch with the project file value at compile time,
+so a call at run time has no effect.
+
+To turn the switch on for one build without editing the project, pass
+`-p:ReactorDiagnostics=true`. It also turns on source maps.
+`Reactor.targets` warns not to ship a build made with it. You still need the
+Devtools package for `--devtools`.
+
+If an app built without devtools gets `--devtools run`, it does not open a
+normal window. It writes this to standard error and exits with code 2:
+
+```text
+[reactor] --devtools requested but this binary was built without Reactor.DevtoolsSupport or without the Microsoft.UI.Reactor.Devtools package. Devtools must be enabled at build time. Add the following to your csproj and rebuild:
+  <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+```
+
+Some devtools features do less under AOT. DP discovery for `properties` and
+`setProperty` returns empty results, and the tool adds a notice that says
+why. For day-to-day work, use devtools in a Debug (JIT) build. Build an AOT
+devtools binary only to look at a problem that only happens under AOT. See
+[Devtools](devtools.md) for how to use devtools.
+
+## Tracing in AOT builds
+
+Native AOT turns `EventSourceSupport` off by default, which removes all
+`EventSource` code. A published app then sends no Reactor ETW events, not
+even warnings. To trace an AOT build, opt back in:
+
+```xml
+<PropertyGroup>
+  <EventSourceSupport>true</EventSourceSupport>
+</PropertyGroup>
+```
+
+See [Diagnostics](diagnostics.md) and
+[Perf instrumentation](perf-instrumentation.md) for the events and how to
+capture them.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The publish fails at the link step, or `link.exe` is not found. | The MSVC linker is not on the path. | Install the Visual Studio C++ build tools and publish from a Developer Command Prompt. |
+| The published app crashes at startup or cannot load its XAML. | The `.pri` resource file is missing from the publish output. Older Reactor previews did not copy it. | Update Reactor. The "Publish output" section of [`docs/aot-support.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/aot-support.md) has a fix for older versions. |
+| `InvalidOperationException`: *No handler is registered for element type …* | An element record was built with `new` before anything registered its handler. | Call the factory once, register the control, or call `ReactorApp.RegisterAllBuiltIns()`. See [Element records built with `new`](#element-records-built-with-new). |
+| The process exits with code `0xC0000409`. | An unhandled managed exception. Native AOT ends the process with a fast fail. | Capture a dump, as described in `docs/aot-support.md`. Keep `StackTraceSupport` on while you debug. |
+| A feature works in a JIT build but not in the AOT build, with no warning. | Reflection behind a suppressed warning. | Check the table in [What works and what doesn't](#what-works-and-what-doesnt). |
+| A third-party control's template is broken. | Its assembly has no registered `IXamlMetadataProvider`. | Call `ReactorApp.RegisterControlAssembly(provider)` at startup. |
+| `--devtools run` prints a message and exits with code 2. | The switch is off or the Devtools package is missing. | Add both, as in [Devtools in AOT builds](#devtools-in-aot-builds). |
+| A trace of the published app has no Reactor events. | `EventSourceSupport` is off. | Set `<EventSourceSupport>true</EventSourceSupport>`. |
+
+A bug that goes away when you add a diagnostic `typeof(T).GetProperties()`
+call is still a bug. That call makes the compiler keep the metadata the app
+was missing, so it hides the problem. Delete the probe and check again.
+
+<!-- ai:caveat -->
+A clean build does not prove that an AOT app works. Several Reactor features
+suppress their trim warnings but still use reflection, and they fail at run
+time under `PublishAot=true`: `AutoColumns<T>`, `UseObservableTree` on plain
+objects, PropertyGrid auto-discovery and the `FieldDescriptor` overload of
+`FormField`. Suggest
+explicit columns and explicit observables instead. Do not suggest
+`ReactorApp.RegisterAllBuiltIns()` for an app that only uses factories,
+because it keeps every built-in control in the binary. Devtools are off in
+Release builds by default; an AOT build with devtools needs the
+`Microsoft.UI.Reactor.Devtools` package, the `Reactor.DevtoolsSupport` switch
+and a `--devtools` argument. Native AOT has no hot reload, and it emits no
+ETW events unless `EventSourceSupport` is `true`.
+<!-- /ai:caveat -->
+
+## Patterns
+
+### Set PublishAot from the first day
+
+Turn on `PublishAot` when you create the project, even if you ship with JIT
+at first. The analyzers then flag reflection while the code is still small
+and easy to change.
+
+### Test the published binary
+
+Run the published `.exe` in CI, not only the build. Reactor's CI publishes
+the selftest host with Native AOT and runs the whole suite against it,
+because a warning-free build can still fail at run time.
+
+### Name types in code
+
+Replace lookups by string with code that names each type, such as the
+[page registry](#types-found-by-name) above. The compiler then keeps exactly
+the types the app uses.
+
+### Keep a separate devtools build
+
+Ship a build with devtools removed, and keep a second build or project with
+devtools on for debugging AOT-only problems. The two `hello-world-aot`
+samples show this split.
+
+## Common Mistakes
+
+### Trusting a clean build
+
+The library suppresses warnings for features it knows use reflection, so the
+build of an app that uses `AutoColumns<T>` is clean. The app still fails at
+run time. Check [the list](#what-works-and-what-doesnt) and run the
+published binary.
+
+### Building records with `new` and no registration
+
+A component that returns `new ButtonElement(...)` before any `Button(...)`
+call throws on first mount. Call the factory once or register the control,
+as in [Element records built with `new`](#element-records-built-with-new).
+
+### Calling RegisterAllBuiltIns by habit
+
+`ReactorApp.RegisterAllBuiltIns()` keeps every built-in control handler in
+the binary. An app that only uses factories does not need it and gets
+bigger for no benefit.
+
+### Using InvariantGlobalization in a localized app
+
+`InvariantGlobalization` saves space, but numbers and dates then use the
+invariant culture for every user. Leave it off if the app shows formatted
+values. See [Localization](localization.md).
+
+### Shipping a diagnostics build
+
+A build made with `-p:ReactorDiagnostics=true` keeps devtools publishing
+code and source maps. Use it to debug, and never ship it.
+
+## Tips
+
+**Publish early.** An AOT publish is much slower than a normal build. The
+repo's selftest host takes 10–15 minutes. Publish a small app first, then
+add features, so you find problems one at a time.
+
+**Keep the inner loop on JIT.** Debug builds run with the JIT, so
+[hot reload](hot-reload.md) and full devtools keep working. Publish with AOT
+to test and ship.
+
+**Check what the compiler kept.** With `IlcGenerateMstatFile` set, the
+publish writes a `.mstat` file next to the intermediate build output. The
+repo's CI reads it with
+[`tools/Reactor.MstatVerifier`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/tools/Reactor.MstatVerifier)
+to prove that devtools types are absent.
+
+**Leave optional packages out.** Reference `Microsoft.UI.Reactor.Advanced`
+only if you use its controls. It adds [Win2D](win2d-canvas.md) to the publish output. See
+[Packaging](packaging.md).
+
+## Next Steps
+
+- **[Packaging](packaging.md)** — Choose MSIX, unpackaged or single-file, and combine it with AOT.
+- **[Samples](samples.md)** — Find the AOT samples and other apps in the repo.
+- **[Advanced](advanced.md)** — Hot loops, direct records and other escape hatches.
+- **[Extending Reactor controls](extending-reactor-controls.md)** — Register your own and third-party controls.
+- **[Devtools](devtools.md)** — Use devtools and `--devtools` activation.
+- **[Diagnostics](diagnostics.md)** — Reactor's events and how to turn them on in AOT builds.
+- **[Data system](data-system.md)** — Build data grid columns without reflection.

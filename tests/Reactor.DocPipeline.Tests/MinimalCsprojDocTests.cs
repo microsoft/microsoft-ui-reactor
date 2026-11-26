@@ -3,8 +3,8 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
-/// Guards the "Minimal Project Setup" csproj published on the docset landing
-/// page (<c>docs/_pipeline/templates/index.md.dt</c>). That block is the very
+/// Guards the "Minimal Project Setup" csproj published on the Installation
+/// page (<c>docs/_pipeline/templates/install.md.dt</c>). That block is the very
 /// first thing a new user copies, and nothing else in the pipeline validates
 /// it: it is a fenced <c>xml</c> block, so no compiler ever sees it, and it
 /// lives inside <c>ai:lock</c> markers, which authoring passes skip by design.
@@ -50,7 +50,7 @@ public class MinimalCsprojDocTests
         var projectRefs = doc.Descendants("ProjectReference").ToList();
         Assert.True(
             projectRefs.Count == 0,
-            "docs/_pipeline/templates/index.md.dt 'Minimal Project Setup' must not use ProjectReference — " +
+            "docs/_pipeline/templates/install.md.dt 'Minimal Project Setup' must not use ProjectReference — " +
             "that path does not exist for a reader outside this repo. Use " +
             $"<PackageReference Include=\"{PackageId}\" Version=\"{DocAssembler.VersionToken}\" />. " +
             "Found: " + string.Join(", ", projectRefs.Select(r => r.Attribute("Include")?.Value)));
@@ -126,13 +126,13 @@ public class MinimalCsprojDocTests
     }
 
     [Fact]
-    public void Generated_index_substitutes_the_version_and_leaks_no_token()
+    public void Generated_install_page_substitutes_the_version_and_leaks_no_token()
     {
         // End-to-end: the committed guide page a reader actually lands on must
         // show a concrete version, never the raw token.
         var repoRoot = TestRepo.Root;
         var generated = global::System.IO.File.ReadAllText(
-            global::System.IO.Path.Join(repoRoot, "docs", "guide", "index.md"));
+            global::System.IO.Path.Join(repoRoot, "docs", "guide", "install.md"));
 
         var expectedVersion = VersionSource.ReadPublicVersion(repoRoot);
 
@@ -142,13 +142,13 @@ public class MinimalCsprojDocTests
 
     /// <summary>
     /// Pulls the fenced <c>xml</c> block that follows the "Minimal Project
-    /// Setup" heading out of the landing-page template.
+    /// Setup" heading out of the Installation page template.
     /// </summary>
     private static string ExtractMinimalSetupCsproj()
     {
         var repoRoot = TestRepo.Root;
         var templatePath = global::System.IO.Path.Join(
-            repoRoot, "docs", "_pipeline", "templates", "index.md.dt");
+            repoRoot, "docs", "_pipeline", "templates", "install.md.dt");
 
         var lines = global::System.IO.File.ReadAllLines(templatePath);
 
@@ -156,7 +156,7 @@ public class MinimalCsprojDocTests
             lines, l => l.TrimStart('#', ' ').Trim().Equals("Minimal Project Setup", global::System.StringComparison.OrdinalIgnoreCase));
 
         Assert.True(headingIndex >= 0,
-            "Could not find a 'Minimal Project Setup' heading in index.md.dt. If the section was renamed, " +
+            "Could not find a 'Minimal Project Setup' heading in install.md.dt. If the section was renamed, " +
             "update this test rather than deleting it — the block it guards is the docset's most-copied code.");
 
         var open = global::System.Array.FindIndex(

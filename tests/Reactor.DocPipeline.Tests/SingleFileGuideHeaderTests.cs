@@ -8,7 +8,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
-/// Ties the file-based-app header documented in the Getting Started guide to the framework's
+/// Ties the file-based-app header documented in the Installation guide to the framework's
 /// own target framework.
 /// </summary>
 /// <remarks>
@@ -41,7 +41,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 /// </remarks>
 public class SingleFileGuideHeaderTests
 {
-    private const string GuideTemplate = "docs/_pipeline/templates/getting-started.md.dt";
+    private const string GuideTemplate = "docs/_pipeline/templates/install.md.dt";
     private const string FrameworkProject = "src/Reactor/Reactor.csproj";
 
     /// <summary>
