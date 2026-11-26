@@ -262,8 +262,11 @@ internal static class AnimateModifierTests
             Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(false);
             host.RequestRender();
             await Harness.Render();
-            // Positive control: the equal render skips, so only the setting change can drop the key.
-            H.Check("RebuiltExtras_MotionEqualRenderSkips", HasKey());
+            // Positive control: with the notification, the equal render skips, so only the setting
+            // change can drop the key. Without it (before Windows 10 2004), the root pass polls the
+            // setting and drops the key itself.
+            bool rootPassPolls = !UiSettingsCapabilities.HasAnimationsEnabledChanged;
+            H.Check("RebuiltExtras_MotionEqualRenderSkips", rootPassPolls ? !HasKey() : HasKey());
             Microsoft.UI.Reactor.Navigation.TransitionEngine.RefreshHostsForAnimationsChange();
             await Harness.Render();
             H.Check("RebuiltExtras_MotionOffDropsKey", !HasKey());
@@ -274,7 +277,7 @@ internal static class AnimateModifierTests
             H.Check("RebuiltExtras_MotionOnRestoresKey", HasKey());
 
             // Before Windows 10 2004 there's no notification, so each root pass polls the setting
-            // instead. This machine has the notification, so the fixture drives the poll itself.
+            // instead. Where the notification exists, root passes don't poll, so drive it here.
             Microsoft.UI.Reactor.Navigation.TransitionEngine.PollAnimationsEnabled();
             Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(false);
             Microsoft.UI.Reactor.Navigation.TransitionEngine.PollAnimationsEnabled();
