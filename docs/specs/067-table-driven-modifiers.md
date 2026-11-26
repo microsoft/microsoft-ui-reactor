@@ -147,10 +147,11 @@ Rows A–D are 29 of the property-writing modifiers on the main bag, and all of 
 Row E is mechanical around one hand-written resolver per family. Row F is not mechanical and this
 spec does not pretend it is.
 
-Two row A/D members carry exceptions the schema has to state, not derive. `RequestedTheme` has a
-set and an unset arm but `CleanElement` never clears it on pool return, and `AutomationName` on a
+One row A/D member carries an exception the schema has to state, not derive. `AutomationName` on a
 captioned control is replaced by a caption-derived local name right after `ApplyModifiers` runs
 (`Reconciler.Update.cs:523-529`), so "unset leaves no local value" is not true for it.
+(`RequestedTheme` used to be a second one: it had a set and an unset arm but `CleanElement` never
+cleared it on pool return. Issue #1717 added the clear.)
 
 ---
 
@@ -296,7 +297,7 @@ internal static partial class ModifierSchema
     internal static readonly ModifierSlot[] Slots =
     {
         Simple("RequestedTheme", Layout, "Microsoft.UI.Xaml.ElementTheme", Family.Theme)
-            .OnFrameworkElement(pool: NotReset("not cleared by CleanElement today")),
+            .OnFrameworkElement(pool: ClearValue),
         // One composite family = one apply call, fed by several slots, each with full metadata.
         CompositeFamily("Margin", target: "Margin", method: "ApplyMarginFamily").OnFrameworkElement(),
         Composite("Margin", Layout, Thickness, Family.Box, family: "Margin"),
@@ -547,7 +548,6 @@ must not generate it as if it were. Today's `CleanElement` has deliberate except
 
 - `TextBlock.FontSize` is reset with `tb.FontSize = 14`, not `ClearValue`, because the DP inherits
   and a clear would let a recycled `TextBlock` pick up an ancestor's size (`ElementPool.cs:587-601`).
-- `RequestedTheme` has a set and an unset arm in `ApplyModifiers` but no clear in `CleanElement`.
 - Resets run through base-type arms (`Control`, `Panel`) while the pool recycles exact types
   (`Button`, `Grid`, …), so which receivers are reset is an assignability fact
   (`ModifierUnsetClearValueTests.cs:882-889`).
@@ -557,9 +557,10 @@ So each receiver declares its `PoolReset` (`ClearValue`, `WriteDefault` with the
 declarations into a `CleanModifierBackedProperties(fe)` helper that `CleanElement` calls at the
 point its modifier clears sit today, and widens `CleanElementScan` to follow that call (§4.3). The
 non-modifier resets in `CleanElement` (tag, refresh snapshots, event handlers, theme bindings,
-facades, transitions, `Clip`, `FlowDirection`, `RenderTransform`) stay hand-written. Whether
-`RequestedTheme` *should* be reset on pool return is a behaviour question for its own issue, not
-for this migration.
+facades, transitions, `Clip`, `FlowDirection`, `RenderTransform`) stay hand-written.
+`RequestedTheme` was once a third exception, set and unset by `ApplyModifiers` but never cleared on
+pool return. Issue #1717 settled that as a bug and added the clear, so it now declares `ClearValue`
+like its row A siblings.
 
 Event wiring on poolable controls goes through the one-time trampoline and
 `ReactorState.ControlEventState` survives rent and return (issue #114). Row G slots are declared
@@ -794,8 +795,8 @@ For every (slot, receiver) the fixture mounts a representative concrete control 
    `tests/Reactor.AppTests.Host/SelfTest/Fixtures/ModifierEventFixtures.cs:784`);
 5. on a poolable receiver, a rented control matches the matrix's expected pool reset: no local
    value for `ClearValue`, the declared value for `WriteDefault` (`TextBlock.FontSize` = 14), and
-   the previous renter's value for `NotReset` (`RequestedTheme`). The last one is a known gap
-   pinned on purpose, not endorsed (the `ModifierPoolClearValueOnRent` shape, `:999`);
+   the previous renter's value for any `NotReset` row (none today; `RequestedTheme` was one until
+   issue #1717) (the `ModifierPoolClearValueOnRent` shape, `:999`);
 6. for gated slots **that have a qualifying control**, on a non-receiver control that declares a
    DP of the same name the modifier deliberately does not reach (for example
    `ContentPresenter.Padding` / `CornerRadius` / `Foreground`, or `RichTextBlock.Foreground` on the
@@ -940,8 +941,8 @@ bucket design that keeps the common case to one or two small records.
 7. **Interaction with the parallel `ApplyModifiers` extraction.** Layer 0 assumes that refactor
    lands first, or is folded into layer 0. The schema's method names for rows E–F should match
    whatever names it picks.
-8. **Pool reset gaps.** `RequestedTheme` is not cleared on pool return today (§6.2). The matrix
-   pins it as-is. Should it get its own issue?
+8. **Pool reset gaps.** *Resolved.* `RequestedTheme` was not cleared on pool return (§6.2). It got
+   its own issue, #1717, which added the clear.
 
 ---
 
