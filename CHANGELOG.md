@@ -251,9 +251,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- Changing `.Opacity()` preserves playback progress when the current keyframe entry
+  animates opacity and its trigger stays the same. Removing the looping entry or
+  finishing a one-shot applies the latest declared opacity (#1651, #1660).
+
 - **Changing only `.XYFocusKeyboardNavigation(...)` now updates the control (spec 067 §14).** The
   reconciler's skip check never compared this modifier, so an element whose only change was its
   XY focus keyboard navigation mode skipped the update and kept the old mode.
+
 - **Elements using `.Keyframes()`, `.ScrollLinked()`, an implicit transition such as
   `.OpacityTransition()`, `.WithTransitions()` or `.InteractionStates()` skip unchanged renders
   again (issue #1702; follow-up to #1536, spec 014).** Each render rebuilds these declarations with
@@ -300,8 +305,9 @@ Conventions for contributors:
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
   XAML writes that value to the visual when it first renders it, which stopped the animation, so
   `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
-  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
-  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+  once after that frame unless an intervening write, such as a `.Set(...)` callback, has taken
+  over opacity. A `.Opacity(...)` update is deferred while the keyframe still owns opacity.
+  A later style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
 
 - Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
   corrupts rows. The next re-render used to paint one row twice, with one copy frozen,

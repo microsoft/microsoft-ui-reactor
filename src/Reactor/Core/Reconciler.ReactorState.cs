@@ -76,6 +76,12 @@ public sealed partial class Reconciler
         // Composition and animation bookkeeping, allocated by the first composition feature the
         // control uses and never replaced (see CompositionState).
         internal CompositionState? Composition;
+        // A replay can drop the opacity track and leave the previous loop playing. Keep its
+        // controller for removal, while letting new opacity writes go through.
+        internal (AnimationController Controller, bool Loops, bool ReplayedWithoutOpacity)? OpacityKeyframe;
+        // The latest .Opacity() declaration. Deferred marks a value held until release. Kept here
+        // rather than on Composition so declaring opacity doesn't allocate composition state.
+        internal (float? Value, bool Deferred) DeclaredOpacity;
         // A navigation transition's completion can still reach the control after it leaves the tree.
         internal bool PoolExcluded;
         // A connected-animation source: an excluded return still drops the element it hosted.
@@ -805,9 +811,12 @@ public sealed partial class Reconciler
         state.ModifierTargets = null;
         state.MemoTransition = null;
         state.MemoWrapsDecorator = false;
+        state.OpacityKeyframe = null;
+        state.DeclaredOpacity = default;
         if (state.Composition is { } composition)
         {
             if (composition.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
+            composition.DeferredModifierResets &= ~AnimateProperty.Opacity;
             // A pending opacity restart holds a layout handler and its reconciler (#1669).
             CancelOpacityRestart(composition);
         }

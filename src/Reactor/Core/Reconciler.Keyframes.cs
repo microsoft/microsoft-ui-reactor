@@ -60,6 +60,7 @@ public sealed partial class Reconciler
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var composition = GetOrCreateCompositionState(uie);
+        var reactorState = GetOrCreateReactorState(uie);
         var keyframes = composition.Keyframes ??= new();
 
         foreach (var entry in entries)
@@ -72,6 +73,22 @@ public sealed partial class Reconciler
             var def = entry.Definition;
             var group = compositor.CreateAnimationGroup();
             var properties = GetKeyframeProperties(def);
+            if ((properties & AnimateProperty.Opacity) == 0
+                && reactorState.OpacityKeyframe is { } playback
+                && previous.Started?.TryGetValue("Opacity", out var former) == true && Equals(former, playback.Controller))
+            {
+                if (reactorState.DeclaredOpacity.Deferred || (composition.DeferredModifierResets & AnimateProperty.Opacity) != 0)
+                {
+                    bool cancelledRestart = Equals(composition.OpacityRestart?.Controller, former);
+                    CancelOpacityRestart(composition);
+                    AnimationHelper.FinishOpacityKeyframe(uie, visual, former, cancelledRestart: cancelledRestart);
+                    StopKeyframeTarget(visual, "Opacity", former);
+                }
+                else if (playback.Loops)
+                {
+                    reactorState.OpacityKeyframe = (former, playback.Loops, true);
+                }
+            }
 
             if ((properties & AnimateProperty.Opacity) != 0)
             {
@@ -164,20 +181,44 @@ public sealed partial class Reconciler
             var started = previous.Started ?? new Dictionary<string, AnimationController>(4);
             foreach (CompositionAnimation anim in group)
             {
+                if (anim.Target == "Opacity")
+                {
+                    if (StartOpacityKeyframe(uie, visual, reactorState, anim, def.Loop) is { } opacity)
+                    {
+                        started["Opacity"] = opacity;
+                        RestartKeyframeOpacityAfterXamlPush(uie, visual, entry.Name, anim, opacity, owner);
+                    }
+                    continue;
+                }
                 visual.StartAnimation(anim.Target, anim);
                 if (visual.TryGetAnimationController(anim.Target) is { } controller)
-                {
                     started[anim.Target] = controller;
-                    if (anim.Target == "Opacity")
-                        RestartKeyframeOpacityAfterXamlPush(uie, visual, entry.Name, anim, controller, owner);
-                }
             }
             keyframes[entry.Name] = new(entry.Trigger, started);
 
             if (properties != default)
-                TrackKeyframeChannelOwners(composition, properties & composition.ModifierProperties,
+                TrackKeyframeChannelOwners(composition,
+                    properties & (composition.ModifierProperties | (composition.DeferredModifierResets & AnimateProperty.Opacity)),
                     new KeyframeChannelOwner(entries, entry));
         }
+    }
+
+    private static AnimationController? StartOpacityKeyframe(UIElement uie, Visual visual, ReactorState state,
+        CompositionAnimation animation, bool loops, bool replayedWithoutOpacity = false)
+    {
+        // Only the opacity channel gates restoration. Sibling channels may be paused.
+        var batch = loops ? null : visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+        try
+        {
+            visual.StartAnimation("Opacity", animation);
+            if (visual.TryGetAnimationController("Opacity") is not { } controller) return null;
+            state.OpacityKeyframe = (controller, loops, replayedWithoutOpacity);
+            if (batch is not null)
+                batch.Completed += (_, _) => AnimationHelper.FinishOpacityKeyframe(uie, visual, controller,
+                    applyDeferredReset: false);
+            return controller;
+        }
+        finally { batch?.End(); }
     }
 
     /// <summary>
@@ -197,10 +238,12 @@ public sealed partial class Reconciler
         AnimationController? Restart()
         {
             if (composition.Keyframes is not { } keyframes || !keyframes.TryGetValue(name, out var entry)
-                || entry.Started is not { } started)
+                || entry.Started is not { } started
+                || uie.GetValue(ReactorAttached.StateProperty) is not ReactorState state
+                || state.OpacityKeyframe is not { } playback || !Equals(playback.Controller, controller)
+                || StartOpacityKeyframe(uie, visual, state, animation, playback.Loops,
+                    playback.ReplayedWithoutOpacity) is not { } restarted)
                 return null;
-            visual.StartAnimation("Opacity", animation);
-            if (visual.TryGetAnimationController("Opacity") is not { } restarted) return null;
             started["Opacity"] = restarted;
             if (composition.KeyframeChannelOwners?.TryGetValue(AnimateProperty.Opacity, out var channelOwner) == true
                 && Equals(channelOwner.DeferredController, controller))
@@ -697,9 +740,13 @@ public sealed partial class Reconciler
         {
             if (retained is not null && HasKeyframeEntry(retained, entry.Name)) continue;
             if (composition?.Keyframes is not { } keyframes || !keyframes.Remove(entry.Name, out var state)) continue;
+            bool cancelledOpacityRestart = false;
             if (state.Started?.TryGetValue("Opacity", out var opacity) == true
                 && Equals(composition.OpacityRestart?.Controller, opacity))
+            {
+                cancelledOpacityRestart = true;
                 CancelOpacityRestart(composition);
+            }
             if (!ownedOnly || noCompositor || state.Started is not { } started)
                 continue;
             // Started controllers mean the visual was already handed out. Look it up without
@@ -707,9 +754,15 @@ public sealed partial class Reconciler
             try { owner ??= ElementCompositionPreview.GetElementVisual(uie); }
             catch { noCompositor = true; continue; }
             foreach (var (property, controller) in started)
+            {
+                if (property == "Opacity")
+                    AnimationHelper.FinishOpacityKeyframe(uie, owner, controller, cancelledRestart: cancelledOpacityRestart);
                 StopKeyframeTarget(owner, property, controller);
+            }
         }
         if (ownedOnly) return;
+        if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState unmounted)
+            unmounted.OpacityKeyframe = null;
 
         // Stop composition animations so they don't keep running on pooled/unmounted controls.
         // StopAnimation is a no-op on an existing property with no running animation.
@@ -752,6 +805,11 @@ public sealed partial class Reconciler
     /// </summary>
     internal static void ForgetCompositionState(UIElement uie)
     {
+        if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState reactorState)
+        {
+            reactorState.OpacityKeyframe = null;
+            reactorState.DeclaredOpacity = default;
+        }
         if (GetCompositionState(uie) is { } state)
         {
             CancelOpacityRestart(state);

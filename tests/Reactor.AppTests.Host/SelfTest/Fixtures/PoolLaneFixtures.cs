@@ -497,14 +497,20 @@ internal static class PoolLaneFixtures
         {
             const string p = "ElementPoolLanes_MemoKeyframes";
             using var lab = new Lab(H);
-            var first = await lab.Show(Memo("k", static () => Target("M")).Keyframes("pulse", 1, Pulse));
+            var first = await lab.Show(Memo("k", static () => Target("M").Opacity(0.4)).Keyframes("pulse", 1, Pulse));
             H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
+            if (first is null) return;
+            var state = Reconciler.GetOrCreateReactorState(first);
+            H.Check(p + "_TracksOpacity", state.OpacityKeyframe is not null && state.DeclaredOpacity.Value == 0.4f);
             await lab.Show(null);
+            H.Check(p + "_ClearsOpacityState", state.OpacityKeyframe is null && state.DeclaredOpacity == default);
 
             var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));
             H.Check(p + "_Recycled", ReferenceEquals(renter, first));
-            H.Check(p + "_RenterPlays", renter is not null
-                && Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
+            // Return cleared the previous renter's local 0.4, so XAML pushes 1 to the visual on its
+            // next frame and stops this keyframe. The #1669 restart runs after a compositor commit.
+            H.Check(p + "_RenterPlays", renter is not null && await Harness.WaitForWithin(
+                () => Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"), 3000));
         }
     }
 
