@@ -2468,6 +2468,35 @@ internal static class SelfTestFixtureRegistry
         // Positive control for the three-state verdict (issue #1061). Asserts nothing on purpose;
         // its SKIPPED result is what SelfTestBatch.SkippedFixtures_AreReported checks for.
         (SkipVerdictPositiveControl.FixtureName, static harness => new SkipVerdictPositiveControl(harness)),
+
+        // FitParent container-sized rebuild (issue #174, FitParentFixtures).
+        ("FitParent_FirstCommitAtHostSize", static harness => new FitParentFixtures.FirstCommitAtHostSize(harness)),
+        ("FitParent_GrowRebuildsAtFinalSize", static harness => new FitParentFixtures.GrowRebuildsAtFinalSize(harness)),
+        ("FitParent_ShrinkRebuildsAtFinalSize", static harness => new FitParentFixtures.ShrinkRebuildsAtFinalSize(harness)),
+        ("FitParent_AsymmetricResize", static harness => new FitParentFixtures.AsymmetricResize(harness)),
+        ("FitParent_TransientTransformThenCleared", static harness => new FitParentFixtures.TransientTransformThenCleared(harness)),
+        ("FitParent_JitterDoesNotRebuild", static harness => new FitParentFixtures.JitterDoesNotRebuild(harness)),
+        ("FitParent_UnmountMidDebounceSafe", static harness => new FitParentFixtures.UnmountMidDebounceSafe(harness)),
+        ("FitParent_RecycledHostHasNoTransform", static harness => new FitParentFixtures.RecycledHostHasNoTransform(harness)),
+        ("FitParent_CallerModifiersOnWrapper", static harness => new FitParentFixtures.CallerModifiersOnWrapper(harness)),
+        ("FitParent_UnsizedParentStaysEmpty", static harness => new FitParentFixtures.UnsizedParentStaysEmpty(harness)),
+        ("FitParent_KeyedRemountSameSizeCommits", static harness => new FitParentFixtures.KeyedRemountSameSizeCommits(harness)),
+        ("FitParent_HotReloadResetCommits", static harness => new FitParentFixtures.HotReloadResetCommits(harness)),
+        ("FitParent_FillingContentGrows", static harness => new FitParentFixtures.FillingContentGrows(harness)),
+        ("FitParent_ShrinkInFlexParent", static harness => new FitParentFixtures.ShrinkInFlexParent(harness)),
+        ("FitParent_ShrinkInGridStar", static harness => new FitParentFixtures.ShrinkInGridStar(harness)),
+        ("FitParent_PieChart", static harness => new FitParentFixtures.PieChartFits(harness)),
+        ("FitParent_LineChart", static harness => new FitParentFixtures.LineChartFits(harness)),
+        ("FitParent_TreeChart", static harness => new FitParentFixtures.TreeChartFits(harness)),
+        ("FitParent_ForceGraphRecenters", static harness => new FitParentFixtures.ForceGraphRecenters(harness)),
+        ("FitParent_NoScaleDuringResize", static harness => new FitParentFixtures.NoScaleDuringResize(harness)),
+        ("FitParent_NoScaleShrinkClipped", static harness => new FitParentFixtures.NoScaleShrinkClipped(harness)),
+        ("FitParent_ShrinkToZeroHidesStaleContent", static harness => new FitParentFixtures.ShrinkToZeroHidesStaleContent(harness)),
+        ("FitParent_InsignificantCommitStopsTimer", static harness => new FitParentFixtures.InsignificantCommitStopsTimer(harness)),
+        ("FitParent_DebounceZeroCommitsImmediately", static harness => new FitParentFixtures.ImmediateDebounceCommits(harness, TimeSpan.Zero, "Zero")),
+        ("FitParent_DebounceNegativeCommitsImmediately", static harness => new FitParentFixtures.ImmediateDebounceCommits(harness, TimeSpan.FromMilliseconds(-250), "Negative")),
+        ("FitParent_OptionsOnlyDebounceZeroCommits", static harness => new FitParentFixtures.OptionsOnlyDebounceZeroCommits(harness)),
+        ("FitParent_OptionsOnlyScaleOffClearsTransient", static harness => new FitParentFixtures.OptionsOnlyScaleOffClearsTransient(harness)),
     ];
 
     public static readonly string[] AllFixtures = Registrations.Select(static entry => entry.Name).ToArray();
