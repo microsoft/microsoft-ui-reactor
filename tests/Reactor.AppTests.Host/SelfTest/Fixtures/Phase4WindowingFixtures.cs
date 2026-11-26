@@ -236,6 +236,71 @@ internal static class Phase4WindowingFixtures
         }
     }
 
+    /// <summary>
+    /// Issue #1707. Windows can silently refuse a runtime <c>HWND_TOPMOST</c> while another
+    /// process owns the foreground, which only reproduces in a locked or background session, so
+    /// the refusal is simulated with <see cref="ReactorWindow.RefuseTopmostForTests"/>: the apply
+    /// skips <c>SetWindowPos</c> and leaves the bit clear, the same observable state. Reactor must
+    /// warn once and reapply the level when one of the app's windows is next activated.
+    /// </summary>
+    internal class WindowLevelRefusedTopmostReapplied(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var spec = new WindowSpec { Title = "Refused Topmost", Width = 260, Height = 180 };
+            ReactorWindow? win = null;
+            ReactorWindow? other = null;
+            try
+            {
+                win = await OpenAndSettle(spec);
+                other = await OpenAndSettle(new WindowSpec { Title = "Refused Topmost Other", Width = 260, Height = 180 });
+                other.Activate();
+                // win must be inactive so its Activate() below is a real activation edge.
+                if (!await Harness.WaitFor(() => !win.IsActive && other.IsActive, maxPasses: 25, perPassMs: 40))
+                {
+                    const string reason = "the second window never took activation, so the reapply edge can't be driven";
+                    H.Skip("WindowLevel_RefusedTopmost_Simulated", reason);
+                    H.Skip("WindowLevel_RefusedTopmost_Warns", reason);
+                    H.Skip("WindowLevel_RefusedTopmost_WarnsOnce", reason);
+                    H.Skip("WindowLevel_RefusedTopmost_ReappliedOnActivation", reason);
+                    return;
+                }
+
+                int warningsBefore = Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests);
+                win.RefuseTopmostForTests = 1;
+                win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
+                await win.Host.WaitForIdleAsync();
+                H.Check("WindowLevel_RefusedTopmost_Simulated",
+                    win.RefuseTopmostForTests == 0 && (ExStyleBits(win) & Native.WS_EX_TOPMOST) == 0);
+                H.Check("WindowLevel_RefusedTopmost_Warns",
+                    Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests) == warningsBefore + 1);
+
+                // An unrelated spec change re-applies the level. Still refused, it must not warn again.
+                win.RefuseTopmostForTests = 1;
+                win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Retitled" });
+                await win.Host.WaitForIdleAsync();
+                H.Check("WindowLevel_RefusedTopmost_WarnsOnce",
+                    win.RefuseTopmostForTests == 0
+                    && (ExStyleBits(win) & Native.WS_EX_TOPMOST) == 0
+                    && Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests) == warningsBefore + 1);
+
+                win.Activate();
+                bool activated = await Harness.WaitFor(() => win.IsActive, maxPasses: 25, perPassMs: 40);
+                bool reapplied = await Harness.WaitFor(
+                    () => (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0, maxPasses: 25, perPassMs: 40);
+                if (!activated)
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_ReappliedOnActivation",
+                        $"Windows didn't activate the window (topmost bit {(reapplied ? "set" : "clear")}), so the reapply edge never fired");
+                    return;
+                }
+                H.Check("WindowLevel_RefusedTopmost_ReappliedOnActivation", reapplied);
+            }
+            finally { await CloseAndSettle(other, win); }
+        }
+    }
+
     internal class WindowLevelRuntimeFlip(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -256,8 +321,9 @@ internal static class Phase4WindowingFixtures
                 // still got topmost, which matches the fixture never failing in isolation. It has
                 // not been seen in CI. When the bit doesn't follow, the fixture issues the same
                 // call itself. It skips only when that is refused too and another process owns
-                // the foreground; any other mismatch fails. Reactor never reapplies a refused
-                // level, which is tracked in #1707.
+                // the foreground; any other mismatch fails. Reactor reapplies a refused level on
+                // the app's next activation (#1707, covered by WindowLevelRefusedTopmostReapplied),
+                // which this fixture doesn't wait for.
                 //
                 // Earlier, refuted hypotheses: a too-short wait, the secondary window's host not
                 // being awaited (a real gap, fixed below), and Z-order churn from leaked Floating
@@ -271,7 +337,7 @@ internal static class Phase4WindowingFixtures
                     $"registered Spec.Level==Floating={registeredFloatingSpecs} " +
                     $"(disposal NOT checked — see below)");
                 // Deliberately a SUPERSET of what actually churns Z-order:
-                // ReassertFloatingWindowsForActivation additionally skips `_disposed`, which is
+                // ReassertWindowLevelsForActivation additionally skips `_disposed`, which is
                 // private on ReactorWindow and unreachable from here even with InternalsVisibleTo.
                 // An over-count of 0 implies the participating count is also 0. Only the Floating
                 // count is asserted, not the total window count: total would red on any unrelated

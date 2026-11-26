@@ -1845,6 +1845,7 @@ internal static class SelfTestFixtureRegistry
         ("WindowLevel_Floating_AboveSiblings", static harness => new Phase4WindowingFixtures.WindowLevelFloatingAboveSiblings(harness)),
         ("WindowLevel_Floating_AboveOwner", static harness => new Phase4WindowingFixtures.WindowLevelFloatingAboveOwner(harness)),
         ("WindowLevel_RuntimeFlip", static harness => new Phase4WindowingFixtures.WindowLevelRuntimeFlip(harness)),
+        ("WindowLevel_RefusedTopmost_Reapplied", static harness => new Phase4WindowingFixtures.WindowLevelRefusedTopmostReapplied(harness)),
         ("WindowLevel_VerdictBranches", static harness => new Phase4WindowingFixtures.WindowLevelVerdictBranches(harness)),
         // Spec 054 Phase 5 — SizeToContent.
         ("SizeToContent_Width_Tracks", static harness => new Phase5WindowingFixtures.SizeToContentWidthTracks(harness)),
