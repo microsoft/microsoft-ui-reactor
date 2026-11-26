@@ -22,3 +22,7 @@ The API reference lists every public type, hook, factory method and modifier in 
 | [Validation](validation/index.md) | Validators, validation contexts and error styling for forms. |
 | [Diagnostics](diagnostics/index.md) | Tracing, source maps, component snapshots and developer tools hosting. |
 | [Extensibility](extensibility/index.md) | The control protocol, control descriptors, the reconciler and element pooling. |
+| [Charting](charting/index.md) | Charts, the D3 scales, shapes and layouts behind them, and chart accessibility. From the Microsoft.UI.Reactor.Advanced package. |
+| [Docking](docking/index.md) | The dock layout model, its events, persistence and the native window interop. From the Microsoft.UI.Reactor.Advanced package. |
+| [Markdown](markdown/index.md) | Markdown rendering options, parser callbacks and text selection. From the Microsoft.UI.Reactor.Advanced package. |
+| [Win2D canvas](win2d/index.md) | Handlers behind the Win2D canvas elements. From the Microsoft.UI.Reactor.Advanced package. |

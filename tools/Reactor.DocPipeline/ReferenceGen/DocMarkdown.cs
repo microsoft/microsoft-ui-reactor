@@ -23,10 +23,20 @@ internal sealed class DocMarkdown
     private static readonly Regex SentenceEnd = new(@"(?<=[.!?])\s+(?=[A-Z`\[*])", RegexOptions.CultureInvariant);
 
     private readonly Func<string, CrefLink> _resolve;
+    private readonly Func<string, string> _href;
 
     /// <param name="resolve">Maps a cref to a link. Called for every <c>&lt;see cref&gt;</c>,
     /// <c>&lt;seealso cref&gt;</c> and <c>&lt;exception cref&gt;</c>.</param>
-    public DocMarkdown(Func<string, CrefLink> resolve) => _resolve = resolve;
+    /// <param name="href">Rewrites an <c>href</c> for the page being written, for example a
+    /// repo-root <c>docs/guide/…</c> path into a page-relative one. Identity when null.</param>
+    public DocMarkdown(Func<string, CrefLink> resolve, Func<string, string>? href = null)
+    {
+        _resolve = resolve;
+        _href = href ?? (h => h);
+    }
+
+    /// <summary>The <c>href</c> as it should appear on this page.</summary>
+    public string Href(string href) => _href(href);
 
     /// <summary>Renders a section as Markdown blocks: paragraphs, lists and code fences,
     /// separated by blank lines. Returns an empty string for a missing or empty section.</summary>
@@ -296,7 +306,7 @@ internal sealed class DocMarkdown
             sb.Append(inner);
             return;
         }
-        sb.Append('[').Append(inner.Length > 0 ? inner : EscapeProse(href)).Append("](").Append(href).Append(')');
+        sb.Append('[').Append(inner.Length > 0 ? inner : EscapeProse(href)).Append("](").Append(_href(href)).Append(')');
     }
 
     private string InnerInline(XElement e)

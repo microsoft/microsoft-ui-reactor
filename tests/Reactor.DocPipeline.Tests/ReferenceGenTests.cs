@@ -23,7 +23,9 @@ public class ReferenceGenTests
     private const string HostingNs = "Microsoft.UI.Reactor.Hosting";
     private const string ElementId = "T:Microsoft.UI.Reactor.Core.Element";
 
-    internal static ReferenceMap Map() => ReferenceMap.Parse("""
+    internal static ReferenceMap Map() => ReferenceMap.Parse(MapYaml);
+
+    internal const string MapYaml = """
 element-base: "Microsoft.UI.Reactor.Core.Element"
 categories:
   - id: hooks
@@ -91,7 +93,7 @@ defaults:
 overrides:
   - cref: "T:Microsoft.UI.Reactor.Core.Element"
     category: elements
-""");
+""";
 
     internal const string Xml = """
 <?xml version="1.0"?>
@@ -1024,6 +1026,17 @@ overrides:
     [InlineData("reference/index.md", "reference/hooks/index.md", null, "hooks/index.md")]
     public void RelativeHref_IsRelativeToThePage(string from, string to, string? anchor, string expected) =>
         Assert.Equal(expected, ReferenceRenderer.RelativeHref(from, to, anchor));
+
+    /// <summary>Doc comments link guide pages by repo path so the link works on GitHub;
+    /// on a reference page that path has to be made relative (issue #1721).</summary>
+    [Theory]
+    [InlineData("reference/hooks/UseDrawState.md", "docs/guide/win2d-canvas.md#threading", "../../win2d-canvas.md#threading")]
+    [InlineData("reference/elements/win2d.md", "docs/guide/win2d-canvas.md", "../../win2d-canvas.md")]
+    [InlineData("reference/index.md", "docs/guide/hooks.md#rules", "../hooks.md#rules")]
+    [InlineData("reference/hooks/UseState.md", "https://learn.microsoft.com/windows/apps/", "https://learn.microsoft.com/windows/apps/")]
+    [InlineData("reference/hooks/UseState.md", "../hooks.md", "../hooks.md")]
+    public void GuideHref_MakesRepoPathsRelativeToThePage(string page, string href, string expected) =>
+        Assert.Equal(expected, ReferenceRenderer.GuideHref(page, href));
 
     /// <summary>Anchors match what the docs site computes, including code spans with
     /// generics and arrays, and the <c>_1</c> suffix for a repeated heading.</summary>

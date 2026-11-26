@@ -258,6 +258,27 @@ public class ReferenceStalenessWiringTests
     }
 
     /// <summary>
+    /// Issue #1721: the reference covers Microsoft.UI.Reactor.Advanced too, so a
+    /// missing Advanced build skips the phase exactly like a missing core one.
+    /// Generating core alone would prune every Advanced page as stale.
+    /// </summary>
+    [Fact]
+    public void Missing_advanced_build_fails_under_ci_and_leaves_pages_alone()
+    {
+        using var repo = new FakeRepo();
+        repo.PlantXml("x64/Release/net10.0-windows10.0.22621.0", Base.AddMinutes(30), withAdvanced: false);
+        repo.PlantSource("Core/Widget.cs", Base);
+        var committed = repo.PlantReferencePage("elements/docking.md", "# Docking\n");
+
+        var (exitCode, output) = repo.CompileWithReference();
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Microsoft.UI.Reactor.Advanced.xml not found", output);
+        Assert.Contains("dotnet build src/Reactor.Advanced", output);
+        Assert.True(File.Exists(committed));
+    }
+
+    /// <summary>
     /// Minimal repo the doc compiler accepts, plus the two trees issue #1068 is
     /// about: <c>src/Reactor/bin</c> (candidates) and <c>src/Reactor</c>
     /// (sources). Modelled on the fixture in
@@ -335,17 +356,26 @@ public class ReferenceStalenessWiringTests
         /// <c>Hooks</c> because that is the only category the fixture map
         /// declares, so anything else would produce zero pages and exercise less.
         /// </summary>
-        public string PlantXml(string layout, DateTime writeUtc, bool withDll = true)
+        public string PlantXml(string layout, DateTime writeUtc, bool withDll = true, bool withAdvanced = true)
         {
-            var dir = Path.Join("src", "Reactor", "bin", Native(layout));
-            if (withDll) PlantDll(Path.Join(_root, dir, "Microsoft.UI.Reactor.dll"), writeUtc);
-            return Write(dir, "Microsoft.UI.Reactor.xml",
-                """
+            // Phase 5.7 needs every documented assembly (issue #1721); Advanced
+            // is planted beside core unless a test is about its absence.
+            if (withAdvanced)
+                PlantAssembly("Reactor.Advanced", "Microsoft.UI.Reactor.Advanced", "Microsoft.UI.Reactor.Hooks.UseDraw", layout, writeUtc, withDll: true);
+            return PlantAssembly("Reactor", "Microsoft.UI.Reactor", "Microsoft.UI.Reactor.Hooks.UseState", layout, writeUtc, withDll);
+        }
+
+        private string PlantAssembly(string project, string assemblyName, string typeName, string layout, DateTime writeUtc, bool withDll)
+        {
+            var dir = Path.Join("src", project, "bin", Native(layout));
+            if (withDll) PlantDll(Path.Join(_root, dir, assemblyName + ".dll"), assemblyName, typeName, writeUtc);
+            return Write(dir, assemblyName + ".xml",
+                $"""
                 <?xml version="1.0"?>
                 <doc>
-                  <assembly><name>Reactor</name></assembly>
+                  <assembly><name>{assemblyName}</name></assembly>
                   <members>
-                    <member name="T:Microsoft.UI.Reactor.Hooks.UseState">
+                    <member name="T:{typeName}">
                       <summary>State hook.</summary>
                     </member>
                   </members>
@@ -358,14 +388,14 @@ public class ReferenceStalenessWiringTests
         /// Emits a real assembly holding the one public type the XML documents,
         /// so the reference phase reads the same surface it would from a build.
         /// </summary>
-        private static void PlantDll(string path, DateTime writeUtc)
+        private static void PlantDll(string path, string assemblyName, string typeName, DateTime writeUtc)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var assembly = new System.Reflection.Emit.PersistedAssemblyBuilder(
-                new System.Reflection.AssemblyName("Microsoft.UI.Reactor"), typeof(object).Assembly);
-            var module = assembly.DefineDynamicModule("Microsoft.UI.Reactor");
+                new System.Reflection.AssemblyName(assemblyName), typeof(object).Assembly);
+            var module = assembly.DefineDynamicModule(assemblyName);
             module.DefineType(
-                "Microsoft.UI.Reactor.Hooks.UseState",
+                typeName,
                 System.Reflection.TypeAttributes.Public | System.Reflection.TypeAttributes.Class |
                 System.Reflection.TypeAttributes.Abstract | System.Reflection.TypeAttributes.Sealed).CreateType();
             assembly.Save(path);

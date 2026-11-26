@@ -266,6 +266,15 @@ Conventions for contributors:
   issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
   the app's own repository. The cards use soft color gradients drawn in CSS, so they need no image files.
 
+- **The API reference now covers `Microsoft.UI.Reactor.Advanced`.** Charting (with the D3
+  scales, shapes and layouts, and chart accessibility), the data grid, docking, Markdown and the
+  Win2D canvas have reference pages. Their elements, factories, modifiers and hooks are listed
+  next to the core ones, and their other types get new Charting, Docking, Markdown and Win2D
+  canvas sections. Every Advanced page says which package it comes from. Links between the two
+  packages work, for example from an Advanced element to the core `Element`. The docs compile
+  now reads `Microsoft.UI.Reactor.Advanced.xml` and its DLL beside the core ones, and a
+  `--ci` compile fails if either build is missing (issue #1721).
+
 ### Deprecated
 
 ### Removed
