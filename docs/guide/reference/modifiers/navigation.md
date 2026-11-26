@@ -1109,8 +1109,8 @@ Declared in `ElementExtensions`.
 ## `WithNavigation`
 
 ```csharp
-TitleBarElement WithNavigation<TRoute>(this TitleBarElement el, NavigationHandle<TRoute> nav)
-NavigationViewElement WithNavigation<TRoute>(this NavigationViewElement el, NavigationHandle<TRoute> nav, Func<TRoute, string?> routeToTag, Func<string, TRoute> tagToRoute, Func<TRoute>? settingsRoute = null)
+TitleBarElement WithNavigation<TRoute>(this TitleBarElement el, NavigationHandle<TRoute> nav) where TRoute : notnull
+NavigationViewElement WithNavigation<TRoute>(this NavigationViewElement el, NavigationHandle<TRoute> nav, Func<TRoute, string?> routeToTag, Func<string, TRoute> tagToRoute, Func<TRoute>? settingsRoute = null) where TRoute : notnull
 ```
 
 Declared in `ElementExtensions`.

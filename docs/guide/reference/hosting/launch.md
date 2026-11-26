@@ -111,7 +111,7 @@ public static LaunchActivation Normal  // get
 Resolve [`LaunchActivation.Arguments`](#arguments) as a deep-link URI through the supplied [`DeepLinkMap<TRoute>`](../navigation/DeepLinkMap.md). Returns `true` only when [`LaunchActivation.Arguments`](#arguments) is non-empty **and** the map matched a registered pattern. The shell-launch convention for Reactor is that jump-list / tray / thumbnail-toolbar entries carry deep-link URIs in their argument strings (see [`JumpListItem.ForUri`](taskbar.md#foruri)); this helper plumbs that convention into the navigation system. (spec 036 §11.6)
 
 ```csharp
-public bool TryResolve<TRoute>(DeepLinkMap<TRoute> map, out DeepLinkResult<TRoute> result)
+public bool TryResolve<TRoute>(DeepLinkMap<TRoute> map, out DeepLinkResult<TRoute> result) where TRoute : notnull
 ```
 
 **Parameters**

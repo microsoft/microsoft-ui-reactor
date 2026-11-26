@@ -72,6 +72,21 @@ public sealed class ReferenceFromAssemblyTests
         Assert.Equal("default", Assert.Single(pick.Params).Default);
     }
 
+    /// <summary><c>notnull</c> is written where the source has it, on a type and on a
+    /// method, and not on an unconstrained, <c>class</c> or interface-constrained
+    /// parameter, which carry the same metadata flag for a different reason.</summary>
+    [Fact]
+    public void NotNullConstraint_IsWritten()
+    {
+        var type = Model.Value.TypesByDocId["T:" + typeof(FixtureApi).Namespace + ".NotNullFixture`1"];
+        Assert.Equal("public class NotNullFixture<TRoute> where TRoute : notnull", type.Declaration);
+        string Sig(string name) => Assert.Single(type.Members, m => m.Name == name).Signature;
+        Assert.Equal("public static TKey Keyed<TKey>(TKey key) where TKey : notnull", Sig("Keyed"));
+        Assert.Equal("public static T Free<T>(T value)", Sig("Free"));
+        Assert.Equal("public static T Reference<T>(T value) where T : class", Sig("Reference"));
+        Assert.Equal("public static T Typed<T>(T value) where T : IComparable", Sig("Typed"));
+    }
+
     /// <summary>A <c>required</c> member keeps its modifier, and the <c>[Obsolete]</c>
     /// Roslyn adds to the constructor for old compilers is not a deprecation. An
     /// <c>[Obsolete]</c> the author wrote still is.</summary>
