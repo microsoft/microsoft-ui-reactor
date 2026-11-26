@@ -163,6 +163,14 @@ public class TierLintTests
     }
 
     [Fact]
+    public void An_inline_triple_backtick_span_is_not_a_fence()
+    {
+        var lead = string.Join(' ', Enumerable.Repeat("word", 80));
+        var body = $"# Title\n\n```UseState``` is a hook.\n\n{lead}\n\n## First section\n";
+        Assert.True(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
     public void Mental_model_lead_does_not_count_code_inside_a_longer_fence()
     {
         var code = string.Join(' ', Enumerable.Repeat("token", 80));

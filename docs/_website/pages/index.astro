@@ -14,6 +14,7 @@ import { SHOWCASE_APPS } from "../components/showcase-apps";
 import codeIcon from "../components/fluent/code_24_regular.svg?raw";
 import contentViewIcon from "../components/fluent/content_view_24_regular.svg?raw";
 import syncIcon from "../components/fluent/arrow_sync_24_regular.svg?raw";
+import { legacyFragmentScript } from "../scripts/legacy-fragments.mjs";
 
 const { config, navigation, fontCssVars } = data;
 
@@ -146,6 +147,7 @@ const [frontShot, backShot] = showcaseShots;
     route: "/",
   }}
 >
+  <script is:inline set:html={legacyFragmentScript(href("/get-started"))} />
   <div class="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6 sm:pt-16 lg:px-8">
     <!-- What Reactor is -->
     <section aria-labelledby="intro-title">

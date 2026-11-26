@@ -18,7 +18,9 @@ internal sealed partial class MarkdownFence
         var m = FenceRun().Match(trimmed);
         if (_open is null)
         {
-            if (!m.Success) return false;
+            // A backtick fence's info string can't contain a backtick, so a
+            // line like ```x``` is an inline code span, not an opening fence.
+            if (!m.Success || (m.Value[0] == '`' && trimmed[m.Length..].Contains('`'))) return false;
             _open = m.Value;
             return true;
         }

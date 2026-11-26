@@ -66,6 +66,16 @@ public class WinUiRefFrontMatterTests
     }
 
     [Fact]
+    public void An_inline_triple_backtick_span_does_not_hide_the_first_section()
+    {
+        var body = "# Page\n\n```UseState``` is a hook.\n\n## Usage\n\nBody.\n";
+
+        var result = TemplateParser.InsertBeforeFirstSection(body, "CALLOUT").Replace("\r\n", "\n");
+
+        Assert.Contains("hook.\n\nCALLOUT\n\n## Usage", result);
+    }
+
+    [Fact]
     public void Title_cases_hyphenated_path_segments()
     {
         var content = """
