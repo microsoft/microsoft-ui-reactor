@@ -143,20 +143,23 @@ internal static class DevtoolsFixtures
         private readonly bool _verbose;
         private long _lastMs;
 
-        private StageClock()
+        private StageClock(bool verbose) => _verbose = verbose;
+
+        private static StageClock Start()
         {
-            _verbose = Interlocked.Increment(ref s_clockCount) == 1;
-            if (_verbose)
+            var verbose = Interlocked.Increment(ref s_clockCount) == 1;
+            if (verbose)
             {
                 Console.WriteLine($"# Devtools stage: first MCP fixture in process, system proxy {DescribeSystemProxy()}");
             }
+            return new StageClock(verbose);
         }
 
         /// <summary>
         /// Called by <see cref="MountRoot"/>, the first step of every MCP fixture, before it
         /// mounts. Returns the clock so the mount stage prints as soon as it completes.
         /// </summary>
-        internal static StageClock FixtureStarting() => s_pendingFixture = new StageClock();
+        internal static StageClock FixtureStarting() => s_pendingFixture = Start();
 
         /// <summary>Continues the clock <see cref="MountRoot"/> started, or starts one.</summary>
         internal static StageClock ForHarness()
@@ -168,7 +171,7 @@ internal static class DevtoolsFixtures
                 pending.Mark("rendered");
                 return pending;
             }
-            var stages = new StageClock();
+            var stages = Start();
             stages.Mark("harness created");
             return stages;
         }
