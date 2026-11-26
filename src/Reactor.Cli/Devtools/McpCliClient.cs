@@ -28,7 +28,7 @@ internal sealed class McpCliClient : IDisposable
     {
         _endpoint = endpoint;
         _token = token;
-        _http = new HttpClient { Timeout = timeout ?? TimeSpan.FromSeconds(30) };
+        _http = LoopbackHttpClient.Create(timeout ?? TimeSpan.FromSeconds(30));
         if (!string.IsNullOrEmpty(token))
         {
             _http.DefaultRequestHeaders.Authorization =

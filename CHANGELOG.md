@@ -295,6 +295,14 @@ Conventions for contributors:
   rendering its whole subtree in the dark theme. The pool now clears it, like every other modifier
   value.
 
+- **`mur devtools` traffic to `127.0.0.1` no longer goes through the system proxy (issue #1718).**
+  The CLI's devtools client and its session liveness probe used a default `HttpClient`. With
+  Windows "Automatically detect settings" on, every request first asked WinHTTP for a proxy, so
+  slow WPAD discovery could use up the probe's 500 ms budget, and a PAC script that doesn't exempt
+  loopback sent the request to a proxy that can't reach the app. When that happened, a live session
+  read as stale and the CLI deleted its lockfile. These clients now connect directly, and only to
+  loopback.
+
 - `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
   support common `.Foreground(brush)` modifiers and interaction-state foreground
   overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and

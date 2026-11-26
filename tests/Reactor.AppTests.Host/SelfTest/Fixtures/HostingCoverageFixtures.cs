@@ -557,7 +557,7 @@ internal static class HostingCoverageFixtures
             };
             server.Start();
 
-            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}/") };
+            using var client = DevtoolsFixtures.CreateLoopbackClient(server.Port);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
 
             using var status = await client.GetAsync("status");
@@ -605,7 +605,7 @@ internal static class HostingCoverageFixtures
             using var missingPath = await client.GetAsync("missing");
             H.Check("Preview_MissingPath404", missingPath.StatusCode == HttpStatusCode.NotFound);
 
-            using var noAuth = new HttpClient { BaseAddress = client.BaseAddress };
+            using var noAuth = DevtoolsFixtures.CreateLoopbackClient(server.Port);
             using var unauthorized = await noAuth.GetAsync("status");
             H.Check("Preview_Unauthorized401", unauthorized.StatusCode == HttpStatusCode.Unauthorized);
 
