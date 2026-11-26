@@ -4516,8 +4516,9 @@ against the public surface only).</p>
 descriptor and the handler instance are registered once per host.
 Per-control state needs to live on the <strong>control</strong> — either on the
 attached state DP (use <code>Reconciler.SetElementTag</code> / <code>GetElementTag</code>)
-or on the typed event payload box (use
-<code>Reconciler.GetOrCreateControlEventPayload&lt;TPayload&gt;</code>). The pool
+or on the typed event payload box (declare it through the
+<code>HandCodedEvent&lt;TPayload, …&gt;</code> / <code>HandCodedControlled&lt;TPayload, …&gt;</code>
+descriptor builders, whose <code>slotIsNull</code> / <code>setSlot</code> pair manages the box). The pool
 reset contract clears both on <code>ReturnControl</code>; descriptor-level state
 survives pool rent and corrupts the next mount.</p>
 <p><strong>Passing a non-<code>static</code> lambda to <code>ControlRegistry.Register</code>.</strong> The

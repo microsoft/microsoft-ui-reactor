@@ -3920,7 +3920,7 @@ pool. If you stash per-control state in a field on the handler
 instance, it survives pool rent — and that is almost certainly a bug.
 Per-control state lives on the <strong>control</strong>, either as an attached
 state DP or as the typed event payload box
-(<a href="#echo-suppression-and-writesuppressed"><code>Reconciler.GetOrCreateControlEventPayload</code></a>),
+(<a href="#echo-suppression-and-writesuppressed"><code>ModifierEvents.GetOrCreateControlEventPayload</code></a>),
 both of which the pool reset contract clears. The handler instance is
 a stateless interpreter.</p>
 </blockquote>
@@ -4406,7 +4406,7 @@ the suppress counter on entry — every controlled prop in every built-in
 handler is echo-safe without the handler author having to think
 about it. Hand-authored trampolines (the ones that bypass
 <code>OnCustomEvent</code> for performance) follow the same shape; see
-<code>Reconciler.GetOrCreateControlEventPayload</code> for the per-control
+<code>ModifierEvents.GetOrCreateControlEventPayload</code> for the per-control
 payload box that anchors the trampoline for the control's lifetime.</p>
 <h2 id="element-identity-via-the-tag">Element identity via the tag<a class="headerlink" href="#element-identity-via-the-tag" title="Permanent link">&para;</a></h2>
 <p>Every framework element record is anchored on its mounted
