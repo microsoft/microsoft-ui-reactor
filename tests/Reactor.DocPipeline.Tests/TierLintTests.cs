@@ -163,6 +163,14 @@ public class TierLintTests
     }
 
     [Fact]
+    public void Mental_model_lead_does_not_count_an_indented_code_block()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\nShort intro.\n\n    {code}\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
     public void A_fence_marker_indented_four_spaces_does_not_close_the_block()
     {
         var code = string.Join(' ', Enumerable.Repeat("token", 80));
