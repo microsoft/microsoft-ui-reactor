@@ -257,7 +257,8 @@ public sealed partial class Reconciler
     // flyout decorator or keyed memo layered over another element's control. Only the owner's
     // inline overlays are recorded (issue #965).
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
-        bool keepRemovedBackground = false, bool ownsControl = false)
+        bool keepRemovedBackground = false, bool ownsControl = false,
+        ForegroundModifier.UpdateAction foregroundUpdate = ForegroundModifier.UpdateAction.None)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -278,7 +279,7 @@ public sealed partial class Reconciler
         ApplyToolTipAndFlyoutModifiers(fe, oldM, m, requestRerender);
         ApplyIsEnabledModifier(fe, oldM, m);
         ApplyBorderModifiers(fe, oldM, m, ownsControl);
-        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground);
+        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate);
         ApplyAutomationAndFocusModifiers(fe, oldM, m);
 
         // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
@@ -672,7 +673,8 @@ public sealed partial class Reconciler
     }
 
     /// <summary>Background and Foreground.</summary>
-    private static void ApplyBackgroundAndForegroundModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool keepRemovedBackground)
+    private static void ApplyBackgroundAndForegroundModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool keepRemovedBackground,
+        ForegroundModifier.UpdateAction foregroundUpdate)
     {
         // Background (Panel, Control, or Border)
         if (m.Background is not null && !ReferenceEquals(m.Background, oldM?.Background))
@@ -688,17 +690,7 @@ public sealed partial class Reconciler
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
         }
 
-        // Foreground (Control or TextBlock)
-        if (m.Foreground is not null && !ReferenceEquals(m.Foreground, oldM?.Foreground))
-        {
-            if (fe is WinUI.Control fgCtrl) fgCtrl.Foreground = m.Foreground;
-            else if (fe is TextBlock fgTb) fgTb.Foreground = m.Foreground;
-        }
-        else if (m.Foreground is null && oldM?.Foreground is not null)
-        {
-            if (fe is WinUI.Control fgCtrl) fgCtrl.ClearValue(WinUI.Control.ForegroundProperty);
-            else if (fe is TextBlock fgTb) fgTb.ClearValue(TextBlock.ForegroundProperty);
-        }
+        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate);
     }
 
     /// <summary>AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.</summary>

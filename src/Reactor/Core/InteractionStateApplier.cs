@@ -63,6 +63,28 @@ internal static class InteractionStateApplier
 
     internal enum InteractionState { Normal, PointerOver, Pressed, Focused }
 
+    internal static void RestoreInteractionForeground(FrameworkElement element)
+    {
+        if (InteractionTrackerOf(element) is { } tracker
+            && ForegroundModifier.GetProperty(element) is { } property)
+            ApplyInteractionBrush(element, property, stateBrush: null,
+                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
+    }
+
+    internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement)
+    {
+        // Leave the visible state brush in place while it still owns the local value.
+        if (InteractionTrackerOf(element) is not { } tracker
+            || !tracker.ForegroundOverrideApplied
+            || !ReferenceEquals(tracker.NormalForeground, previous)
+            || ForegroundModifier.GetProperty(element) is not { } property
+            || !ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground))
+            return false;
+
+        tracker.NormalForeground = replacement;
+        return true;
+    }
+
     /// <summary>
     /// Sets up or updates InteractionStates on an element. Registers pointer event handlers
     /// on first setup; updates cached config on subsequent calls.
@@ -244,13 +266,7 @@ internal static class InteractionStateApplier
             ApplyInteractionBrush(fe, backgroundProperty, values?.Background,
                 ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
 
-        var foregroundProperty = fe switch
-        {
-            WinUI.Control => WinUI.Control.ForegroundProperty,
-            TextBlock => TextBlock.ForegroundProperty,
-            _ => null,
-        };
-        if (foregroundProperty is not null)
+        if (ForegroundModifier.GetProperty(fe) is { } foregroundProperty)
             ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
                 ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 

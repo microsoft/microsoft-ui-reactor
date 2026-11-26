@@ -61,6 +61,8 @@ namespace Microsoft.UI.Xaml.Controls
     public class Button : Control { }
     public class TextBlock : FrameworkElement { }
     public class RichTextBlock : FrameworkElement { }
+    public class IconElement : FrameworkElement { }
+    public class AnimatedIcon : IconElement { }
     public class Image : FrameworkElement { }
 }
 
@@ -158,6 +160,9 @@ namespace Microsoft.UI.Reactor.Core
     [GenerateReactorDescriptor(typeof(WinUI.RichTextBlock))]
     public record RichTextBlockElement : Element { }
 
+    [GenerateReactorDescriptor(typeof(WinUI.AnimatedIcon))]
+    public record AnimatedIconElement : Element { }
+
     [GenerateReactorDescriptor(typeof(WinUI.Image))]
     public record ImageElement : Element { }
 
@@ -199,6 +204,7 @@ namespace Microsoft.UI.Reactor.Core
         public static ButtonElement Button() => new();
         public static TextBlockElement Text(string s) => new();
         public static RichTextBlockElement RichTextBlock() => new();
+        public static AnimatedIconElement AnimatedIcon() => new();
         public static ImageElement Image(string s) => new();
         public static TemplatedListElement<T> TemplatedList<T>() => new();
         public static FlexElement Flex() => new();
@@ -242,6 +248,7 @@ namespace Microsoft.UI.Reactor
         public static ButtonElement Set(this ButtonElement el, Action<WinUI.Button> configure) => el;
         public static TextBlockElement Set(this TextBlockElement el, Action<WinUI.TextBlock> configure) => el;
         public static RichTextBlockElement Set(this RichTextBlockElement el, Action<WinUI.RichTextBlock> configure) => el;
+        public static AnimatedIconElement Set(this AnimatedIconElement el, Action<WinUI.AnimatedIcon> configure) => el;
         public static ImageElement Set(this ImageElement el, Action<WinUI.Image> configure) => el;
         public static TemplatedListElement<T> Set<T>(this TemplatedListElement<T> el, Action<WinUI.Image> configure) => el;
         public static FlexElement Set(this FlexElement el, Action<global::Microsoft.UI.Reactor.Layout.FlexPanel> configure) => el;
@@ -685,12 +692,15 @@ namespace TestApp
     }
 
     [Fact]
-    public async Task Only_Themed_Generic_Foreground_Applies_To_A_RichTextBlock()
+    public async Task Both_Generic_Foreground_Overloads_Use_The_Shared_Receiver_Gate()
     {
         var body = App(@"
-        internal static Element Themed(ThemeRef t) => RichTextBlock().Foreground(t);
-        internal static Element ExplicitGeneric(Brush b) => RichTextBlock().{|REACTOR_MOD_003:Foreground<RichTextBlockElement>|}(b);
-        internal static Element UnsupportedControl(ThemeRef t) => Border().{|REACTOR_MOD_003:Foreground|}(t);");
+        internal static Element RichTextTheme(ThemeRef t) => RichTextBlock().Foreground(t);
+        internal static Element RichTextBrush(Brush b) => RichTextBlock().Foreground<RichTextBlockElement>(b);
+        internal static Element IconTheme(ThemeRef t) => AnimatedIcon().Foreground(t);
+        internal static Element IconBrush(Brush b) => AnimatedIcon().Foreground(b);
+        internal static Element UnsupportedTheme(ThemeRef t) => Border().{|REACTOR_MOD_003:Foreground|}(t);
+        internal static Element UnsupportedBrush(Brush b) => Border().{|REACTOR_MOD_003:Foreground|}(b);");
 
         await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
     }

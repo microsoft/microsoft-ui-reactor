@@ -232,11 +232,12 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 they now ship — `_002` flags a hook after a single-guard early return, `_003`
 flags an `async`-void `UseEffect` body (spec 060 §4.1).
 
-`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for writes through
-`ApplyModifiers`. When a `ThemeRef` overload has a separate receiver list,
-the rule uses `ThemeControlGate`. For example, the generic brush overload of
-`Foreground` reaches `Control` and `TextBlock`, and the `ThemeRef` overload
-also reaches `RichTextBlock`.
+`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for common modifier writes.
+When a `ThemeRef` overload has a separate receiver list,
+the rule uses `ThemeControlGate`. Generic `Foreground` overloads share a receiver gate for
+`Control`, `TextBlock`, `RichTextBlock`, and `IconElement`. The runtime uses
+the same dependency-property lookup for common foreground brush modifiers, theme bindings,
+and `InteractionStates` foreground overrides.
 
 ## Combined sizing without extra copies
 
