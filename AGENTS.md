@@ -355,7 +355,11 @@ point of return: stop and ship.
   to `ModifierTable.Properties`, which takes its gates from the slot. A `Brush` or
   `FontFamily` field runs in the `ModifierFieldContract_BrushAndFont` selftest instead: add it to
   `ModifierFieldContractSelfTestFields` and a `CheckField` line in `ModifierFieldContractFixture`.
-  Update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067).
+  Update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067). A simple, converted
+  or attached field also gets a typed probe: run `dotnet run --project tools/Reactor.ModifierGen`
+  (a stale `ModifierProbes.Generated.cs` fails `ModifierMatrixSchemaAgreementTests`), then add its
+  rows to `ModifierMatrixExpectations` and sample values to `ModifierMatrixFixtures.SampleValues`.
+  The matrix is hand-written on purpose so a schema mistake can't certify itself.
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via
   `EnforceCodeStyleInBuild`), so an `object` gate fails the Release build. Keep `object` only
