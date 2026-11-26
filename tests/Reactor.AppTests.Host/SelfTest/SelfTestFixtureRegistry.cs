@@ -979,6 +979,8 @@ internal static class SelfTestFixtureRegistry
         ("Animate_ConfigurationChildSkip", static harness => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: true)),
         ("Animate_ExtrasAcrossUpdates", static harness => new AnimateModifierTests.ExtrasAcrossUpdates(harness, childSkip: false)),
         ("Animate_ExtrasChildSkip", static harness => new AnimateModifierTests.ExtrasAcrossUpdates(harness, childSkip: true)),
+        ("Animate_RebuiltExtrasSkip", static harness => new AnimateModifierTests.RebuiltExtrasSkip(harness, childSkip: false)),
+        ("Animate_RebuiltExtrasChildSkip", static harness => new AnimateModifierTests.RebuiltExtrasSkip(harness, childSkip: true)),
         // Animation system — InteractionStates
         ("InterState_StateMachineTransitions", static harness => new InteractionStatesTests.StateMachineTransitions(harness)),
         ("InterState_PressedInheritsPointerOver", static harness => new InteractionStatesTests.PressedInheritsFromPointerOver(harness)),

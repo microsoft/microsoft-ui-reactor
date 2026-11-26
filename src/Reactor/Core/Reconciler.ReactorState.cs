@@ -374,6 +374,7 @@ public sealed partial class Reconciler
             && CallSiteChangedOnSkip(oldElement, newElement))
             PublishSourceOnSkip(control, newElement);
         GestureDispatch.RefreshGestureDragStateOnSkip(control, oldElement.Modifiers, newElement.Modifiers);
+        RetargetKeyframeOwnersOnSkip(control, oldElement, newElement);
     }
 
     /// <summary>
