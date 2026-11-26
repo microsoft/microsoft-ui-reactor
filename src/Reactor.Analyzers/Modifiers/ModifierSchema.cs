@@ -4,8 +4,10 @@ namespace Microsoft.UI.Reactor.Analyzers.Modifiers;
 
 /// <summary>
 /// Spec 067 §4.2: every common-modifier field, declared once. The array order is the order the
-/// reconciler applies the arms (spec 067 §5), pinned against <c>ApplyModifiers</c> by
-/// <c>ModifierSchemaTests</c> in Reactor.Tests.
+/// reconciler applies the arms (spec 067 §5): property slots are pinned against
+/// <c>ApplyModifiers</c> / <c>ApplyAccessibilityModifiers</c> and reference edges against
+/// <c>ApplyModifierReferenceEdges</c> by <c>ModifierSchemaTests</c> in Reactor.Tests. Behaviour
+/// slots (handlers, gestures, lifecycle) sit at the handoff that wires them.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -87,15 +89,17 @@ internal static class ModifierSchema
     private static ModifierSlot Event(string name, string args) =>
         S(name, ModifierBucket.Root, "System.Action<object, " + args + ">", ModifierFamily.Behavior, ApplyShape.Behavior).Callback();
 
-    private static ModifierSlot BoxReceivers(ModifierSlot slot, string property, bool text)
+    // The box family's receivers, in the order the apply chain tests them. Padding also reaches
+    // TextBlock and tests StackPanel before Grid; the border family is Control, Border, Grid,
+    // StackPanel, RelativePanel. Every slot that folds into the same DP shares one list.
+    private static ModifierSlot BoxReceivers(ModifierSlot slot, string property, bool text, ReceiverRole roles = ReceiverRole.Apply)
     {
-        // The order the apply chain tests them.
-        slot.On(ReceiverRole.Apply, Control, property).On(ReceiverRole.Apply, Border, property);
+        slot.On(roles, Control, property).On(roles, Border, property);
         return text
-            ? slot.On(ReceiverRole.Apply, StackPanel, property).On(ReceiverRole.Apply, Grid, property)
-                .On(ReceiverRole.Apply, RelativePanel, property).On(ReceiverRole.Apply, TextBlock, property)
-            : slot.On(ReceiverRole.Apply, Grid, property).On(ReceiverRole.Apply, StackPanel, property)
-                .On(ReceiverRole.Apply, RelativePanel, property);
+            ? slot.On(roles, StackPanel, property).On(roles, Grid, property)
+                .On(roles, RelativePanel, property).On(roles, TextBlock, property)
+            : slot.On(roles, Grid, property).On(roles, StackPanel, property)
+                .On(roles, RelativePanel, property);
     }
 
     private static ModifierSlot Automation(string name, string property, ModifierBucket bucket, string clrType)
@@ -159,7 +163,7 @@ internal static class ModifierSchema
 
         // ── Visibility (row C) ──
         S("IsVisible", ModifierBucket.Layout, "bool", ModifierFamily.Visibility, ApplyShape.Converted)
-            .Converted("value ? Visibility.Visible : Visibility.Collapsed")
+            .Converted("ToVisibility")
             .On(ReceiverRole.Apply, FrameworkElement, "Visibility", UIElement).Fluent("IsVisible", "Visible"),
 
         // ── Tooltips and flyouts (row F: they mount child elements) ──
@@ -184,28 +188,18 @@ internal static class ModifierSchema
                 poolResetGate: ControlOnly),
 
         // ── Border ──
-        S("CornerRadius", ModifierBucket.Visual, CornerRadius, ModifierFamily.Border)
-            .On(ReceiverRole.Apply, Control).On(ReceiverRole.Apply, Border).On(ReceiverRole.Apply, Grid)
-            .On(ReceiverRole.Apply, StackPanel).On(ReceiverRole.Apply, RelativePanel)
+        BoxReceivers(S("CornerRadius", ModifierBucket.Visual, CornerRadius, ModifierFamily.Border), "CornerRadius", text: false)
             .Analyzer(controlGate: ControlBorderGridStackRelative, poolResetGate: ControlBorderGridStack),
         // Hand-coded: a hovered control keeps its interaction brush (spec 067 §6.5).
-        S("BorderBrush", ModifierBucket.Visual, Brush, ModifierFamily.Brush, ApplyShape.HandCoded)
-            .Method("ApplyBorderModifiers")
-            .On(ReceiverRole.Apply | ReceiverRole.Theme, Control).On(ReceiverRole.Apply | ReceiverRole.Theme, Border)
-            .On(ReceiverRole.Apply | ReceiverRole.Theme, Grid).On(ReceiverRole.Apply | ReceiverRole.Theme, StackPanel)
-            .On(ReceiverRole.Apply | ReceiverRole.Theme, RelativePanel)
+        BoxReceivers(S("BorderBrush", ModifierBucket.Visual, Brush, ModifierFamily.Brush, ApplyShape.HandCoded)
+                .Method("ApplyBorderModifiers"), "BorderBrush", text: false, ReceiverRole.Apply | ReceiverRole.Theme)
             .Equality(SkipEquality.BrushValue, WriteEquality.Reference)
             .Analyzer(controlGate: ControlBorderGridStackRelative, poolResetGate: ControlBorderGridStack),
-        S("BorderThickness", ModifierBucket.Visual, Thickness, ModifierFamily.Border, ApplyShape.Composite)
-            .Composite("Border", "ApplyBorderModifiers")
-            .On(ReceiverRole.Apply, Control).On(ReceiverRole.Apply, Border).On(ReceiverRole.Apply, Grid)
-            .On(ReceiverRole.Apply, StackPanel).On(ReceiverRole.Apply, RelativePanel)
+        BoxReceivers(S("BorderThickness", ModifierBucket.Visual, Thickness, ModifierFamily.Border, ApplyShape.Composite)
+                .Composite("Border", "ApplyBorderModifiers"), "BorderThickness", text: false)
             .Analyzer(controlGate: ControlBorderGridStackRelative, poolResetGate: ControlBorderGridStack),
-        S("BorderInlineStart", ModifierBucket.Layout, Thickness, ModifierFamily.Border, ApplyShape.Composite)
-            .Composite("Border", "ApplyBorderModifiers")
-            .On(ReceiverRole.Apply, Control, "BorderThickness").On(ReceiverRole.Apply, Border, "BorderThickness")
-            .On(ReceiverRole.Apply, Grid, "BorderThickness").On(ReceiverRole.Apply, StackPanel, "BorderThickness")
-            .On(ReceiverRole.Apply, RelativePanel, "BorderThickness")
+        BoxReceivers(S("BorderInlineStart", ModifierBucket.Layout, Thickness, ModifierFamily.Border, ApplyShape.Composite)
+                .Composite("Border", "ApplyBorderModifiers"), "BorderThickness", text: false)
             .Analyzer(gateOnlyInReconciler: "Reactor-only BiDi logical modifier; folds into the BorderThickness write and inherits its Control/Border/Grid/StackPanel/RelativePanel gate. Not a WinUI property name — same reasoning as PaddingInlineStart. (There is no BorderInlineEnd modifier.)"),
 
         // ── Brushes ──
@@ -324,21 +318,6 @@ internal static class ModifierSchema
         S("Ref", ModifierBucket.Root, ElementRef, ModifierFamily.Lifecycle, ApplyShape.Behavior).Callback(),
 
         // ── Reference edges (row G′, ReferenceEdgeWiring.ApplyModifierReferenceEdges, last) ──
-        S("ToolTipPlacementTargetRef", ModifierBucket.Root, ElementRef, ModifierFamily.ToolTip, ApplyShape.ReferenceEdge)
-            .Method("ApplyModifierReferenceEdges").AttachedTo(ToolTipService, "PlacementTarget")
-            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("ToolTipPlacementTarget"),
-        S("XYFocusUpRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
-            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusUp", UIElement)
-            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusUp"),
-        S("XYFocusDownRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
-            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusDown", UIElement)
-            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusDown"),
-        S("XYFocusLeftRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
-            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusLeft", UIElement)
-            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusLeft"),
-        S("XYFocusRightRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
-            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusRight", UIElement)
-            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusRight"),
         S("LabeledByRef", ModifierBucket.Accessibility, ElementRef, ModifierFamily.Accessibility, ApplyShape.ReferenceEdge)
             .Method("ApplyModifierReferenceEdges").AttachedTo(AutomationProperties, "LabeledBy")
             .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("LabeledBy"),
@@ -354,9 +333,24 @@ internal static class ModifierSchema
                 ModifierFamily.Accessibility, ApplyShape.ReferenceEdge)
             .Method("ApplyModifierReferenceEdges").AttachedTo(AutomationProperties, "FlowsFrom")
             .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("FlowsFrom"),
+        S("XYFocusUpRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
+            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusUp", UIElement)
+            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusUp"),
+        S("XYFocusDownRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
+            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusDown", UIElement)
+            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusDown"),
+        S("XYFocusLeftRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
+            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusLeft", UIElement)
+            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusLeft"),
+        S("XYFocusRightRef", ModifierBucket.Root, ElementRef, ModifierFamily.Focus, ApplyShape.ReferenceEdge)
+            .Method("ApplyModifierReferenceEdges").OnFrameworkElement("XYFocusRight", UIElement)
+            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("XYFocusRight"),
+        S("ToolTipPlacementTargetRef", ModifierBucket.Root, ElementRef, ModifierFamily.ToolTip, ApplyShape.ReferenceEdge)
+            .Method("ApplyModifierReferenceEdges").AttachedTo(ToolTipService, "PlacementTarget")
+            .Equality(SkipEquality.Reference, WriteEquality.Reference).Fluent("ToolTipPlacementTarget"),
 
         // ── Host-read state ──
-        S("Backdrop", ModifierBucket.Root, "Microsoft.UI.Reactor.BackdropChoice", ModifierFamily.Behavior, ApplyShape.Behavior)
+        S("Backdrop", ModifierBucket.Root, "Microsoft.UI.Reactor.Core.BackdropChoice", ModifierFamily.Behavior, ApplyShape.Behavior)
             .NotCompared("Not applied by ApplyModifiers. The host reads the root tree's Backdrop on every render (ReactorHost, ReactorHostControl)."),
     };
 

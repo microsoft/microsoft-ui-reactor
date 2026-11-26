@@ -349,8 +349,10 @@ point of return: stop and ship.
   Declare the field in `ModifierSchema.Slots` (`src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`)
   at its apply position, with its bucket, receivers, skip-gate comparison and analyzer gates.
   `ModifierFieldContractTests` checks `Merge` and both skip-equality modes against it for every
-  headless field, and `ModifierSchemaTests` checks its receivers, order and fluent names against
-  the reconciler; the analyzer's `ModifierTable` reads its gates from it. A `Brush` or
+  headless field, and `ModifierSchemaTests` checks its receivers, order, types and write
+  equality against the reconciler and its fluent names against the public extensions. If the
+  analyzer should map the property's `.Set` form, also add a `Common("<Name>", poolReset: …)` row
+  to `ModifierTable.Properties`, which takes its gates from the slot. A `Brush` or
   `FontFamily` field runs in the `ModifierFieldContract_BrushAndFont` selftest instead: add it to
   `ModifierFieldContractSelfTestFields` and a `CheckField` line in `ModifierFieldContractFixture`.
   Update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067).

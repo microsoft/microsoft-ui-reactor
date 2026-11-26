@@ -134,7 +134,11 @@ internal sealed class ModifierSlot
     /// <summary>Row D: the type declaring the attached property.</summary>
     public string? AttachedOwner { get; private set; }
 
-    /// <summary>Row C: the value conversion, as a readable expression.</summary>
+    /// <summary>
+    /// Row C: the conversion before the write, as the name of a static method in
+    /// <c>ModifierConverters</c> (spec 067 §4.2). Layer 3 adds that class when it generates the
+    /// arm; today the arm converts inline.
+    /// </summary>
     public string? Converter { get; private set; }
 
     /// <summary>Row E: the apply family this field feeds, e.g. <c>Padding</c> for <c>PaddingInlineStart</c>.</summary>

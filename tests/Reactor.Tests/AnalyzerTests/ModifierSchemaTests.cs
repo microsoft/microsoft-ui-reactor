@@ -19,7 +19,7 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// which reads its field table from the schema. The analyzer side is pinned by
 /// <see cref="ModifierTableParitySnapshotTests"/>.
 /// </remarks>
-[global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: enumerates the Reactor and WinUI assemblies' exported types. JIT-only host, never trimmed.")]
+[global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: resolves the receiver and DP-owner type names the schema declares with Assembly.GetType. JIT-only host, never trimmed.")]
 [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only: reflects static members of the receiver and DP-owner types the schema names. JIT-only host, never trimmed.")]
 [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects static members of the receiver and DP-owner types the schema names. JIT-only host, never trimmed.")]
 public class ModifierSchemaTests
@@ -33,7 +33,7 @@ public class ModifierSchemaTests
     }
 
     [Fact]
-    public void Reasons_Are_Recorded_Where_Required()
+    public void Declarations_Are_Internally_Consistent()
     {
         foreach (var slot in ModifierSchema.Slots)
         {
@@ -45,7 +45,111 @@ public class ModifierSchemaTests
                 $"{slot.Name}: declares an analyzer control gate AND a GateOnlyInReconciler reason. The gate wins, so the reason is dead.");
             if (slot.TakesVisualAtMount)
                 Assert.True(slot.RestorableOwner && slot.IdentityValue is not null, $"{slot.Name}: TakesVisualAtMount needs RestorableOwner and an IdentityValue.");
+
+            // Each shape carries the data a generator needs for it.
+            switch (slot.Shape)
+            {
+                case ApplyShape.Converted:
+                    Assert.True(slot.Converter is not null, $"{slot.Name}: a Converted slot needs a Converter.");
+                    break;
+                case ApplyShape.Attached:
+                    Assert.True(slot.AttachedOwner is not null, $"{slot.Name}: an Attached slot needs an AttachedOwner.");
+                    break;
+                case ApplyShape.Composite:
+                    Assert.True(slot.CompositeFamily is not null && slot.HandCodedMethod is not null, $"{slot.Name}: a Composite slot needs its family and method.");
+                    break;
+                case ApplyShape.HandCoded:
+                    Assert.True(slot.HandCodedMethod is not null, $"{slot.Name}: a HandCoded slot needs its method.");
+                    break;
+                case ApplyShape.ReferenceEdge:
+                    Assert.Equal("ApplyModifierReferenceEdges", slot.HandCodedMethod);
+                    break;
+                case ApplyShape.Behavior:
+                    Assert.True(slot.Receivers.Count == 0, $"{slot.Name}: a Behavior slot writes no property, so it has no receivers.");
+                    break;
+            }
+            if (slot.Shape is ApplyShape.Simple or ApplyShape.Converted or ApplyShape.Attached or ApplyShape.Composite)
+                Assert.True(slot.ReceiversWith(ReceiverRole.Apply).Any(), $"{slot.Name}: a {slot.Shape} slot needs at least one Apply receiver.");
+            if (slot.Converter is not null) Assert.Equal(ApplyShape.Converted, slot.Shape);
         }
+
+        // Slots of one composite family write the same DP on the same receivers.
+        foreach (var family in ModifierSchema.Slots.Where(s => s.CompositeFamily is not null).GroupBy(s => s.CompositeFamily))
+        {
+            var lists = family.Select(s => string.Join(",", s.Receivers.Select(r => r.Type + "." + r.Property))).Distinct().ToList();
+            Assert.True(lists.Count == 1, $"Composite family {family.Key} has differing receivers: {string.Join(" / ", lists)}");
+        }
+    }
+
+    [Fact]
+    public void Behavior_Slots_Write_No_Property_The_Reconciler_Gates()
+    {
+        // A field the reconciler writes behind a type gate is a property write; tagging it Behavior
+        // would exempt it from the order and fluent checks below.
+        var gates = ModifierTableIntegrityTests.ReadApplyModifierControlGates();
+        var mislabelled = ModifierSchema.Slots.Where(s => s.Shape == ApplyShape.Behavior && gates.ContainsKey(s.Name)).Select(s => s.Name);
+        Assert.Empty(mislabelled);
+
+        // In the frozen order, the only non-marker entries after the handler wiring are lifecycle/ref slots.
+        var order = ModifierApplyOrderTests.FrozenOrder;
+        var afterHandlers = order.Skip(Array.IndexOf(order, "→ApplyEventHandlers")).Where(o => !o.StartsWith('→'));
+        Assert.All(afterHandlers, name => Assert.Equal(ApplyShape.Behavior, ModifierSchema.Find(name)!.Shape));
+    }
+
+    [Fact]
+    public void Write_Equality_Matches_The_Apply_Arm_Guards()
+    {
+        // Brush and FontFamily arms guard with ReferenceEquals (spec 067 §6.6); everything else
+        // with value comparison. Read the guards out of the apply family and the accessibility arms.
+        var methods = ReconcilerSource.ApplyModifiersFamily().Concat(ReconcilerSource.Methods("ApplyAccessibilityModifiers"));
+        var byReference = methods
+            .SelectMany(m => m.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            .Where(i => ReconcilerSource.InvokedName(i) == "ReferenceEquals")
+            .SelectMany(i => i.ArgumentList.Arguments)
+            .Select(a => a.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "m" } } access ? access.Name.Identifier.Text : null)
+            .Where(name => name is not null)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Contains("Background", byReference);   // positive control
+
+        // Arms that always reconcile (flyouts, rich tooltip) have no change guard, and behaviour /
+        // reference-edge slots are not property arms.
+        var guarded = ModifierSchema.Slots.Where(s =>
+            s.Shape is not (ApplyShape.Behavior or ApplyShape.ReferenceEdge) && s.Skip != SkipEquality.BlocksSkipWhenSet);
+        foreach (var slot in guarded)
+            Assert.True((slot.Write == WriteEquality.Reference) == byReference.Contains(slot.Name),
+                $"{slot.Name}: schema Write is {slot.Write}, but the apply arm {(byReference.Contains(slot.Name) ? "uses" : "does not use")} ReferenceEquals.");
+    }
+
+    [Fact]
+    public void Clr_Types_Match_The_Record_Properties()
+    {
+        foreach (var slot in ModifierSchema.Slots)
+        {
+            var record = slot.Bucket switch
+            {
+                ModifierBucket.Layout => typeof(LayoutModifiers),
+                ModifierBucket.Visual => typeof(VisualModifiers),
+                ModifierBucket.Accessibility => typeof(AccessibilityModifiers),
+                _ => typeof(ElementModifiers),
+            };
+            var property = record.GetProperty(slot.Name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.True(property is not null, $"{slot.Name}: no such property on {record.Name}.");
+            var type = Nullable.GetUnderlyingType(property!.PropertyType) ?? property.PropertyType;
+            Assert.Equal(CSharpName(type), slot.ClrType);
+        }
+    }
+
+    private static string CSharpName(Type type)
+    {
+        if (type == typeof(object)) return "object";
+        if (type == typeof(string)) return "string";
+        if (type == typeof(bool)) return "bool";
+        if (type == typeof(int)) return "int";
+        if (type == typeof(double)) return "double";
+        if (type == typeof(float)) return "float";
+        if (!type.IsGenericType) return type.FullName!;
+        var name = type.GetGenericTypeDefinition().FullName!;
+        return name[..name.IndexOf('`')] + "<" + string.Join(", ", type.GetGenericArguments().Select(CSharpName)) + ">";
     }
 
     // ── Order (spec 067 §5) ─────────────────────────────────────────────
@@ -182,7 +286,7 @@ public class ModifierSchemaTests
     [Fact]
     public void Every_Property_Slot_Has_Its_Generic_Fluent_Modifiers()
     {
-        var declared = GenericFluentModifiers();
+        var declared = ModifierTableIntegrityTests.DeclaredGenericModifiers.Value;
         Assert.Contains("Padding", declared);   // positive control for the reflection
 
         var missing = ModifierSchema.Slots
@@ -191,27 +295,28 @@ public class ModifierSchemaTests
             .Where(pair => !declared.Contains(pair.Fluent))
             .Select(pair => $"{pair.Name} → .{pair.Fluent}<T>(this T …)")
             .ToList();
-        Assert.True(missing.Count == 0, "Slots whose fluent modifier doesn't exist as a generic extension:\n  " + string.Join("\n  ", missing));
+        Assert.True(missing.Count == 0,
+            "Slots whose fluent modifier doesn't exist as a generic extension. If the public modifier has a "
+            + "different name, declare it with .Fluent(\"<Name>\", …) on the slot in ModifierSchema.cs; otherwise "
+            + "add the generic extension:\n  " + string.Join("\n  ", missing));
 
         var nameless = ModifierSchema.Slots.Where(s => s.Shape is not ApplyShape.Behavior && s.FluentNames.Length == 0).Select(s => s.Name);
         Assert.Empty(nameless);
     }
 
-    private static HashSet<string> GenericFluentModifiers()
+    [Fact]
+    public void Reference_Edge_Order_Matches_ApplyModifierReferenceEdges()
     {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var type in typeof(Element).Assembly.GetExportedTypes().Where(t => t.IsAbstract && t.IsSealed))
-        {
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (!method.IsGenericMethodDefinition) continue;
-                var typeArguments = method.GetGenericArguments();
-                var parameters = method.GetParameters();
-                if (typeArguments.Length == 1 && parameters.Length > 0 && parameters[0].ParameterType == typeArguments[0])
-                    names.Add(method.Name);
-            }
-        }
-        return names;
+        // First mention of each reference-edge field in the wiring method, in source order.
+        var edges = ModifierSchema.Slots.Where(s => s.Shape == ApplyShape.ReferenceEdge).Select(s => s.Name).ToList();
+        var body = ReconcilerSource.Methods("ApplyModifierReferenceEdges").Single();
+        var wired = body.DescendantNodes().OfType<IdentifierNameSyntax>()
+            .Select(id => id.Identifier.Text)
+            .Where(edges.Contains)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(9, wired.Count);
+        Assert.Equal(wired, edges);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

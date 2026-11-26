@@ -595,7 +595,7 @@ remaining-owner semantics would be a behaviour change.
 The `ThemeRef` overloads of `Background`, `Foreground` and `BorderBrush` go through
 `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568-580`), not `ApplyModifiers`, and
 their reach differs: `Foreground` reaches `RichTextBlock` on the theme path but not on the plain
-brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305`). In the
+brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`; since layer 1, `ModifierTable.ThemeGate` derives it from the Foreground slot's `Theme`-role receivers). In the
 schema that is a receiver row with the `Theme` role but not the `Apply` role, so it never widens
 the plain write, and layer 2 generates `GetDependencyPropertyName`'s modifier rows from the
 `Theme`-role rows. The pool reach is a third, separate set (`RichTextBlock.Foreground` is cleared
@@ -672,7 +672,7 @@ m.Layout)` skips the whole layout block), passing the already computed skip-gate
   §10.1), which already suppresses trim warnings, and in the generator tool, which never ships.
 - The analyzer only gains a data file. No `netstandard2.0` restriction is touched: no
   `FrozenDictionary`, no newer BCL APIs. The analyzer already compiles collection expressions
-  (`ModifierTable.cs:304-305`), so the shared file can use the same syntax.
+  (`ModifierTable.cs:304-305` at `4df0f6feb`), so the shared file can use the same syntax. Layer 1's `ModifierSchema.cs` uses plain array initializers.
 - Headless tests cannot touch WinUI objects, and reading `FrameworkElement.MarginProperty`
   activates a WinUI factory. The schema therefore names DPs as strings, never as
   `DependencyProperty` values, so it is constructible in every consumer. Only the generated code

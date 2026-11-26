@@ -12,12 +12,14 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 /// <summary>
 /// One <c>controlGate:</c> / <c>poolResetGate:</c> argument exactly as written in
-/// <c>ModifierTable.Properties</c> — the ground truth a text matcher is measured against.
+/// <c>ModifierTable.Properties</c> or on a <c>ModifierSchema.Slots</c> element — the ground truth a
+/// text matcher is measured against.
 /// </summary>
 internal readonly record struct ModifierGateSlot(string Property, string Slot, string Identifier);
 
 /// <summary>
-/// One identifier-valued argument of a <c>ModifierTable.Properties</c> entry — the argument name
+/// One identifier-valued argument of a <c>ModifierTable.Properties</c> entry or a
+/// <c>ModifierSchema.Slots</c> element — the argument name
 /// (<c>null</c> when positional) and the group identifier it references. Unlike
 /// <see cref="ModifierGateSlot"/> this includes non-gate arguments such as <c>elementTypes</c>,
 /// because a slot-blind text matcher sees those too.
@@ -25,8 +27,11 @@ internal readonly record struct ModifierGateSlot(string Property, string Slot, s
 internal readonly record struct ModifierGateArgument(string? Slot, string Identifier);
 
 /// <summary>
-/// Reads gate facts out of <c>src/Reactor.Analyzers/ModifierTable.cs</c> <em>as text</em>, and
-/// supplies the one matcher that is safe to do it with.
+/// Reads gate facts out of <c>src/Reactor.Analyzers/ModifierTable.cs</c> and
+/// <c>src/Reactor.Analyzers/Modifiers/ModifierSchema.cs</c> <em>as text</em>, and supplies the one
+/// matcher that is safe to do it with. Since spec 067 layer 1 the common modifiers' gate groups and
+/// <c>controlGate:</c> / <c>poolResetGate:</c> arguments are written on their schema slots, so an
+/// entry is the table row and the slot of the same name read together.
 /// </summary>
 /// <remarks>
 /// <para>
