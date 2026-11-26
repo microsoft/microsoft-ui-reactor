@@ -235,9 +235,9 @@ internal static class CompositorTransitionFixtures
                 if (order != "Mount") await Update(Full(Target()));
                 if (feature == "InteractionStates")
                 {
-                    Reconciler.SimulatePointerOverForTests(Control, isOver: true);
+                    InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: true);
                     await TransformsMatrixRecorder.Settle();
-                    Reconciler.SimulatePointerOverForTests(Control, isOver: false);
+                    InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: false);
                     await TransformsMatrixRecorder.Settle(400);
                 }
             }
@@ -735,7 +735,7 @@ internal static class CompositorTransitionFixtures
 
             TransitionEngine.SetOpacityNow(Control, 0);
             H.Check(Name + "_HideIsImmediate", !Running(visual) && Near(visual.Opacity, 0), $"running={Running(visual)} opacity={visual.Opacity}");
-            TransitionEngine.NormalizeVisual(visual);
+            TransitionEngine.NormalizeVisual(Control, visual);
             H.Check(Name + "_ResetIsImmediate", !Running(visual) && Near(visual.Opacity, 1), $"running={Running(visual)} opacity={visual.Opacity}");
             H.Check(Name + "_KeyKept", visual.ImplicitAnimations?.ContainsKey("Opacity") == true);
         }

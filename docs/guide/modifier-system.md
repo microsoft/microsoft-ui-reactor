@@ -1,4 +1,9 @@
 
+# Modifier System
+
+This page is the runtime view of the same fluent chain that Styling
+introduces from the surface.
+
 A modifier in Microsoft.UI.Reactor (Reactor) is not an operation — it is a value-bearing
 function `T -> T` that returns a new [`Element`](components.md) record
 with its `Modifiers` slot replaced. `.Bold().Margin(8).Background(Theme.Accent)`
@@ -17,12 +22,9 @@ expecting `.Padding().Background()` to paint differently than
 `.Background().Padding()`; in Reactor it doesn't, because both end up
 in the same merged `Padding` / `Background` slots.
 
-# Modifier System
-
-This page is the runtime view of the same fluent chain
-[Styling](styling.md) introduces from the surface. Both ride on top of
-`ElementExtensions` in `src/Reactor/Elements/`; the difference is which
-half of the call you care about — the API or the fold.
+[Styling](styling.md) covers the API. Both ride on top of
+`ElementExtensions` in `src/Reactor/Elements/`; the difference is which half
+of the call you care about — the API or the fold.
 
 ## Modifiers are flat records, not nested wrappers
 
@@ -113,8 +115,8 @@ would pin it permanently rather than hand the property back to the
 style. Render a themed `Button` with `.Padding(24)` and then without
 `.Padding()` and you get the *themed* padding back, not `0`.
 
-> **Caveat:** The transform modifiers `.Scale()`, `.Rotation()`, `.Translation()` and
-> `.CenterPoint()` write the element's composition visual
+> **Caveat:** The transform modifiers `.Scale()`, `.Rotation()`, `.Translation()`, `.CenterPoint()` and
+> `.TransformOrigin()` write the element's composition visual
 > (`ElementCompositionPreview.GetElementVisual`), not the XAML facade properties. A
 > non-identity value takes the visual the first time it's written. An identity value
 > (`.Scale(1)`, `.Rotation(0)`) on a control whose visual hasn't been taken writes nothing, so
@@ -123,7 +125,8 @@ style. Render a themed `Button` with `.Padding(24)` and then without
 > facades directly:
 > 
 > - `fe.Scale`, `fe.Rotation` and `fe.CenterPoint` read identity. Read the values back from the
->   visual instead (`ElementCompositionPreview.GetElementVisual(fe).Scale`).
+>   visual instead (`ElementCompositionPreview.GetElementVisual(fe).Scale`). Under `.TransformOrigin()`
+>   an expression drives the visual's `CenterPoint`, so its getter doesn't return the pivot.
 > - WinUI throws `UnauthorizedAccessException` on a later write to `fe.Scale`, `fe.Rotation`,
 >   `fe.CenterPoint`, `fe.RotationAxis` or `fe.TransformMatrix`, so a `.Set(...)` or `.OnMount(...)`
 >   that writes one on the same element fails. Use the modifier instead. `REACTOR_ANIM_004` flags
@@ -135,7 +138,8 @@ style. Render a themed `Button` with `.Padding(24)` and then without
 > translation is enabled.
 > 
 > Dropping the last declaration restores its identity value on the visual: `Vector3.One` for scale,
-> and zero for rotation, translation and center point. If the modifier previously
+> and zero for rotation, translation and center point. Dropping `.TransformOrigin()` stops its pivot
+> expression and puts back the `.CenterPoint()` pixel pivot, or the leading top corner. If the modifier previously
 > started a composition animation, Reactor also stops that animation. Dropping `.Opacity()` releases
 > its dependency property and any composition animation started by the modifier.
 > When decorators share a native target, a declaration that remains on another

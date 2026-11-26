@@ -15,6 +15,8 @@ goal: |
 tier: comprehensive
 ---
 
+# DevTools Internals
+
 What is left of Microsoft.UI.Reactor (Reactor)'s own devtools is one in-app
 subsystem: the preview host in the deprecated `Microsoft.UI.Reactor.Devtools`
 package. It mounts a single component (or the whole app) in a window, and when an
@@ -27,18 +29,16 @@ needs nothing in your project. The preview host is zero-cost in retail: without 
 `Reactor.DevtoolsSupport` switch the package's code is trimmed and a `--devtools`
 argument only prints how to enable it.
 
-# DevTools Internals
-
 > **Deprecated.** This page describes the in-app preview host in the
 > `Microsoft.UI.Reactor.Devtools` package. Its MCP server, its in-app dev menu
 > (`DevtoolsMenu`, `UseDevtools`) and the `mur devtools` CLI have been **removed**; use
 > the WinUI DevTools in the winapp CLI (`winapp run . --devtools on`) — see
-> [Dev Tooling](dev-tooling.md#winui-devtools-winapp) for the mapping. The package stays
+> [Devtools](devtools.md#move-from-mur-devtools) for the mapping. The package stays
 > (deprecated) until winapp has its own previewer, because the VS Code live preview and
 > the Visual Studio embedded preview run on it; this page goes with it. The
 > `Microsoft-UI-Reactor` ETW provider stays.
 
-[Dev Tooling](dev-tooling.md) is the user-facing companion; this is the internals
+[Devtools](devtools.md) is the user-facing companion; this is the internals
 view.
 
 ![The in-app preview host: the VS Code live preview, the Visual Studio embedded preview and the doc screenshot pipeline launch the app, read CAPTURE_PORT and CAPTURE_TOKEN, and call the bearer-authed PreviewCaptureServer, which hops to the UI thread to capture frames, switch the previewed component or walk the reference graph. The MCP server, the in-app dev menu and mur devtools are removed in favour of the winapp CLI.](images/devtools-internals/preview-host.svg)

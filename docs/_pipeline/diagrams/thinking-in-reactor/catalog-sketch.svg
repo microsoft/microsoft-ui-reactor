@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 400" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 600; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .cell { font-size: 11px; }
+    .cell-dim { font-size: 11px; fill: #57606a; }
+    .cell-crit { font-size: 11px; fill: #cf222e; }
+    .tag { font-size: 10.5px; font-weight: 600; }
+    .c-root { fill: none; stroke: #0969da; stroke-width: 2; stroke-dasharray: 6 4; }
+    .c-search { fill: #fbefff; stroke: #8250df; stroke-width: 1.5; }
+    .c-list { fill: #dafbe1; stroke: #1a7f37; stroke-width: 1.5; }
+    .c-row { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.25; }
+    .t-root { fill: #0969da; }
+    .t-search { fill: #8250df; }
+    .t-list { fill: #1a7f37; }
+    .t-row { fill: #9a6700; }
+    .field { fill: #ffffff; stroke: #57606a; stroke-width: 1; }
+    .check { fill: #ffffff; stroke: #57606a; stroke-width: 1; }
+    .sw-root { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .cell-dim { fill: #8b949e; }
+      .cell-crit { fill: #f85149; }
+      .c-root { stroke: #58a6ff; }
+      .c-search { fill: #271052; stroke: #a371f7; }
+      .c-list { fill: #033a16; stroke: #3fb950; }
+      .c-row { fill: #341a00; stroke: #d29922; }
+      .t-root { fill: #58a6ff; }
+      .t-search { fill: #a371f7; }
+      .t-list { fill: #3fb950; }
+      .t-row { fill: #d29922; }
+      .field { fill: #0d1117; stroke: #8b949e; }
+      .check { fill: #0d1117; stroke: #8b949e; }
+      .sw-root { fill: #0c2d6b; stroke: #58a6ff; }
+    }
+  </style>
+
+  <!-- ProductCatalog (root) -->
+  <rect class="c-root" x="20" y="20" width="450" height="360" rx="8"/>
+  <text class="tag t-root" x="34" y="38">ProductCatalog</text>
+
+  <!-- SearchBar -->
+  <rect class="c-search" x="36" y="48" width="418" height="92" rx="6"/>
+  <text class="tag t-search" x="48" y="64">SearchBar</text>
+  <rect class="field" x="48" y="72" width="394" height="28" rx="4"/>
+  <text class="cell-dim" x="58" y="90">Search...</text>
+  <rect class="check" x="48" y="112" width="14" height="14" rx="2"/>
+  <text class="cell" x="70" y="123">Only show products in stock</text>
+
+  <!-- ProductList -->
+  <rect class="c-list" x="36" y="152" width="418" height="214" rx="6"/>
+  <text class="tag t-list" x="48" y="168">ProductList</text>
+
+  <!-- ProductRow x6 -->
+  <rect class="c-row" x="48" y="176" width="394" height="26" rx="4"/>
+  <text class="cell" x="60" y="193">Notebook</text>
+  <text class="cell-dim" x="230" y="193">Paper</text>
+  <text class="cell" x="430" y="193" text-anchor="end">$4.50</text>
+
+  <rect class="c-row" x="48" y="207" width="394" height="26" rx="4"/>
+  <text class="cell" x="60" y="224">Sticky notes</text>
+  <text class="cell-dim" x="230" y="224">Paper</text>
+  <text class="cell" x="430" y="224" text-anchor="end">$2.00</text>
+
+  <rect class="c-row" x="48" y="238" width="394" height="26" rx="4"/>
+  <text class="cell-crit" x="60" y="255">Printer paper</text>
+  <text class="cell-dim" x="230" y="255">Paper</text>
+  <text class="cell" x="430" y="255" text-anchor="end">$8.99</text>
+
+  <rect class="c-row" x="48" y="269" width="394" height="26" rx="4"/>
+  <text class="cell" x="60" y="286">Gel pen</text>
+  <text class="cell-dim" x="230" y="286">Writing</text>
+  <text class="cell" x="430" y="286" text-anchor="end">$1.50</text>
+
+  <rect class="c-row" x="48" y="300" width="394" height="26" rx="4"/>
+  <text class="cell-crit" x="60" y="317">Highlighter</text>
+  <text class="cell-dim" x="230" y="317">Writing</text>
+  <text class="cell" x="430" y="317" text-anchor="end">$1.25</text>
+
+  <rect class="c-row" x="48" y="331" width="394" height="26" rx="4"/>
+  <text class="cell" x="60" y="348">Desk lamp</text>
+  <text class="cell-dim" x="230" y="348">Lighting</text>
+  <text class="cell" x="430" y="348" text-anchor="end">$24.00</text>
+
+  <!-- Legend -->
+  <rect class="sw-root" x="500" y="60" width="16" height="16" rx="3"/>
+  <text class="label" x="526" y="73">ProductCatalog</text>
+  <text class="sub" x="526" y="91">The whole page. Owns the state.</text>
+
+  <rect class="c-search" x="500" y="130" width="16" height="16" rx="3"/>
+  <text class="label" x="526" y="143">SearchBar</text>
+  <text class="sub" x="526" y="161">Takes the user's input.</text>
+
+  <rect class="c-list" x="500" y="200" width="16" height="16" rx="3"/>
+  <text class="label" x="526" y="213">ProductList</text>
+  <text class="sub" x="526" y="231">Filters the products and lists them.</text>
+
+  <rect class="c-row" x="500" y="270" width="16" height="16" rx="3"/>
+  <text class="label" x="526" y="283">ProductRow</text>
+  <text class="sub" x="526" y="301">Shows one product.</text>
+  <text class="sub" x="526" y="317">Red name: out of stock.</text>
+</svg>

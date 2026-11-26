@@ -205,6 +205,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             TransformAxis.Translation => e.Translation(p.Translation.X, p.Translation.Y, p.Translation.Z),
             TransformAxis.CenterPoint => e.CenterPoint(p.CenterPoint),
             TransformAxis.ScaleRotationCenter => e.Scale(p.Scale).Rotation(p.Degrees).CenterPoint(p.CenterPoint),
+            TransformAxis.TransformOrigin => e.TransformOrigin(p.Origin.X, p.Origin.Y).Scale(p.Scale).Rotation(p.Degrees),
             _ => e,
         };
     }
@@ -376,10 +377,10 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
         if (_case.Feature == FeatureAxis.InteractionStates)
         {
-            Reconciler.SimulatePointerOverForTests(t, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(t, isOver: true);
             await Settle();
             f["active"] = await Pose(pose, step, name);
-            Reconciler.SimulatePointerOverForTests(t, isOver: false);
+            InteractionStateApplier.SimulatePointerOverForTests(t, isOver: false);
             await Settle();
             return;
         }

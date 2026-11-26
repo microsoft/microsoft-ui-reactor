@@ -1,49 +1,47 @@
 
-Microsoft.UI.Reactor (Reactor)'s render-from-state model has a clean 1:1 translation table to XAML
-that an experienced XAML developer can hold in their head. Where XAML
-describes *bindings* between view-model properties and control DPs and lets
-the binding engine pull values on change-notification, Reactor describes the
-*current UI* directly and re-evaluates the entire component when state
-changes. The control tree is the same WinUI control tree at runtime — only
-the authoring surface differs. This page is the translation key: every
-XAML idiom you reach for (DataContext, Binding modes, DataTemplate,
-DependencyProperty, code-behind, ICommand, Frame.Navigate) maps to a
-specific Reactor shape, and the body below walks each one in order.
-Companion essay [`reactor-vs-xaml`](reactor-vs-xaml.md) covers the
-architectural *why* — read this page for the recipes, that one for the
-philosophy.
+# Coming from XAML
 
-# Reactor for XAML Developers
+If you know XAML, you already know most of Reactor. Reactor renders the same
+WinUI controls, with the same layout panels, theme resources and input events.
+What changes is how you describe them.
 
-If you already know XAML, Reactor is not a different Windows UI stack. It still
-renders real WinUI controls. The shift is in **how** you describe the UI: instead
-of splitting a page across XAML, bindings, converters, and code-behind, you
-return the UI directly from C# and let Reactor keep the native control tree in
-sync.
+In XAML you split a page across markup,
+bindings, converters, styles and code-behind. In Reactor you write one C#
+component. Its `Render()` method returns the UI for the current state. When the
+state changes, Reactor runs `Render()` again and updates only the controls that
+changed. This page maps each XAML and MVVM concept to its Reactor form, shows
+the two side by side, and explains how to adopt Reactor one screen at a time.
+For the general mental model, read [Thinking in Reactor](thinking-in-reactor.md)
+first.
 
-![From XAML page to Reactor component — mental-model shift](images/xaml-developers/mental-model-shift.svg)
+![A XAML page split across markup, code-behind, a view model, converters and bindings becomes one Reactor component whose Render method returns the UI from hook state and plain C# expressions](images/xaml-developers/mental-model-shift.svg)
 
-## The Mental Model Shift
+## Concept map
 
-Think of Reactor as "WinUI controls, but expressed like a function of state."
+| XAML or MVVM | Reactor | Learn more |
+|---|---|---|
+| `Page`, `UserControl` | A `Component` class with a `Render()` method | [Components](components.md) |
+| Code-behind | Code in `Render()`, plus normal methods and lambdas | [Components](components.md) |
+| `{Binding}`, `{x:Bind}`, `INotifyPropertyChanged` | State from `UseState` or `UseReducer`, read in `Render()` | [Bindings become state](#bindings-become-state) |
+| `Mode=TwoWay` | A value and a callback: `TextBox(name, setName)` | [Forms and Input](forms.md) |
+| `IValueConverter` | A C# expression in `Render()` | [Bindings become state](#bindings-become-state) |
+| `DataContext` | Props from the parent, or context for shared values | [Context](context.md) |
+| `DependencyProperty` | A field on a props record, or hook state | [DependencyProperty](#dependencyproperty-becomes-a-prop-or-a-hook) |
+| `DataTemplate` | A method or lambda that returns an element | [Collections](collections.md) |
+| `Style`, `Setter`, `BasedOn` | Modifiers and helper methods | [Styling and Theming](styling.md) |
+| `ThemeResource`, `ResourceDictionary` | `Theme` tokens, `Theme.Ref(key)` and `.Resources(...)` | [Theming Tokens](theming-tokens.md) |
+| `ICommand` | A method or lambda, or a `Command` record | [Commanding](commanding.md) |
+| `x:Name` | `UseElementRef<T>()` and `.Ref(...)` | [Advanced Patterns](advanced.md) |
+| `VisualStateManager` | Branches in `Render()`, plus `.InteractionStates(...)` | [Animation](animation.md) |
+| `Storyboard` | `.Animate(...)`, `.Transition(...)` and `AnimationScope.WithAnimation(...)` | [Animation](animation.md) |
+| `Visibility` with a converter | `When(condition, ...)`, a `?:` expression, or `.IsVisible(bool)` | [Bindings become state](#bindings-become-state) |
+| `Frame.Navigate(...)` | `UseNavigation` and `NavigationHost` | [Navigation](navigation.md) |
+| `StackPanel`, `Grid`, attached properties | `VStack`, `HStack`, `Grid` and `.Grid(row:, column:)` | [Layout](layout.md) |
 
-| In XAML | In Reactor |
-|---------|------------|
-| `Page`, `UserControl`, `Window` markup | A `Component` with `Render()` |
-| `{Binding Name}` | Plain C# variable usage: `TextBlock(name)` |
-| `Mode=TwoWay` | Controlled input: `TextBox(name, setName)` |
-| `DataContext` | Local hook state, typed props, or [context](context.md) |
-| `ICommand` | Lambdas, methods, or [commands](commanding.md) |
-| `StackPanel` | [`VStack`](layout.md) or [`HStack`](layout.md) |
-| `Grid.Row`, `Grid.Column` | `.Grid(row: ..., column: ...)` |
-| `StaticResource` / `ThemeResource` | [`Theme`](styling.md) tokens and fluent modifiers |
-| `Frame.Navigate(...)` | [`UseNavigation`](navigation.md) + `NavigationHost` |
+The rest of the page walks through these rows with code. Reactor has no
+separate binding, style or template system. Each row becomes ordinary C#.
 
-The important difference is that Reactor does not ask you to describe *bindings*.
-It asks you to describe the **current UI**. When the state changes, `Render()`
-runs again and Reactor updates only the native WinUI controls that changed.
-
-## Rewriting a Familiar Form
+## A familiar form, rewritten
 
 Here is the kind of XAML page many WinUI developers start with:
 
@@ -65,7 +63,7 @@ Here is the kind of XAML page many WinUI developers start with:
 </StackPanel>
 ```
 
-In Reactor, the same screen becomes a component:
+In Reactor, the same screen is one component:
 
 ```csharp
 class TutorialFormPage : Component
@@ -94,24 +92,71 @@ class TutorialFormPage : Component
 
 What changed:
 
-- **Bindings became state variables.** `Name`, `Email`, and `WantsUpdates` live in `UseState`.
-- **Two-way input became explicit.** `TextBox(name, setName)` makes data flow obvious.
-- **The command became normal C#.** The save button uses a lambda instead of XAML command wiring.
-- **Derived UI stayed inline.** `canSave` is just a local expression, not a converter or extra property.
+- **Bindings became state.** `name`, `email` and `wantsUpdates` live in `UseState`.
+- **Two-way input became explicit.** `TextBox(name, setName)` shows the value and
+  the callback that changes it.
+- **The command became normal C#.** The button takes a lambda, not a command binding.
+- **Derived values stayed inline.** `canSave` is a local expression, not a converter
+  or an extra view-model property.
 
-That is the Reactor pattern in one screen: **state at the top, UI returned at the
-bottom**.
+That is the Reactor pattern in one screen: state at the top, UI returned at the
+bottom.
 
-## Layout Feels Familiar, but Smaller
+## Bindings become state
 
-Most XAML layouts translate directly, but Reactor pushes you toward a smaller set
-of composition primitives.
+![XAML pull-based binding, where a BindingExpression listens to PropertyChanged and reads the view-model getter, next to Reactor push from state, where a UseState setter runs Render and the reconciler writes the new value to the WinUI control](images/xaml-developers/push-vs-pull.svg)
+
+In XAML, a binding is an object. `{Binding Name}` creates a `BindingExpression`
+that listens to `PropertyChanged` on the view model. When the event fires, the
+binding reads the new value and writes it to the control. The control pulls the
+value.
+
+Reactor has no binding objects. `TextBlock(name)` reads the current value of the
+`name` variable and puts it in the element. When you call `setName`, Reactor runs
+`Render()` again, compares the new elements with the old ones, and writes the new
+text to the same `TextBlock`. The state pushes the value to the control. The
+[Reactivity Model](reactivity-model.md) page explains this cycle in depth.
+
+A binding usually does one of several jobs. Pick the Reactor tool by the job:
+
+- **A value this component owns:** [`UseState`](hooks.md).
+- **Several values that change together:** [`UseReducer`](hooks.md).
+- **A value from a parent:** typed props with [`Component<TProps>`](components.md).
+- **A computed value or a converter:** a C# expression in `Render()`.
+- **Visibility:** `When(condition, () => ...)`, a `?:` expression, or `.IsVisible(bool)`.
+- **State that many components share:** [Context](context.md), or state in a common parent.
+- **An existing MVVM object:** `UseObservable` or `UseObservableTree`, described
+  in [Keep your view models](#keep-your-view-models).
+
+This is why Reactor code often looks shorter than XAML. A label like
+`TextBlock($"{firstName} {lastName}")` is already "bound", because `Render()` runs
+again whenever that state changes.
+
+> **Caveat:** There are no binding modes in Reactor. Do not look for `Mode=OneWay`,
+> `Mode=OneTime` or `Mode=TwoWay`. Every render reads the current state, and every
+> edit calls your callback.
+> 
+> - For `TwoWay`, pass the value and a setter: `TextBox(name, setName)`.
+> - For a value the user must not edit, show it in a `TextBlock`, or call
+>   `.IsReadOnly()` on the `TextBox`.
+> - For `OneTime`, keep the first value. `UseRef(value)` uses its argument only on
+>   the first render, so `ref.Current` keeps that value until you change it.
+> 
+> Also, do not attach a `{Binding}` to a control that Reactor created, and do not
+> set its properties from an effect or through a ref. Reactor does not know about
+> those writes, so a later render can overwrite them. Drive the property from
+> state instead.
+
+## Layout
+
+Most XAML layouts translate directly. Reactor uses a small set of layout
+primitives:
 
 | XAML | Reactor |
 |------|---------|
 | `StackPanel Orientation="Vertical"` | `VStack(...)` |
 | `StackPanel Orientation="Horizontal"` | `HStack(...)` |
-| `Grid` with row/column definitions | `Grid(columns: ..., rows: ..., ...)` |
+| `Grid` with row and column definitions | `Grid(columns: ..., rows: ..., ...)` |
 | `Border` | `Border(child)` |
 | `ScrollViewer` (classic) | `ScrollViewer(child)` |
 | `ScrollView` (modern) | `ScrollView(child)` |
@@ -160,73 +205,252 @@ class GridTranslationPage : Component
 }
 ```
 
-The layout idea is the same. The difference is that the child placement lives in
-fluent modifiers instead of attached properties written in markup.
+The layout is the same. Attached properties such as `Grid.Row` become fluent
+modifiers such as `.Grid(row: 1, column: 0)`. See [Layout](layout.md) for the full
+set of panels.
 
-## Bindings Turn into State, Props, or Plain Expressions
+## DataTemplate becomes a method
 
-XAML developers often look for the Reactor equivalent of `Binding`. There is no
-single replacement, because bindings usually solve several different problems.
+In XAML, a `DataTemplate` describes how to show one item:
 
-Use this rule of thumb instead:
+```xml
+<ItemsRepeater ItemsSource="{x:Bind ViewModel.Products}">
+  <ItemsRepeater.Layout>
+    <StackLayout Spacing="8" />
+  </ItemsRepeater.Layout>
+  <ItemsRepeater.ItemTemplate>
+    <DataTemplate x:DataType="local:Product">
+      <Border Style="{StaticResource CardSurfaceStyle}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{x:Bind Name}" FontSize="16" FontWeight="SemiBold" />
+          <TextBlock Text="{x:Bind Category}"
+                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </ItemsRepeater.ItemTemplate>
+</ItemsRepeater>
+```
 
-- **Value owned by this component:** [`UseState`](hooks.md)
-- **Complex local updates:** [`UseReducer`](hooks.md)
-- **Input from a parent:** typed props via [`Component<TProps>`](components.md)
-- **Computed value:** ordinary local C# expression
-- **Shared app state:** [`context`](context.md) or a higher-level parent component
-- **Existing MVVM object:** [`UseObservable`](advanced.md) or `UseObservableTree`
+In Reactor, the template is a method that returns an element:
 
-That is why Reactor code often looks simpler than XAML. A label like
-`TextBlock($"{firstName} {lastName}")` is already "bound" because `Render()`
-re-runs whenever the relevant state changes.
+```csharp
+// The "template" is an ordinary method that returns an Element.
+// ForEach calls it once for each item, on every render.
+static Element ProductList(IReadOnlyList<Product> items) =>
+    VStack(8, ForEach(items, item => Card(item).WithKey(item.Id.ToString())));
 
-> **Caveat:** A XAML `Binding` with `Mode=TwoWay` becomes a Reactor controlled-input
-> pattern (`TextBox(name, setName)`), not a binding-with-mode. There is
-> **no** Reactor analogue to `Mode=OneWay` / `Mode=OneTime` / `Mode=TwoWay`
-> because state IS the binding — every render re-reads from state, every
-> edit calls a setter. If you write `TextBox(name, _ => { })` and never
-> call a setter, the field is read-only (effectively `Mode=OneWay`); if
-> you wire both, it round-trips (effectively `Mode=TwoWay`). The trap is
-> "reach for the binding mode for OneTime" — there is no equivalent.
-> Cache the value in a `UseRef` and read `ref.Current` if you genuinely
-> want to capture-and-freeze, or call a function once in a
-> `UseEffect(() => …, Array.Empty<object>())` so it runs only on mount.
-> The Reactor analyzer doesn't emit a specific diagnostic for "missing
-> setter" — passing `null` to a `TextBox` change handler is a
-> `CS8625` "Cannot convert null literal" instead.
+static Element Card(Product item) =>
+    CardSurface(VStack(4,
+        TextBlock(item.Name).FontSize(16).SemiBold(),
+        TextBlock(item.Category).Foreground(Theme.SecondaryText)));
+```
 
-## Events and Commands Are Just C#
+`Card` is the template. `ForEach` calls it for each item on every render and
+returns the results as children of the `VStack`. `.WithKey(...)` gives each item
+a stable identity, so Reactor matches items across renders even when the list is
+sorted or filtered. See [Reconciliation](reconciliation.md) for how keys work.
 
-You do not need a special command layer for every button click.
+`ForEach` is for short lists inside a stack. It creates every item and does not
+virtualize. For long or scrolling lists, use a typed collection such as
+`ListView<T>`, `GridView<T>` or `LazyVStack<T>`. Each takes your items, a key
+selector and an item function. See [Collections](collections.md) to choose one.
 
-- `Button("Save", Save)` is the direct equivalent of a button command.
-- `Button("Refresh", async () => await ReloadAsync())` works for async actions.
-- `TextBox(text, setText)` replaces both `TextChanged` wiring and two-way binding.
+## Styles become methods and modifiers
 
-If you want richer busy/error behavior, Reactor also has a dedicated
-[Commanding](commanding.md) API. But the default is deliberately small: use a
-method or lambda first, then add command abstractions when they actually help.
+A XAML `Style` applies a set of property setters to a control:
 
-## Events: XAML Attributes Become Fluents
+```xml
+<Page.Resources>
+  <Style x:Key="CardSurfaceStyle" TargetType="Border">
+    <Setter Property="Background"
+            Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="16" />
+  </Style>
+</Page.Resources>
 
-Every WinUI event attribute has a matching Reactor fluent. For most events
-the rule is straightforward — drop the leading `On` from the Reactor
-property name. A handful of Reactor fluents normalize across WinUI's
-slightly different event shapes (e.g. `CheckBox` exposes three separate
-`Checked` / `Unchecked` / `Indeterminate` events in XAML; Reactor surfaces
-a single `IsCheckedChanged` callback):
+<Border Style="{StaticResource CardSurfaceStyle}">
+  <TextBlock Text="Hello" />
+</Border>
+```
+
+In Reactor, a shared style is a method that applies modifiers:
+
+```csharp
+// A shared "style" is a plain method that wraps a child and applies
+// modifiers. There is no registry and no TargetType check.
+static Element CardSurface(Element child) =>
+    Border(child)
+        .Background(Theme.CardBackground)
+        .CornerRadius(8)
+        .Padding(16);
+```
+
+Call `CardSurface(TextBlock("Hello"))` wherever you used the style. The method is
+plain C#, so `BasedOn` becomes one method that calls another. There is no style
+registry and no `TargetType` check.
+
+For WinUI's built-in named styles, use the named-style fluents:
+
+- `.AccentButton()` and `.SubtleButton()` on buttons.
+- `.TextLink()` on a `HyperlinkButton`.
+- `.Informational()`, `.Success()`, `.Warning()` and `.Error()` on an `InfoBar`.
+
+To restyle one control the way WinUI lightweight styling does, override its
+resource keys with `.Resources(...)`. The next section shows an example. See
+[Styling and Theming](styling.md) for the full styling surface.
+
+## Theme resources become Theme tokens
+
+In XAML, `{ThemeResource}` picks a brush from the active light or dark theme
+dictionary:
+
+```xml
+<StackPanel Spacing="12">
+  <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+          BorderThickness="1" CornerRadius="8" Padding="16">
+    <StackPanel Spacing="4">
+      <TextBlock Text="Storage" FontWeight="SemiBold" />
+      <TextBlock Text="12 GB of 50 GB used"
+                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+      <TextBlock Text="Last synced 5 minutes ago"
+                 Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+    </StackPanel>
+  </Border>
+
+  <Border BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+          BorderThickness="1" CornerRadius="8" Padding="12">
+    <TextBlock Text="Sync is paused" />
+  </Border>
+
+  <Button Content="Delete">
+    <Button.Resources>
+      <StaticResource x:Key="ButtonBackground" ResourceKey="SystemFillColorCriticalBrush" />
+      <SolidColorBrush x:Key="ButtonForeground" Color="White" />
+    </Button.Resources>
+  </Button>
+</StackPanel>
+```
+
+In Reactor, the same resources come from `Theme`:
+
+```csharp
+class ThemeResourceExample : Component
+{
+    public override Element Render() =>
+        VStack(12,
+            // Named tokens for common {ThemeResource} brushes.
+            Border(VStack(4,
+                    TextBlock("Storage").SemiBold(),
+                    TextBlock("12 GB of 50 GB used").Foreground(Theme.SecondaryText),
+                    TextBlock("Last synced 5 minutes ago").Foreground(Theme.TertiaryText)))
+                .Background(Theme.CardBackground)
+                .BorderBrush(Theme.CardStroke)
+                .BorderThickness(1)
+                .CornerRadius(8)
+                .Padding(16),
+            // Any other theme resource, by its key.
+            Border(TextBlock("Sync is paused"))
+                .BorderBrush(Theme.Ref("ControlStrongStrokeColorDefaultBrush"))
+                .BorderThickness(1)
+                .CornerRadius(8)
+                .Padding(12),
+            // A resource override for one control and its children.
+            Button("Delete", () => { })
+                .Resources(r => r
+                    .Set("ButtonBackground", Theme.SystemCritical)
+                    .Set("ButtonForeground", "#FFFFFF")));
+}
+```
+
+- `Theme` has named tokens for the common WinUI brushes, such as
+  `Theme.CardBackground` and `Theme.SecondaryText`.
+- `Theme.Ref(key)` reaches any other resource key, including keys your app
+  defines.
+- `.Resources(...)` overrides resource keys for one control and its children,
+  like `Button.Resources` in XAML.
+- A token modifier such as `.Background(Theme.Accent)` sets the property
+  through a `{ThemeResource}` reference, so WinUI picks the brush for the
+  control's own theme. A dark subtree in a light app gets the dark brush, as in
+  XAML.
+
+When the user switches between light and dark, Reactor clears its cache of
+resolved brushes and renders again. Every token picks up the new theme, and you
+do not handle `ActualThemeChanged` yourself. See
+[Theming Tokens](theming-tokens.md) for the full list of tokens.
+
+## Commands and events are C#
+
+In XAML, a button usually binds to an `ICommand` on the view model:
+
+```xml
+<TextBox Header="Document" Text="{x:Bind ViewModel.Text, Mode=TwoWay}" />
+<Button Content="Save" Command="{x:Bind ViewModel.Save}">
+  <Button.KeyboardAccelerators>
+    <KeyboardAccelerator Modifiers="Control" Key="S" />
+  </Button.KeyboardAccelerators>
+</Button>
+```
+
+Most Reactor buttons do not need a command. `Button("Save", Save)` calls a
+method, and `Button("+", () => setCount(count + 1))` runs a lambda. When one
+action needs a label, an icon, a shortcut and an enabled state in one place, use
+a `Command` record:
+
+```csharp
+class BasicCommandExample : Component
+{
+    public override Element Render()
+    {
+        var (text, setText) = UseState("Hello, World!");
+        var (saved, setSaved) = UseState(false);
+
+        var saveCmd = new Command
+        {
+            Label = "Save",
+            Execute = () => setSaved(true),
+            CanExecute = !saved,
+            Icon = SymbolIcon("Save"),
+            Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control)
+        };
+
+        return VStack(12,
+            TextBox(text, v => { setText(v); setSaved(false); }, header: "Document")
+                .Width(400),
+            HStack(8,
+                Button(saveCmd),
+                When(saved, () => TextBlock("Saved!").Foreground(Theme.SystemSuccess))
+            )
+        ).Padding(24);
+    }
+}
+```
+
+`CanExecute` is a plain `bool` that you compute in `Render()`. There is no
+`CanExecuteChanged` event to raise: when `saved` changes, the component renders
+again with the new value. See [Commanding](commanding.md) for async commands
+with a busy state.
+
+### Event attributes become fluents
+
+Every WinUI event attribute has a matching Reactor fluent. For most events,
+the fluent is the Reactor property name without the leading `On`. A few
+fluents simplify the WinUI event shape. For example, a XAML `CheckBox` has
+separate `Checked`, `Unchecked` and `Indeterminate` events, and Reactor gives
+you one `IsCheckedChanged` callback.
 
 | WinUI XAML event | Reactor fluent |
 |------------------|----------------|
 | `<Button Click="OnClick"/>` | `Button("…").Click(handler)` |
 | `<TextBox TextChanged="OnTextChanged"/>` | `TextBox(text, setText).Changed(handler)` |
 | `<ListView SelectionChanged="OnSelectionChanged"/>` | `ListView<T>(...).SelectionChanged(handler)` |
-| `<ComboBox SelectionChanged="OnSelectionChanged"/>` | `ComboBox(...).SelectedIndexChanged(handler)` — Reactor reports the selected index, not the args |
-| `<CheckBox Checked="…" Unchecked="…"/>` | `CheckBox(value, setValue).IsCheckedChanged(handler)` — Reactor collapses the three XAML events into a single bool callback |
+| `<ComboBox SelectionChanged="OnSelectionChanged"/>` | `ComboBox(...).SelectedIndexChanged(handler)`. Reactor passes the selected index, not the event args. |
+| `<CheckBox Checked="…" Unchecked="…"/>` | `CheckBox(value, setValue).IsCheckedChanged(handler)`. Reactor passes one `bool`. |
 
-The underlying init property keeps the `On` prefix, so existing
-property-init code continues to compile:
+The element property keeps the `On` prefix, so code that sets it in an object
+initializer still compiles:
 
 ```csharp
 class EventsFluentExample : Component
@@ -245,17 +469,131 @@ class EventsFluentExample : Component
 }
 ```
 
-The fluent drops the `On` because C# binds `el.OnClick(arg)` to
-delegate-as-property invocation (`Action?.Invoke(arg)`) and never falls back
-to extension methods — see
-[spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §0.1 for the discovery
-and the naming decision. Passing `null` to any of these fluents clears a
-previously-set handler.
+The fluent drops the `On` because C# treats `el.OnClick(handler)` as a call to
+the delegate stored in the `OnClick` property, not as an extension method.
+[Spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md)
+§0.1 records this decision. Passing `null` to any of these fluents clears the
+handler.
 
-## Navigation Without `Frame`
+## x:Name becomes a ref
 
-Reactor navigation is still WinUI navigation in spirit, but it is declared in the
-component tree instead of being driven by imperative `Frame.Navigate(...)` calls.
+In XAML, `x:Name` gives code-behind a field for a control:
+
+```xml
+<TextBox x:Name="NameField" PlaceholderText="Name" />
+<Button Content="Focus the field" Click="OnFocusClick" />
+```
+
+The `OnFocusClick` handler then calls `NameField.Focus(FocusState.Programmatic)`.
+In Reactor, ask for a ref with `UseElementRef<T>()` and attach it with `.Ref(...)`:
+
+```csharp
+class ElementRefFocusDemo : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("");
+        var fieldRef = this.UseElementRef<TextBox>();
+
+        return VStack(12,
+            SubHeading("Imperative focus via ElementRef<T>"),
+            TextBox(name, setName, placeholderText: "Name")
+                .AutomationName("Name")
+                .Ref(fieldRef),
+            Button("Focus the field", () =>
+                fieldRef.Current?.Focus(FocusState.Programmatic))
+        ).Padding(24);
+    }
+}
+```
+
+`fieldRef.Current` is the real `TextBox` once it is mounted, and `null` before
+that. Use refs for imperative calls such as focus and scrolling. Do not use them
+to set properties: put those values in state. See
+[Advanced Patterns](advanced.md) for more on refs.
+
+## Visual states become branches in Render
+
+In XAML, the `VisualStateManager` switches between named states:
+
+```xml
+<VisualStateManager.VisualStateGroups>
+  <VisualStateGroup x:Name="LoadStates">
+    <VisualState x:Name="Loading">
+      <VisualState.Setters>
+        <Setter Target="Spinner.Visibility" Value="Visible" />
+        <Setter Target="ErrorText.Visibility" Value="Collapsed" />
+      </VisualState.Setters>
+    </VisualState>
+    <VisualState x:Name="Failed">
+      <VisualState.Setters>
+        <Setter Target="Spinner.Visibility" Value="Collapsed" />
+        <Setter Target="ErrorText.Visibility" Value="Visible" />
+      </VisualState.Setters>
+    </VisualState>
+  </VisualStateGroup>
+</VisualStateManager.VisualStateGroups>
+```
+
+Code-behind then calls `VisualStateManager.GoToState(this, "Failed", true)`.
+In Reactor, the state is a normal value, and each visual state is a branch:
+
+```csharp
+enum LoadState { Loading, Loaded, Failed }
+
+class VisualStatesExample : Component
+{
+    public override Element Render()
+    {
+        var (state, setState) = UseState(LoadState.Loading);
+
+        // Each visual state is a branch in Render, not a named VisualState.
+        Element status = state switch
+        {
+            LoadState.Loading => ProgressRing(),
+            LoadState.Failed => TextBlock("Could not load the orders.")
+                .Foreground(Theme.SystemCritical),
+            _ => TextBlock("12 orders loaded."),
+        };
+
+        return VStack(12,
+            status,
+            HStack(8,
+                Button("Loading", () => setState(LoadState.Loading)),
+                Button("Loaded", () => setState(LoadState.Loaded)),
+                Button("Failed", () => setState(LoadState.Failed))),
+            // Pointer states run on the compositor, with no re-render.
+            Border(TextBlock("Hover or press me"))
+                .Padding(12).CornerRadius(8).Background(Theme.CardBackground)
+                .InteractionStates(s => s.PointerOver(scale: 1.03f).Pressed(scale: 0.97f)));
+    }
+}
+```
+
+You change the state with a setter, and the UI for that state is whatever
+`Render()` returns. Pointer-over and pressed feedback does not need state at all.
+`.InteractionStates(...)` runs those animations on the compositor, without a
+render. See [Animation](animation.md) for the options.
+
+## Storyboards become animation modifiers
+
+In XAML, a `Storyboard` animates dependency properties over time. You start it
+from code or from a `VisualState`. In Reactor, you describe the animation on the
+element:
+
+- `.Animate(curve)` animates changes to visual properties, such as opacity,
+  scale, rotation and translation, when their values change between renders.
+- `.Transition(transition)` plays an enter animation when an element appears,
+  and an exit animation before it is removed.
+- `AnimationScope.WithAnimation(curve, () => ...)` animates the visual changes
+  that one state update causes.
+
+See [Animation](animation.md) for when to use each one.
+
+## Navigation without Frame
+
+Reactor navigation is declared in the component tree. You do not call
+`Frame.Navigate(...)` on a `Frame` reference.
 
 ```csharp
 class TutorialNavigationPage : Component
@@ -295,15 +633,34 @@ class TutorialNavigationPage : Component
 }
 ```
 
-Instead of keeping a `Frame` reference and pushing pages into it, you keep a typed
-navigation handle in component state and render the current page through
-`NavigationHost`. That keeps navigation decisions in the same declarative flow as
-the rest of the UI.
+`UseNavigation` returns a typed navigation handle that lives in component state.
+`NavigationHost` renders the page for the current route. Navigation decisions use
+the same state-driven flow as the rest of the UI. See [Navigation](navigation.md)
+for parameters, back navigation and nested hosts.
 
-## You Can Keep MVVM While Migrating
+## DependencyProperty becomes a prop or a hook
 
-You do **not** have to throw away existing `INotifyPropertyChanged` view models on
-day one. Reactor has a bridge specifically for migration:
+In XAML, you register a `DependencyProperty` when a control needs a property
+that can be bound, styled or animated. In Reactor, you do not register
+properties:
+
+- A value that a parent passes in is a field on the props record of a
+  [`Component<TProps>`](components.md).
+- A value the component owns is hook state, such as `UseState`.
+- A derived value is a local variable in `Render()`. If it is expensive to
+  compute, wrap it in [`UseMemo`](hooks.md).
+
+Reactor still sets dependency properties on the WinUI controls it creates. Your
+components just do not need their own.
+
+## Adopting Reactor gradually
+
+You do not have to rewrite your app to use Reactor. Reactor and XAML can share
+one window in both directions, and existing view models keep working.
+
+### Keep your view models
+
+Reactor has hooks for existing `INotifyPropertyChanged` view models:
 
 ```csharp
 class ObservableTreeDemo : Component
@@ -329,104 +686,16 @@ class ObservableTreeDemo : Component
 }
 ```
 
-`UseObservableTree` subscribes to your existing view model and triggers a
-re-render when it changes. That lets you migrate screen-by-screen:
+`UseObservableTree` subscribes to the view model and renders the component again
+when a property changes. It also follows nested objects that implement
+`INotifyPropertyChanged`. `UseObservable` watches only the object you pass to it.
+With these hooks you can replace a XAML view first and move its state into hooks
+later, or never.
 
-1. Keep the current view model.
-2. Replace the XAML view with a Reactor component.
-3. Move simple screens from view-model state to hooks later, if you want.
+### Host Reactor in a XAML page
 
-This is usually the least risky way to adopt Reactor in an existing codebase.
-
-## What You Usually Stop Writing
-
-Most XAML developers notice the same things disappear first:
-
-- **No `DataContext` plumbing** for ordinary screens
-- **No value converters** for simple formatting or visibility rules
-- **No code-behind just to mirror control state**
-- **No separate markup file** for routine UI composition
-- **Fewer tiny view models** whose only job was exposing bindable properties
-
-The replacement is not "more framework." It is usually just **more ordinary C#**.
-
-## A Practical Migration Path
-
-If you are moving an existing WinUI app to Reactor, this tends to work well:
-
-1. Start with one leaf page, not the whole app shell.
-2. Rebuild the layout with `VStack`, `HStack`, `Grid`, and `Border`.
-3. Replace bindings with `UseState`, props, or `UseObservableTree`.
-4. Inline trivial converters as local expressions.
-5. Keep existing services and view models until the Reactor version is stable.
-6. Extract reusable UI into small components once the page works.
-
-The goal is not to "port XAML syntax into C#." The goal is to adopt Reactor's
-state-driven model while preserving your WinUI knowledge.
-
-## Patterns
-
-### DependencyProperty becomes a hook
-
-In XAML, every reactive value on a control sits on a `DependencyProperty`
-— a globally-registered slot with metadata, change callbacks, and
-inheritance rules. In Reactor, the analogue is a hook call inside
-[`Render()`](components.md): `var (count, setCount) = UseState(0)` is
-the equivalent of a single instance-scoped DP, and the hook slot table
-behind it ([hooks-internals](hooks-internals.md)) plays the role the
-DP system plays for XAML. The mental shift is "I don't need a registry;
-I need a positional slot," and the implementation gets vastly smaller
-in the process.
-
-### `UserControl` becomes a component
-
-XAML developers reach for `UserControl` whenever a screen contains a
-reusable visual chunk with its own state. In Reactor, that chunk is a
-[component](components.md) — a class with a `Render()` method and
-typed props. The XAML version has a `.xaml` markup file plus a
-`.xaml.cs` code-behind plus often a property dependency-injected via
-DataContext; the Reactor version is one C# class. The reuse story is
-the same; the line count drops by ~70% on most controls.
-
-### `DataTemplate` becomes a render function
-
-XAML `DataTemplate` declares how each item in a list renders. Reactor's
-equivalent is the third argument to [`ListView<T>`](collections.md) /
-[`GridView<T>`](collections.md) / [`VirtualList`](collections.md): a
-`Func<T, Element>` that returns the per-item Element tree. Item
-selection and editing are state in the parent component, not a
-hand-wired `SelectedItem` binding. The
-[recipes/master-detail](recipes/master-detail.md) walkthrough is the
-canonical example.
-
-## Common Mistakes
-
-### Trying to compute layout from a `DependencyProperty`
-
-Reactor has no DP system — there is no `DependencyProperty.Register`,
-no metadata callback, no `AffectsMeasure`. Computed values live as
-ordinary local variables inside `Render()`; cached computations live in
-[`UseMemo`](hooks.md). If you find yourself looking for "the equivalent
-of `AffectsArrange`," the answer is "your `Render()` already ran and
-the reconciler diffed the layout-affecting modifiers" — see
-[reactor-vs-xaml](reactor-vs-xaml.md) for the longer explanation.
-
-### Using `INotifyPropertyChanged` to back local state
-
-A small "binding view model" that exposes `Name`, `Email`, etc. as
-INPC properties is the XAML idiom — in Reactor, those four lines
-collapse to four `UseState` calls. The `INotifyPropertyChanged` bridge
-still exists ([`UseObservable`](advanced.md)), but reach for it only
-when you're migrating an existing view model. New code uses hooks.
-
-### Writing XAML at all
-
-Reactor does not host a XAML loader. There is no `Application.LoadComponent`
-equivalent, no markup for Reactor *elements*, no `*.reactor.xml` files. Apps that
-need part of the screen in XAML use a WinUI `Page` as the host and
-embed Reactor via [winforms-interop](winforms-interop.md) or
-`ReactorHostControl`; everything inside that host is C#. The host itself is an
-ordinary WinUI control, so it can be declared in the page's markup:
+`ReactorHostControl` is an ordinary WinUI control, so you can declare it in a
+page's markup:
 
 ```xml
 <Page xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"
@@ -435,18 +704,17 @@ ordinary WinUI control, so it can be declared in the page's markup:
 </Page>
 ```
 
-`ComponentType` names a component with a public parameterless constructor; for
-a root that needs constructor arguments or view-model state, declare the host
-with an `x:Name` and call `Mount(...)` from code-behind. `ComponentType` only
-works for a type named in markup (that is what makes the XAML compiler generate
-its trim-safe activator); set from code, the host shows an error explaining this
-in place of the root, so use `ComponentFactory` or `Mount(...)` there. If a
-contractor's "Reactor XAML compiler" appears in your search results,
-it doesn't exist — the framework's design eliminates the second
-authoring language deliberately.
+`ComponentType` names a component with a public parameterless constructor. It
+only works for a type named in markup, because that is what makes the XAML
+compiler generate a trim-safe way to create it. If you set it from code, the host
+shows an error in place of the component. From code, set `ComponentFactory`, or
+give the host an `x:Name` and call `Mount(...)`. Use these when the component
+needs constructor arguments or view-model state.
 
-The other direction — an existing XAML `Page` or control inside a Reactor tree — uses
-`XamlPage(...)` and `XamlHost(...)`:
+### Host XAML inside Reactor
+
+The other direction, an existing XAML page or control inside a Reactor tree,
+uses `XamlPage(...)` and `XamlHost(...)`:
 
 ```csharp
 class XamlInteropExample : Component
@@ -464,35 +732,155 @@ class XamlInteropExample : Component
 }
 ```
 
-`XamlPage` re-navigates in place when the page type or parameter changes. `XamlHost`'s
-factory runs once on mount and its updater after creation and on every render; give
-unrelated hosts different `typeKey`s so one is never updated in place into another.
-Reactor does not manage the hosted control's children. Prefer the factories to the
-`XamlPageElement` / `XamlHostElement` constructors: they record the call site, so
-inspectors can map the hosted control back to your code.
+- `XamlPage` hosts a `Frame` navigated to the page. It navigates again when the
+  page type or the parameter changes.
+- `XamlHost` hosts any `FrameworkElement`. Its factory runs once, on mount. Its
+  updater runs after creation and on every render.
+- Give unrelated `XamlHost` calls different `typeKey` values, so Reactor never
+  updates one host into another.
+
+Reactor does not manage the children of the hosted control. Use the factories
+instead of the `XamlPageElement` and `XamlHostElement` constructors: the
+factories record the call site, so inspectors can map the hosted control back to
+your code.
+
+### WPF and WinForms apps
+
+- **WinForms:** the `Reactor.Interop.WinForms` package has `XamlIslandControl`,
+  a WinForms control that hosts a Reactor component. See
+  [WinForms Interop](winforms-interop.md).
+- **WPF:** there is no WPF host control yet. You can host a component through
+  `DesktopWindowXamlSource` inside an `HwndHost`. See
+  [WPF Interop](wpf-interop.md).
+- **Window settings:** for WPF and UWP window options such as `ResizeMode`,
+  `Topmost` and `WindowStyle`, the [Windows](windows.md) page has a mapping table.
+
+### A migration path
+
+1. Start with one leaf page, not the app shell.
+2. Rebuild its layout with `VStack`, `HStack`, `Grid` and `Border`.
+3. Replace bindings with `UseState`, props or `UseObservableTree`.
+4. Replace simple converters with C# expressions.
+5. Keep existing services and view models until the Reactor page is stable.
+6. Extract reusable parts into small components once the page works.
+
+The goal is not to copy XAML syntax into C#. The goal is to use Reactor's
+state-driven model and keep your WinUI knowledge.
+
+## What you usually stop writing
+
+- `DataContext` plumbing for ordinary screens.
+- Value converters for formatting and visibility.
+- Code-behind that only mirrors control state.
+- A separate markup file for each screen.
+- Small view models whose only job is to expose bindable properties.
+
+What replaces them is ordinary C#.
+
+## Patterns
+
+### Porting a XAML page
+
+1. **List the view-model properties the page uses.** Each becomes `UseState` in
+   the component, or stays in the view model behind `UseObservableTree`.
+2. **Rebuild the markup tree.** The outer panel becomes `VStack`, `HStack` or
+   `Grid`. Styles become modifier chains or helper methods.
+3. **Replace bindings with reads.** `{Binding Name}` becomes the `name`
+   variable. `Mode=TwoWay` becomes a value and a setter.
+4. **Replace commands.** An `ICommand` becomes a method or lambda. Use a
+   [`Command`](commanding.md) record when the action needs a label, an icon or a
+   shortcut.
+
+### UserControl becomes a component
+
+You reach for a `UserControl` when a screen has a reusable part with its own
+state. In Reactor, that part is a [component](components.md): one C# class with
+a `Render()` method and, if it needs input, a props record. The XAML version
+needs a `.xaml` file, a `.xaml.cs` file and often a `DataContext`. The Reactor
+version is one class.
+
+### DataContext becomes props or context
+
+In XAML, controls inherit a `DataContext` from their parents. In Reactor, a
+parent passes data to a child as props, so each component's inputs are visible
+in its type. For a value that many components deep in the tree need, such as the
+signed-in user or app settings, use [Context](context.md) instead of passing it
+through every level.
+
+## Common Mistakes
+
+### Implementing INotifyPropertyChanged on a component
+
+```csharp
+// Don't:
+// Reactor never listens to PropertyChanged on a component.
+public class ProfilePage : Component, INotifyPropertyChanged
+{
+    private string _name = "";
+    public string Name
+    {
+        get => _name;
+        set { _name = value; PropertyChanged?.Invoke(this, new(nameof(Name))); }
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
+```
+
+Reactor does not subscribe to `PropertyChanged` on a component. A component
+renders again when one of its hook setters runs or its parent renders it again.
+Setting `Name` changes the field, and nothing on screen updates. Keep the value
+in hook state instead, `var (name, setName) = UseState("");`, and the setter is
+the change signal. The `REACTOR_STATE_001` analyzer warns when a component
+implements `INotifyPropertyChanged`.
+
+### Setting properties on a control Reactor owns
+
+If you get a control through a ref and set one of its properties, or attach a
+`{Binding}` to it, you create a second source of truth. Reactor writes a
+property again only when its value in the element changes, so your value can
+stay for a while and then disappear. Put the value in state and let `Render()`
+set it. Use refs only for imperative calls such as focus.
+
+### Looking for a DependencyProperty system
+
+Reactor has no `DependencyProperty.Register`, no property metadata and no
+`AffectsMeasure`. If you look for the equivalent of `AffectsArrange`, the answer
+is that `Render()` already ran and Reactor already applied the layout changes.
+Compute values as local variables in `Render()`, and cache expensive ones with
+[`UseMemo`](hooks.md).
+
+### Looking for a Reactor XAML compiler
+
+Reactor has no markup for its elements and no XAML loader for them. There is no
+"Reactor XAML" format. Everything inside a Reactor tree is C#. To mix the two,
+use [`ReactorHostControl`](#host-reactor-in-a-xaml-page) in a XAML page, or
+[`XamlPage` and `XamlHost`](#host-xaml-inside-reactor) in a Reactor tree.
 
 ## Tips
 
-**Think "render the current truth."** In XAML, you often describe relationships
-between properties. In Reactor, you usually compute the current value directly and
-return it.
+**Render the current truth.** In XAML, you often describe relationships between
+properties. In Reactor, you compute the current value and return the UI for it.
 
-**Prefer state over control references.** If changing something should update the
-screen, store the value in `UseState` instead of reaching into a control instance.
+**Prefer state over control references.** If a change should update the screen,
+store the value in `UseState` instead of reaching into a control.
 
-**Use small components where you used `UserControl`.** The same decomposition
-instinct still applies; the only change is that the reusable unit is a C#
-component rather than a XAML file.
+**Use a component where you used a `UserControl`.** The same instinct to split
+the UI into reusable parts still applies.
 
-**Keep MVVM only where it earns its keep.** Existing observable objects migrate
-well, but many small "binding-only" view models become unnecessary once your UI is
-already C#.
+**Do not translate XAML line by line.** A page with several user controls and
+many bindings often becomes one component with a few hooks.
+
+**Keep MVVM only where it helps.** Existing view models migrate well with
+`UseObservableTree`. Many small view models that only exposed bindable
+properties are no longer needed.
 
 ## Next Steps
 
-- **[Reactor vs XAML](reactor-vs-xaml.md)** — the architectural essay: why the binding model is fundamentally different, not just syntactically
-- **[Getting Started](getting-started.md)** — build your first Reactor app from scratch
-- **[Components](components.md)** — break UI into reusable typed components
-- **[Hooks](hooks.md)** — learn `UseState`, `UseReducer`, `UseEffect`, and the core render model
-- **[Layout](layout.md)** — map more WinUI layout patterns into Reactor primitives
-- **[Advanced Patterns](advanced.md)** — bridge existing MVVM state with `UseObservableTree`
+- [Thinking in Reactor](thinking-in-reactor.md): the mental model behind this page.
+- [Your first app](getting-started.md): build a Reactor app from scratch.
+- [Components](components.md): props, children and composition.
+- [Hooks](hooks.md): `UseState`, `UseReducer`, `UseEffect` and the hook rules.
+- [Layout](layout.md): more WinUI layout patterns in Reactor.
+- [Reactivity Model](reactivity-model.md): how a state change becomes a control update.
+- [WinForms Interop](winforms-interop.md) and [WPF Interop](wpf-interop.md): host
+  Reactor in an existing desktop app.

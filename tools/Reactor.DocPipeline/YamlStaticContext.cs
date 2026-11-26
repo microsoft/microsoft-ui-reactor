@@ -28,6 +28,10 @@ namespace Microsoft.UI.Reactor.Cli.Docs;
 [YamlSerializable(typeof(ReferenceMap.FileShape))]
 [YamlSerializable(typeof(ReferenceMap.DefaultEntry))]
 [YamlSerializable(typeof(ReferenceMap.OverrideEntry))]
+[YamlSerializable(typeof(ReferenceMap.CategoryEntry))]
+[YamlSerializable(typeof(ReferenceMap.GroupEntry))]
+[YamlSerializable(typeof(ReferenceMap.AreaEntry))]
+[YamlSerializable(typeof(ReferenceMap.ModifierAreaEntry))]
 public partial class YamlStaticContext
 {
 }

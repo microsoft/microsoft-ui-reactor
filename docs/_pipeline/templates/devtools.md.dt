@@ -1,0 +1,224 @@
+---
+title: "Devtools"
+app: dev-tooling
+order: 2.2
+audience: beginner
+goal: |
+  Show how to inspect, change, and drive a running Reactor app with the
+  WinUI DevTools in the winapp CLI. Map every removed `mur devtools`
+  command to its winapp equivalent, explain what is left of the deprecated
+  Microsoft.UI.Reactor.Devtools package (the preview host behind the VS
+  Code and Visual Studio previews), and how it stays out of Release and
+  Native AOT builds. Link to devtools-internals for the implementation.
+tier: solid
+---
+
+# Devtools
+
+The devtools for a running Reactor app are the WinUI DevTools in the
+[winapp CLI](https://github.com/microsoft/winappCli). They attach to the app from
+outside, so you don't add anything to your project. They show the component tree
+and the line of C# that created each element. They change properties, resources,
+and hook state, and they click and type into the app.
+
+Reactor used to ship its own devtools: an in-app dev menu, an MCP server, and
+`mur devtools`. Those have been removed. The `Microsoft.UI.Reactor.Devtools`
+package is deprecated. It stays only for the live previews in Visual Studio and
+VS Code. See [Move from `mur devtools`](#move-from-mur-devtools).
+
+## Start a session
+
+Run a Debug build of the app with DevTools attached:
+
+```
+winapp run . --devtools on
+```
+
+`--devtools` takes `on` (a toolbar in the app), `headless` (nothing drawn in the
+app), or `off`. For WinUI projects outside CI, DevTools are on by default, so a
+plain `winapp run .` attaches them too. With `--devtools on`, winapp fails
+instead of starting the app without them.
+
+To get your terminal back, add `--detach`. It prints the app's process ID. To
+apply code edits with hot reload, add `--watch` instead. When an edit needs a
+restart, winapp rebuilds the app and attaches DevTools again. You can't use
+`--watch` and `--detach` together.
+
+Keep a Debug build. Reactor records the line that created each element only
+when [source mapping](source-mapping.md) is on, and it is on by default in Debug.
+
+## Inspect and change the app
+
+Then, from a second terminal:
+
+```
+winapp devtools inspect
+winapp devtools get-property "<Counter>/Button"
+winapp devtools get-state "<Counter>"
+winapp devtools invoke-handler "<Counter>/Button" OnClick
+winapp ui click "<Counter>/Button"
+winapp ui screenshot
+```
+
+`inspect` shows the tree your C# created in every window: component rows such
+as `<Counter>`, element kinds, keys, and the `App.cs:67` line of each element.
+These selectors work in both `winapp devtools` and `winapp ui`:
+
+| Selector | Matches |
+|---|---|
+| `<Counter>/Button` | A `Button` inside the `Counter` component |
+| `key=t1` | The element with that key |
+| `App.cs:67` | The element created on that line |
+
+Give important controls an `.AutomationId(...)` too. It is the most stable
+selector, and it also helps [UI tests](testing.md).
+
+`winapp devtools logs` shows the Reactor warnings and errors the app has raised:
+render and swallowed errors, framework warnings, keyed lists with null or
+duplicate keys, hot reload, and window events. Add `--follow` to keep reading.
+For `Debug.WriteLine` and `Trace` output, start the app with
+`winapp run . --devtools on --debug-output`. See [Diagnostics](diagnostics.md).
+
+AI agents use the same commands with `--json`. The `winui-devtools` skill teaches
+them how. See [Build with AI](build-with-ai.md).
+
+## Move from `mur devtools`
+
+Every `mur devtools` command now prints its winapp equivalent and exits `1`. It
+doesn't run anything. `mur devtools --help` prints the whole list:
+
+| `mur devtools` (removed) | use instead |
+|---|---|
+| `mur devtools [project]` | `winapp run . --devtools on` (add `--watch` for hot reload with automatic re-attach) |
+| `session list` / `session clean` | `winapp devtools list` / not needed |
+| `version` | `winapp devtools call DevTools.negotiate` (reports the Reactor version) |
+| `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
+| `properties`, `set-property`, `styles` | `winapp devtools get-property`, `set-property` |
+| `resources`, `set-resource` | `winapp devtools get-resource`, `set-resource` |
+| `state` | `winapp devtools get-state`, `set-state`, `rerender` (any component) |
+| `fire` | `winapp devtools invoke-handler <selector> <event>` (for example `OnClick`) |
+| `click`, `type`, `focus`, `invoke`, `scroll`, `wait` | `winapp ui click`, `set-value`, `focus`, `invoke`, `scroll`, `wait-for` |
+| `toggle`, `select`, `expand`, `collapse` | `winapp ui invoke <selector> --action toggle` (`select`, `expand`, `collapse`) |
+| `screenshot`, `windows`, `windows.list`, `windows.activate` | `winapp ui screenshot`, `winapp ui list-windows`, `winapp ui focus -w <hwnd>` |
+| In-app ⚡ dev menu | The DevTools overlay toolbar |
+| `--print-config`, `call <tool>` (MCP) | Not carried over: the matching winapp command with `--json` |
+| `windows.close`, `shutdown`, `call docking.*` | No tool equivalent: app behavior — drive the app's UI with `winapp ui` |
+| `logs` | `winapp devtools logs [--follow]` |
+| `reload` | `winapp run . --devtools on --watch` |
+| References overlay (`call references`) | `winapp devtools get-property <selector>` (References section) |
+| `--component`, `components`, `switch`, `windows.open` | `winapp run . --devtools on -- --preview <Name>` — the preview host lives in the app, so for now the app must reference `Microsoft.UI.Reactor.Devtools` |
+
+### MCP server
+
+The in-app MCP server has been removed, and so has `--print-config`. The app
+ignores the `--mcp-port`, `--mcp-transport`, `--devtools-log-level`,
+`--devtools-logs*`, and `--devtools-project` flags and prints a notice. Use the
+winapp CLI with `--json` instead.
+
+### In-app dev menu
+
+`DevtoolsMenu(...)` and `UseDevtools()` have been removed, so code that calls
+them no longer compiles. The DevTools toolbar in the app takes over from the
+built-in menu. For your own debug commands, build an ordinary menu and compile it
+into Debug builds only:
+
+```csharp snippet="dev-tooling/debug-menu"
+```
+
+The flags are `Observable<T>` cells. Make them `static readonly`, so every
+component shares one instance:
+
+```csharp snippet="dev-tooling/app-flags"
+```
+
+Read a flag with `ctx.UseObservable(...)` in the render body, not in a menu item
+callback, which runs on a click instead of during a render. Changing a flag
+re-renders every component that reads it. See [Advanced patterns](advanced.md)
+for more about observables.
+
+The two built-in menu items are still available from code. Add them to your own
+menu:
+
+```csharp snippet="dev-tooling/debug-overlays"
+```
+
+| Item | Use instead |
+|---|---|
+| Highlight reconcile changes | Set `ReactorFeatureFlags.HighlightReconcileChanges = true`. After each render, controls that were mounted flash red and controls that changed flash yellow. When it is off, the reconciler collects nothing. |
+| Keyed-list diagnostics | Read `ReactorDiagnostics.RecentKeyedListWarnings`, or run `winapp devtools logs`. |
+
+The highlight helps you find renders you did not expect. The
+[Rules of Reactor](rules-of-reactor.md) page covers the most common causes.
+
+## The deprecated preview package
+
+`Microsoft.UI.Reactor.Devtools` still runs the in-app preview host. The
+[Visual Studio and VS Code previews](vs-extension.md) start the app with it, and
+`--preview <Component>` uses it to open one component. It stays until winapp has
+its own previewer.
+
+`dotnet new reactor` references it in Debug builds only. If you add it yourself,
+keep the same condition:
+
+```xml
+<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+  <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="{{reactorVersion}}" />
+</ItemGroup>
+```
+
+A reference outside Debug gets build warning `REACTOR_DEVTOOLS_001`. Suppress it
+with `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>`.
+
+The preview host also needs the `Reactor.DevtoolsSupport` build switch. The
+`Microsoft.UI.Reactor` package turns it on in Debug builds, and the trimmer
+removes the preview host code in other builds. The WinUI DevTools use the same
+switch to read C# call sites, so the switch is not deprecated.
+`-p:ReactorDiagnostics=true` turns it on for one build, even in Release, and
+`-p:ReactorDiagnostics=false` turns it off. Don't ship a build made with
+`ReactorDiagnostics=true`.
+
+![How the preview host turns on. The build switch Reactor.DevtoolsSupport, on by default in Debug builds, and the deprecated Microsoft.UI.Reactor.Devtools package reference are both needed. Then the launch flag decides: --devtools run with a component name starts the preview host that the VS Code and Visual Studio previews use; --devtools list prints the names of the app's components and exits; no flag gives a normal run, and winapp run . --devtools on still attaches. In a Release or Native AOT build of the same project, the switch defaults to false, so the trimmer removes the preview host code.](images/devtools/opt-in.svg)
+
+| Argument | What it does |
+|---|---|
+| none | A normal run. |
+| `--devtools run [Component]` | Starts the preview host. With a component name, it opens that component instead of the app's root. `--devtools` with no verb means `run`. |
+| `--preview <Component>` | The same as `--devtools run <Component>`. |
+| `--devtools list [file]` | Prints the names of the app's components and exits. With a file name, it also writes the list to that file. |
+| `--devtools app` | Used to open the dev menu. The app now prints a notice and starts normally. |
+| `--devtools screenshot`, `tree`, `on`, `off`, or `headless` | Prints the winapp command to use and exits with code 2. |
+
+If the switch or the package is missing and you pass `--devtools run`, the app
+doesn't open a window. It prints how to turn the preview host on and exits with
+code 2. If the versions of `Microsoft.UI.Reactor` and
+`Microsoft.UI.Reactor.Devtools` don't match, the app prints both versions and
+exits with code 2. This usually means NuGet restored an old local package.
+Delete the app's `bin` and `obj` folders and build again.
+
+## Release builds and Native AOT
+
+A Release build has no preview host. The switch is off, the trimmer removes the
+code, and a Debug-only package reference isn't in the build at all. The WinUI
+DevTools still attach to a Release build, but without source mapping they can't
+show which line created each element.
+
+You can keep the preview host in a Native AOT build for testing. The sample
+[`hello-world-aot-devtools-on`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/hello-world-aot-devtools-on)
+shows how. [Native AOT](native-aot.md#devtools-in-aot-builds) has the steps.
+
+## Tips
+
+- Give the controls you want to drive an `.AutomationId(...)`. Then your
+  `winapp ui` commands keep working when the layout changes.
+- Use `winapp ui screenshot` to check a layout without looking at the screen. It
+  works well in scripts and for agents.
+- Keep the deprecated package reference in a Debug-only `ItemGroup`.
+
+## Next Steps
+
+- **[Developer tools](dev-tooling.md)**: the whole inner loop
+- **[Hot reload and live preview](hot-reload.md)**: edit a running app
+- **[Build with AI](build-with-ai.md)**: let an agent drive the app
+- **[Diagnostics](diagnostics.md)**: Reactor's events, traces, and logs
+- **[DevTools Internals](devtools-internals.md)**: how the preview host works
+- **[Source mapping](source-mapping.md)**: map a control back to its line of code

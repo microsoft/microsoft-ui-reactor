@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
@@ -131,3 +132,27 @@ static class CacheService
     public static void Clear() { }
 }
 // </snippet:debug-menu>
+
+// <snippet:debug-overlays>
+static class DebugOverlays
+{
+    // The two items the removed dev menu built in, as ordinary menu items.
+    // Add them to your own Debug-only menu.
+    public static MenuFlyoutItemBase[] Items() => new MenuFlyoutItemBase[]
+    {
+        // After each render, mounted controls flash red and changed ones yellow.
+        ToggleMenuItem("Highlight reconcile changes",
+            ReactorFeatureFlags.HighlightReconcileChanges,
+            v => ReactorFeatureFlags.HighlightReconcileChanges = v),
+        // The latest duplicate or null keys in keyed lists, newest first.
+        MenuItem("Log keyed-list warnings", () =>
+        {
+            foreach (var w in ReactorDiagnostics.RecentKeyedListWarnings)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"{w.Kind} in {w.ControlContext}: {string.Join(", ", w.SampleKeys)} ({w.Count}x)");
+            }
+        }),
+    };
+}
+// </snippet:debug-overlays>

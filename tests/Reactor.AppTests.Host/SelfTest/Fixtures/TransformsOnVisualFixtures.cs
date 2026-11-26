@@ -173,9 +173,9 @@ internal static class TransformsOnVisualFixtures
 
             await Mount(Target().InteractionStates(static b => b.PointerOver(scale: 1.1f), Curve.Linear(1)));
             Control.Translation = new Vector3(40, 0, 0);
-            Reconciler.SimulatePointerOverForTests(Control, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: true);
             await TransformsMatrixRecorder.Settle();
-            Reconciler.SimulatePointerOverForTests(Control, isOver: false);
+            InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: false);
             await TransformsMatrixRecorder.Settle(200);
             H.Check(Name + "_Hover_VisualTaken", ElementPool.IsVisualTaken(Control));
             H.Check(Name + "_Hover_FacadeKept", Control.Translation == new Vector3(40, 0, 0), $"translation={Control.Translation}");
@@ -195,11 +195,11 @@ internal static class TransformsOnVisualFixtures
             await Mount(Target().InteractionStates(static b => b.PointerOver(translation: new Vector3(0, -10, 0)), Curve.Linear(1)));
             Control.Translation = new Vector3(7, 0, 0);
             await TransformsMatrixRecorder.Settle();
-            Reconciler.SimulatePointerOverForTests(Control, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: true);
             await TransformsMatrixRecorder.Settle(200);
             var hovered = await Box();
             H.Check(Name + "_HoverTranslation_PositiveControl_Moves", hovered is { } hv && Near(hv.X0, Left) && Near(hv.Y0, Top - 10), $"box={hovered}");
-            Reconciler.SimulatePointerOverForTests(Control, isOver: false);
+            InteractionStateApplier.SimulatePointerOverForTests(Control, isOver: false);
             await TransformsMatrixRecorder.Settle(200);
             var rested = await Box();
             H.Check(Name + "_HoverTranslation_ReturnsToFacadeOffset", rested is { } rs && Near(rs.X0, Left + 7) && Near(rs.Y0, Top), $"box={rested}");

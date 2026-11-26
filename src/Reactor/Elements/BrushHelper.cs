@@ -99,4 +99,19 @@ public static class BrushHelper
         parsed = FallbackGray;
         return false;
     }
+
+    /// <summary>
+    /// Structural brush comparison. <see cref="Parse"/> caches the parsed color but returns a
+    /// fresh <see cref="SolidColorBrush"/> on every call (brushes have thread affinity), so a
+    /// solid brush compares by color and opacity. Other brushes compare by reference. Reads the
+    /// brushes, so it runs on the UI thread.
+    /// </summary>
+    internal static bool BrushesEqual(Brush? a, Brush? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a is SolidColorBrush sa && b is SolidColorBrush sb)
+            return sa.Color == sb.Color && sa.Opacity == sb.Opacity;
+        return false;
+    }
 }

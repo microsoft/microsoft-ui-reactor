@@ -107,6 +107,7 @@ new WindowSpec
 Notes:
 
 - `Floating` stays above owner and sibling Reactor app windows.
+- Windows can decline `AlwaysOnTop` while another app owns the foreground. Reactor logs a warning and reapplies it the next time the app is activated.
 - `ToolWindow` defaults `ShowInTaskbar` to false unless explicitly set.
 - `WindowStyle.None` should normally pair with `IsMovableByBackground = true`.
 - `UseIsCovered()` returns a z-order hint, not pixel-accurate occlusion.

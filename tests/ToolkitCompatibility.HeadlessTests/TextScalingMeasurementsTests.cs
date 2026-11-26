@@ -9,8 +9,8 @@ public sealed class TextScalingMeasurementsTests
     [InlineData("SettingsCard", 1, "approval")]
     [InlineData("SettingsCard", 1.01, null)]
     [InlineData("SettingsCard", 2.25, null)]
-    [InlineData("SettingsExpander", 1, "not-implemented")]
-    [InlineData("SettingsExpander", 2, "not-implemented")]
+    [InlineData("SettingsExpander", 1, "approval")]
+    [InlineData("SettingsExpander", 2, null)]
     [InlineData("GridSplitter", 2, "not-implemented")]
     [InlineData("Unknown", 2, "not-implemented")]
     public void Gate_OnlyAllowsImplementedCoverageAtLargerRealScale(string control, double scale, string? blocker)

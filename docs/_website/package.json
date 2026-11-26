@@ -1,0 +1,22 @@
+{
+  "name": "reactor-docs-site",
+  "private": true,
+  "type": "module",
+  "//": [
+    "No `build` script on purpose. .github/workflows/node.yml runs every `build` it finds on Node 22.13.0,",
+    "and Blume's Astro needs 22.23.4 or newer. `site` is the build; `smoke` is what node.yml runs."
+  ],
+  "scripts": {
+    "sync": "node scripts/sync.mjs",
+    "dev": "node scripts/sync.mjs && blume dev",
+    "site": "node scripts/sync.mjs && blume build && node scripts/redirect-pages.mjs",
+    "validate": "blume validate --strict",
+    "smoke": "node --test --test-reporter=spec scripts/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "dependencies": {
+    "blume": "2.2.7"
+  }
+}

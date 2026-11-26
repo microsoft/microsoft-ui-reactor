@@ -155,7 +155,7 @@ public class AccessibilityScannerTests
         Assert.DoesNotContain(findings, f => f.Id == "A11Y_003");
     }
 
-    // Matches Reconciler.ResolveCaptionForElement's `Header ?? OnContent ?? OffContent`: a set but
+    // Matches AccessibilityApplier.ResolveCaptionForElement's `Header ?? OnContent ?? OffContent`: a set but
     // empty header (or on-content) resolves to an empty caption, so the switch stays unnamed.
     [Fact]
     public void A11Y_003_ToggleSwitch_With_Empty_Higher_Precedence_Caption_Flagged()

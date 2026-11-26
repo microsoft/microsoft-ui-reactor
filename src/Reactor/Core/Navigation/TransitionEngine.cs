@@ -69,8 +69,8 @@ internal static class TransitionEngine
             // predecessor's ownership above, nothing else will take the outgoing page out of
             // whatever state its interrupted animation left it in — and NavigationCacheMode can
             // hand that control back as a later page.
-            NormalizeVisual(inVisual);
-            NormalizeVisual(outVisual);
+            NormalizeVisual(incoming, inVisual);
+            NormalizeVisual(outgoing, outVisual);
 
             // Same reasoning for hit testing. A slide that is still in flight suppressed both of
             // its pages, and one of them can be a page this swap is about to show — navigating
@@ -108,7 +108,7 @@ internal static class TransitionEngine
             ClearHitTestSuppression(incoming);
         }
 
-        PrepareTransitionAnimations(compositor, outVisual, inVisual, transition);
+        PrepareTransitionAnimations(outgoing, outVisual, incoming, inVisual, transition);
 
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
@@ -122,7 +122,7 @@ internal static class TransitionEngine
             if (StillOwns(incoming, generation))
             {
                 // Finalize: ensure incoming is fully visible
-                NormalizeVisual(inVisual);
+                NormalizeVisual(incoming, inVisual);
             }
             if (suppressesHitTesting)
             {
@@ -156,7 +156,7 @@ internal static class TransitionEngine
                 // a transition that is already running.
                 if (StillOwns(outgoing, generation))
                 {
-                    NormalizeVisual(outVisual);
+                    NormalizeVisual(outgoing, outVisual);
                 }
 
                 batch.Dispose();
@@ -168,12 +168,12 @@ internal static class TransitionEngine
     }
 
     internal static void PrepareTransitionAnimations(
-        Compositor compositor, Visual outVisual, Visual inVisual, NavigationTransition transition)
+        UIElement outgoing, Visual outVisual, UIElement incoming, Visual inVisual, NavigationTransition transition)
     {
         if (transition is not DrillInTransition) return;
         // Persistent expressions must not become part of a finite animation batch.
-        BindCenterPointToVisualSize(compositor, outVisual);
-        BindCenterPointToVisualSize(compositor, inVisual);
+        Animation.TransformOriginBinding.BindCentre(outgoing, outVisual);
+        Animation.TransformOriginBinding.BindCentre(incoming, inVisual);
     }
 
     internal static void StartTransitionAnimations(
@@ -230,6 +230,10 @@ internal static class TransitionEngine
         var generation = global::System.Threading.Interlocked.Increment(ref _transitionGeneration);
         _elementGeneration.GetOrCreateValue(outgoing).Value = generation;
         _elementGeneration.GetOrCreateValue(incoming).Value = generation;
+        // The transition owns both pages' opacity now (it hides, fades and normalizes them), so an
+        // opacity restart waiting for XAML's opacity push must not show a page early (#1669).
+        Core.Reconciler.CancelOpacityRestart(outgoing);
+        Core.Reconciler.CancelOpacityRestart(incoming);
         return generation;
     }
 
@@ -247,7 +251,13 @@ internal static class TransitionEngine
     {
         try
         {
-            return new global::Windows.UI.ViewManagement.UISettings();
+            var settings = new global::Windows.UI.ViewManagement.UISettings();
+            // Implicit transitions check the setting when they're applied, and an unchanged
+            // element skips its update, so a change refreshes every host (issue #1702).
+            // ColorValuesChanged doesn't fire for this setting.
+            if (Core.UiSettingsCapabilities.HasAnimationsEnabledChanged)
+                settings.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
+            return settings;
         }
         catch (global::System.Runtime.InteropServices.COMException ex)
         {
@@ -263,6 +273,44 @@ internal static class TransitionEngine
             Core.Diagnostics.DiagnosticLog.SwallowedError(
                 Core.Diagnostics.LogCategory.Navigation, "UISettings activation", ex);
             return null;
+        }
+    }
+
+    private static void OnAnimationsEnabledChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
+        => RefreshHostsForAnimationsChange();
+
+    // The setting at the last poll: -1 before the first, then 0 or 1.
+    private static int _polledAnimationsEnabled = -1;
+
+    /// <summary>
+    /// Where the change notification doesn't exist (before Windows 10 2004), each host's root
+    /// pass calls this, and a setting that moved since the last poll refreshes every host. The
+    /// first poll only records the value. UI thread.
+    /// </summary>
+    internal static void PollAnimationsEnabled()
+    {
+        int now = AnimationsEnabled ? 1 : 0;
+        int before = global::System.Threading.Interlocked.Exchange(ref _polledAnimationsEnabled, now);
+        if (before >= 0 && before != now)
+            RefreshHostsForAnimationsChange();
+    }
+
+    /// <summary>
+    /// Asks every live host for a pass that skips no element, so implicit transitions are
+    /// applied again under the current setting. Any thread. Internal so a selftest can drive
+    /// what the settings notification does.
+    /// </summary>
+    internal static void RefreshHostsForAnimationsChange()
+    {
+        try
+        {
+            Core.ThemeResourceListeners.NotifyAll();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Raised on the WinRT notification thread, where nothing above would catch it.
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Navigation, "AnimationsEnabledChanged refresh", ex);
         }
     }
 
@@ -331,8 +379,13 @@ internal static class TransitionEngine
     /// <summary>
     /// Stops the animations this engine starts and returns the visual to its resting state. The
     /// reset doesn't fire the page's implicit keys (an <c>.OpacityTransition()</c> on its root).
+    /// A <c>.TransformOrigin()</c> the page declares gets its pivot expression back (spec 066 §8.2).
     /// </summary>
-    internal static void NormalizeVisual(Visual visual)
+    internal static void NormalizeVisual(UIElement page)
+        => NormalizeVisual(page, Animation.AnimationHelper.GetElementVisual(page));
+
+    /// <inheritdoc cref="NormalizeVisual(UIElement)"/>
+    internal static void NormalizeVisual(UIElement page, Visual visual)
     {
         ReleaseAnimatedProperties(visual);
         Core.Reconciler.WithoutImplicitAnimations(visual, () =>
@@ -341,6 +394,7 @@ internal static class TransitionEngine
             visual.Offset = Vector3.Zero;
             visual.Scale = Vector3.One;
         });
+        Animation.TransformOriginBinding.Restore(page, visual);
     }
 
     /// <summary>
@@ -373,7 +427,9 @@ internal static class TransitionEngine
     /// DrillIn can lose ownership of a page to a Slide or an instant swap and never run its own
     /// cleanup, so whichever transition ends up owning the page has to be the one that clears
     /// it — otherwise a live animation leaks onto a control that <c>NavigationCacheMode</c> may
-    /// hand back later.
+    /// hand back later. Since spec 066 layer 5 that expression is the <c>.TransformOrigin</c> binding,
+    /// so a bound visual keeps it here and <see cref="NormalizeVisual(UIElement, Visual)"/> hands it to
+    /// <c>TransformOriginBinding.Restore</c>, which releases it unless the page declares an origin.
     /// </para>
     /// </remarks>
     private static void ReleaseAnimatedProperties(Visual visual)
@@ -381,7 +437,8 @@ internal static class TransitionEngine
         visual.StopAnimation("Opacity");
         visual.StopAnimation("Offset");
         visual.StopAnimation("Scale");
-        visual.StopAnimation("CenterPoint");
+        // A bound pivot expression stays: TransformOriginBinding.Restore writes into it or releases it.
+        if (!Animation.TransformOriginBinding.OwnsCenterPoint(visual)) visual.StopAnimation("CenterPoint");
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -827,14 +884,6 @@ internal static class TransitionEngine
 
     internal static bool UsesWinUIDrillInSpecification(DrillInTransition drill) =>
         drill.Duration is null;
-
-    private static void BindCenterPointToVisualSize(Compositor compositor, Visual visual)
-    {
-        var centerPoint = compositor.CreateExpressionAnimation(
-            "Vector3(target.Size.X / 2, target.Size.Y / 2, 0)");
-        centerPoint.SetReferenceParameter("target", visual);
-        visual.StartAnimation("CenterPoint", centerPoint);
-    }
 
     private static void RunCustomDrillIn(
         Compositor compositor, Visual outVisual, Visual inVisual,

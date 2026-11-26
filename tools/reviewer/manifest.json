@@ -112,6 +112,21 @@
       "description": "Yoga value types, enums, and layout results \u2014 data integrity"
     },
     {
+      "id": "safety-batch-6",
+      "agent": "safety",
+      "files": [
+        "src/Reactor/Core/Reconciler.ReactorState.cs",
+        "src/Reactor/Core/Reconciler.Pooling.cs",
+        "src/Reactor/Core/Reconciler.Unmount.cs",
+        "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
+        "src/Reactor/Core/Reconciler.Context.cs",
+        "src/Reactor/Core/Reconciler.Keyframes.cs",
+        "src/Reactor/Core/InteractionStateApplier.cs",
+        "src/Reactor/Core/Reconciler.CompositionState.cs"
+      ],
+      "description": "Reconciler partials and helpers \u2014 per-control state, pooling, teardown, context replay, per-control composition state, interaction states"
+    },
+    {
       "id": "lifecycle-batch-1",
       "agent": "lifecycle",
       "files": [
@@ -274,6 +289,21 @@
         "src/Reactor/Core/Localization/NumberFormatOptions.cs"
       ],
       "description": "Localization format option types"
+    },
+    {
+      "id": "lifecycle-batch-13",
+      "agent": "lifecycle",
+      "files": [
+        "src/Reactor/Core/Reconciler.Unmount.cs",
+        "src/Reactor/Core/Reconciler.ExitTransitions.cs",
+        "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
+        "src/Reactor/Core/Reconciler.Pooling.cs",
+        "src/Reactor/Core/Reconciler.Registration.cs",
+        "src/Reactor/Core/Reconciler.Navigation.cs",
+        "src/Reactor/Core/Reconciler.Flyouts.cs",
+        "src/Reactor/Core/Reconciler.ReactorState.cs"
+      ],
+      "description": "Reconciler partials \u2014 unmount, exit transitions, error-boundary rollback, registration, navigation, flyouts"
     },
     {
       "id": "interop-batch-1",
@@ -1311,6 +1341,61 @@
         "tests/cmd_perf/CmdPerf.XamlCmd/CmdPerf.XamlCmd.csproj"
       ],
       "description": "Remaining perf bench and cmd perf project files"
+    },
+    {
+      "id": "general-batch-33",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/Reconciler.Modifiers.cs",
+        "src/Reactor/Core/ModifierEvents.cs",
+        "src/Reactor/Core/ThemeBindingApplier.cs",
+        "src/Reactor/Core/AccessibilityApplier.cs",
+        "src/Reactor/Core/ReferenceEdgeWiring.cs",
+        "src/Reactor/Core/Reconciler.Flyouts.cs",
+        "src/Reactor/Core/Reconciler.Registration.cs",
+        "src/Reactor/Core/Reconciler.StaticForwarders.cs"
+      ],
+      "description": "Reconciler partials and helpers \u2014 modifiers, event trampolines, theme bindings, accessibility, reference edges"
+    },
+    {
+      "id": "general-batch-34",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/Reconciler.Keyframes.cs",
+        "src/Reactor/Core/Reconciler.Transitions.cs",
+        "src/Reactor/Core/InteractionStateApplier.cs",
+        "src/Reactor/Core/Reconciler.CompositionState.cs",
+        "src/Reactor/Core/Reconciler.ConnectedAnimations.cs",
+        "src/Reactor/Core/Reconciler.ExitTransitions.cs"
+      ],
+      "description": "Reconciler partials and helpers \u2014 animations, transitions, interaction states"
+    },
+    {
+      "id": "general-batch-35",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/Reconciler.ReactorState.cs",
+        "src/Reactor/Core/Reconciler.Pooling.cs",
+        "src/Reactor/Core/Reconciler.Unmount.cs",
+        "src/Reactor/Core/Reconciler.ErrorBoundary.cs",
+        "src/Reactor/Core/Reconciler.Context.cs",
+        "src/Reactor/Core/Reconciler.SourcePublishing.cs",
+        "src/Reactor/Core/Reconciler.Navigation.cs"
+      ],
+      "description": "Reconciler partials \u2014 per-control state, pooling, unmount, context, diagnostics source publishing"
+    },
+    {
+      "id": "general-batch-36",
+      "agent": "general",
+      "files": [
+        "src/Reactor/Core/GestureDispatch.cs",
+        "src/Reactor/Core/DragDropDispatch.cs",
+        "src/Reactor/Core/Reconciler.KeyedItemsBinding.cs",
+        "src/Reactor/Core/Reconciler.RichTextScrollAnchor.cs",
+        "src/Reactor/Core/Reconciler.Diagnostics.cs",
+        "src/Reactor/Core/V1Protocol/Reconciler.TemplatedTree.cs"
+      ],
+      "description": "Reconciler partials and helpers \u2014 gestures, drag and drop, keyed items binding, rich text scroll anchor, diagnostics"
     }
   ]
 }

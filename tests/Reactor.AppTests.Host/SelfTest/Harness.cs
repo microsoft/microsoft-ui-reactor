@@ -172,8 +172,39 @@ internal sealed class Harness
         var host = new ReactorHost(_window);
         if (_contentArea is not null)
             host.ContentTarget = _contentArea;
+        s_createdHosts.Add(new WeakReference<ReactorHost>(host));
         return host;
     }
+
+    // Hosts the current fixture built with CreateHost, which Render drains alongside the
+    // primary window's host (issue #1679). Weak, so the tracker never roots a host a fixture
+    // disposed. Scoped to one fixture: the harness never disposes these hosts,
+    // so a process-wide list would make every Render wait on every earlier fixture's host.
+    private static readonly List<WeakReference<ReactorHost>> s_createdHosts = new();
+
+    /// <summary>Stops <see cref="Render"/> waiting on hosts from the previous fixture.</summary>
+    internal static void ForgetCreatedHosts() => s_createdHosts.Clear();
+
+    /// <summary>Entries currently tracked for <see cref="Render"/>, live or not.</summary>
+    internal static int TrackedCreatedHostCount => s_createdHosts.Count;
+
+    /// <summary>The hosts <see cref="Render"/> drains: the primary window's, plus this fixture's live CreateHost hosts.</summary>
+    private static List<ReactorHost> HostsToDrain()
+    {
+        var hosts = new List<ReactorHost>(s_createdHosts.Count + 1);
+        if (ReactorApp.PrimaryWindow?.Host is { } primary)
+            hosts.Add(primary);
+        // One pass prunes collected or disposed entries and collects the rest.
+        s_createdHosts.RemoveAll(weak =>
+        {
+            if (!weak.TryGetTarget(out var host) || host.IsDisposed) return true;
+            if (!hosts.Contains(host)) hosts.Add(host);
+            return false;
+        });
+        return hosts;
+    }
+
+    private static bool AllIdle(List<ReactorHost> hosts) => hosts.TrueForAll(static host => host.IsIdle);
 
     /// <summary>
     /// Places arbitrary content into the test content area (below the TitleBar).
@@ -306,7 +337,8 @@ internal sealed class Harness
     // -- Render / timing -------------------------------------------------
 
     /// <summary>
-    /// Waits for ReactorHost to finish all pending render passes, then forces a
+    /// Waits for the primary window's host and every live host this fixture made with
+    /// <see cref="CreateHost"/> to finish all pending render passes, then forces a
     /// synchronous WinUI layout update so ActualWidth/ActualHeight are current.
     /// Pass a non-zero <paramref name="ms"/> only for genuinely async operations
     /// (e.g. WebView2 initialization) that need wall-clock time beyond the render.
@@ -333,15 +365,24 @@ internal sealed class Harness
         // bearing for ~98.4% of fixtures; the multi-wave NativeDocking sites
         // (TabView → nested DockManager → nested TabView) were the remaining
         // ~1.6% flake source observed in 1000-iteration stress runs.
-        var host = ReactorApp.PrimaryWindow?.Host;
+        //
+        // The hosts drained are the primary window's plus every live host the
+        // current fixture made with H.CreateHost (issue #1679), so a state
+        // change inside a fixture's own host is awaited like one in the
+        // primary host. A host built with `new ReactorHost(...)` is not
+        // tracked; its fixture drains it with host.WaitForIdleAsync().
         var dq = DispatcherQueue.GetForCurrentThread();
         const int minPasses = 2;
         const int maxPasses = 4;
 
+        List<ReactorHost> hosts = [];
         int pass = 0;
         for (; pass < maxPasses; pass++)
         {
-            if (host is not null) await host.WaitForIdleAsync();
+            // Re-read each pass: a host may have been disposed since the last one.
+            hosts = HostsToDrain();
+            foreach (var host in hosts)
+                await host.WaitForIdleAsync();
 
             // Re-read window content each pass — an async mount may have
             // replaced it between passes.
@@ -361,17 +402,17 @@ internal sealed class Harness
             // by exact-text).
             (_currentWindow?.Content as UIElement)?.UpdateLayout();
 
-            // Stability gate: at least `minPasses` rounds AND Reactor idle.
+            // Stability gate: at least `minPasses` rounds AND every drained host idle.
             // A nested sub-host that bumpTicks during realization flips
             // IsIdle false → loop until it settles or we hit the cap.
-            if (pass + 1 >= minPasses && (host is null || host.IsIdle)) break;
+            if (pass + 1 >= minPasses && AllIdle(hosts)) break;
         }
 
-        // Diagnostic: if we exited at the cap and the host is still
+        // Diagnostic: if we exited at the cap and a host is still
         // non-idle, surface a TAP comment so the next flake is greppable
         // instead of silent. Mirrors WaitForIdleAsync's yield-cap log.
-        if (pass >= maxPasses && host is not null && !host.IsIdle)
-            Console.WriteLine("# Harness.Render exited at maxPasses while host was still non-idle");
+        if (pass >= maxPasses && !AllIdle(hosts))
+            Console.WriteLine("# Harness.Render exited at maxPasses while a host was still non-idle");
 
         // Small breathing room for the compositor to finish processing
         // visual tree changes. Without this, rapid fixture transitions can

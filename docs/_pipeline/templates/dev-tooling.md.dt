@@ -1,412 +1,165 @@
 ---
-title: "Dev Tooling"
+title: "Developer tools"
 app: dev-tooling
 order: 2
 audience: beginner
 goal: |
-  Cover Reactor's entire inner-loop surface: the `mur` CLI, preview
-  mode with `dotnet watch`, the WinUI DevTools in the winapp CLI, the
-  VS Code panel, Debug-only dev menus built from Observable<T>, and the
-  reconcile-highlight overlay. Comprehensive tier — this page
-  is the primary entry point for new contributors.
-tier: comprehensive
+  Overview and index of the Tools section. Walk the inner dev loop one
+  stage at a time (create, edit live, inspect, catch mistakes, work with
+  AI agents, debug and measure). Each stage gets a short section and a
+  link to its own page. The detailed content lives on those pages.
+tier: solid
 ---
 
-Microsoft.UI.Reactor (Reactor)'s development workflow is built around fast feedback. The
-runtime is designed to surface the work it is doing — every render,
-every reconcile, every effect, every dispatcher hop — through a small
-set of dedicated tools so you can see, attribute, and reason about
-what your app is doing without a profiler. The `mur` CLI, preview
-mode under `dotnet watch`, the WinUI DevTools, the VS Code panel, and
-the reconcile-highlight overlay are all variants of the same idea: the
-runtime publishes its work, and the inner loop lets you read it. The
-cost is zero in retail — the WinUI DevTools attach from outside the app,
-and the in-app preview host lives behind a build-time capability switch
-(`Reactor.DevtoolsSupport`) so end users never see anything you don't
-intend to ship.
+# Developer tools
 
-# Dev Tooling
+Reactor comes with tools for the inner dev loop: the short cycle where you
+change code, see the result, and fix what is wrong. This page walks that loop
+one stage at a time. Each stage links to a page with the full details.
 
-> **`mur devtools` has been removed.** Reactor's developer tools are the
-> [WinUI DevTools in the winapp CLI](#winui-devtools-winapp), which need nothing in
-> your project: `winapp run . --devtools on`. Every `mur devtools` command now only
-> prints its winapp equivalent and exits `1`. The in-app MCP server and the in-app
-> dev menu (`DevtoolsMenu`, `UseDevtools`) have been removed too. The
-> `Microsoft.UI.Reactor.Devtools` package remains, deprecated, only for the in-app
-> preview host that has no winapp equivalent yet — it powers the component preview
-> (`--preview <Name>`), the VS Code live preview panel and the Visual Studio embedded
-> preview — and stays until winapp has its own previewer. The
-> `Reactor.DevtoolsSupport` switch is not deprecated: `ReactorDiagnostics` turns it
-> on in Debug, and the WinUI DevTools need it for C# call sites. The rest of this page — `dotnet watch`, hot reload, the
-> other `mur` commands — is unaffected.
+## The tools at a glance
 
-Reactor's inner loop centers on `dotnet watch` and preview mode: you edit
-code, save, and see changes in a running window — no manual restart, no
-state-resetting class reload most of the time. Surrounding that loop are
-four complementary surfaces — the [`mur` CLI](#the-mur-cli), the
-[WinUI DevTools](#winui-devtools-winapp), the [VS Code panel](#vs-code-panel),
-and the [runtime overlays](#runtime-overlays) — each of which lights up
-only when you ask for it.
+| Tool | What it does | Where you get it | Details |
+|---|---|---|---|
+| Project templates | Create a new Reactor app | Windows App SDK template pack, through `winapp new` or `dotnet new` | [Install Reactor](install.md) |
+| `mur` CLI | Create, check, inspect, and localize from the terminal | .NET tool `Microsoft.UI.Reactor.Cli`, or the skill kit zip | [mur CLI](mur-cli.md) |
+| Hot reload | Apply code edits to a running app and keep its state | Built into `Microsoft.UI.Reactor`; run with `dotnet watch` | [Hot reload](hot-reload.md) |
+| WinUI DevTools | Inspect, edit, and drive a running app from the terminal or an agent | The winapp CLI: `winapp run . --devtools on` | [Devtools](devtools.md) |
+| Visual Studio extension | Live preview inside Visual Studio 2026 | `Reactor.VsExtension.vsix` on the GitHub release | [Extensions](vs-extension.md) |
+| VS Code extension | Live preview panel in VS Code | Run from source in `src/vscode-reactor` | [Extensions](vs-extension.md) |
+| Analyzers | Report Reactor mistakes in the editor and the build, with code fixes | Inside the `Microsoft.UI.Reactor` package | [Analyzers](analyzers.md) |
+| `mur check` | Build the project and add a fix hint to each diagnostic | Part of the `mur` CLI | [mur check](analyzers.md#mur-check) |
+| Agent plugin and skill kit | Teach AI coding agents the Reactor DSL and tools | `plugins/reactor` in the repo, or the skill kit zip | [Build with AI](build-with-ai.md) |
+| Diagnostics | Release-safe events, traces, and logs | Built into `Microsoft.UI.Reactor` | [Diagnostics](diagnostics.md) |
 
-## Preview Mode
+![The Reactor inner dev loop. 1 Create, with project templates and mur --create. 2 Edit live, with dotnet watch, hot reload, and live preview. 3 Inspect, with the WinUI DevTools in the winapp CLI. 4 Catch mistakes early, with analyzers and mur check. 5 Debug and measure, with diagnostics. An arrow labeled next change goes back to Edit live. In the center, Work with AI agents has dashed arrows to each stage.](images/dev-tooling/inner-loop.svg)
 
-Launch the app from `dotnet watch` to use Reactor's hot-reload-friendly
-preview workflow:
+## Create a project
 
-```csharp snippet="dev-tooling/entry-point"
-```
+Start from a project template. `winapp new -t reactor -n MyApp` creates a
+packaged app with the `Microsoft.UI.Reactor` package already referenced.
+[Install Reactor](install.md) lists every template and the `dotnet new`
+commands.
 
-The app entry point is an ordinary `ReactorApp.Run` call; there is no
-`preview:` or `devtools:` argument. The in-app preview host (the VS Code
-panel and the Visual Studio embedded preview use it) needs the deprecated
-`Microsoft.UI.Reactor.Devtools` package, referenced in Debug only, and the
-`Reactor.DevtoolsSupport` switch, which is on in Debug by default. It is
-activated at launch with `--devtools run`.
+If you work inside a clone of the Reactor repository, `mur --create MyApp`
+writes a minimal project (`Program.cs`, a `.csproj`, a `.sln`, and an app
+icon) that references the Reactor source instead of the package. See
+[mur CLI](mur-cli.md#create-a-project).
 
-## Running with Hot Reload
-
-Start your app with `dotnet watch`:
-
-<!-- ai:lock -->
-```
-dotnet watch run
-```
-<!-- /ai:lock -->
-
-This launches the app and watches your `.cs` files for changes. When you
-save, `dotnet watch` recompiles and Reactor re-renders the component tree
-in place — the same window, the same process. For most edits your live
-state survives the reload.
-
-Here's what the preview app looks like running:
-
-```csharp snippet="dev-tooling/preview-app"
-```
-
-![Preview mode demo](screenshot://dev-tooling/preview-app)
-
-Edit the `message` default value or add a new element, save the file, and
-watch the window update.
-
-### What state survives a reload
-
-Reactor migrates live state across a hot reload instead of resetting it.
-When you save, the runtime re-runs `Render()` against the existing
-[`RenderContext`](hooks.md) and reconciles the result onto the live
-controls. Hook cells are matched **by call order**, so `UseState`,
-`UseReducer`, `UseRef`, `UseMemo`, and `UsePersisted` keep their values
-as long as the hook sequence is unchanged. When you edit a record or
-class that a hook stores, the runtime migrates the value field-by-field
-onto the new shape; fields it can't map are dropped (with a log line)
-rather than throwing. When you rename or change the type of a component,
-Reactor migrates the subtree onto the new component instance, preserving
-its hook state and the underlying WinUI controls.
-
-| Edit you make | What happens to state |
-|---|---|
-| Change a `Render()` body, add/remove/reorder elements | Preserved — controls patched in place |
-| Edit a value-type or record stored in a hook | Preserved — migrated field-by-field; unmappable fields dropped |
-| Rename a component type / change its identity | Preserved — subtree migrated onto the new instance |
-| Change a stored value's field type, such as `int` → `Optional<int>` | Not migrated — the hot-reload copier matches fields by name and compatible type; restart or remount to cross the schema boundary |
-| **Add, remove, or reorder hook calls** | Reset — the hook list is cleared and re-mounted fresh |
-
-The last row is the unavoidable case: changing the hook *shape* means the
-old values can't be re-keyed onto the new layout, so Reactor runs pending
-cleanups and re-mounts hooks from scratch to keep the loop alive instead
-of leaving you at an error fallback.
-
-<!-- ai:caveat -->
-Effects whose dependencies didn't change across a reload keep the cleanup
-closure they captured from the previous instance. This matches React's
-identity semantics and is harmless for state-capturing effects, but if an
-effect must re-run on every reload, give it a dependency that changes. For
-state you explicitly want to survive even a hook-shape change, use
-`UsePersisted` with `PersistedScope.Window` or store the value in an
-`Observable<T>` field — see [persistence](persistence.md).
-<!-- /ai:caveat -->
-
-### When migration misbehaves
-
-State migration is best-effort. If an unusual edit leaves a component in a
-bad state, the recovery is a full restart: stop `dotnet watch` and start
-it again, which remounts every hook from scratch. The runtime's own
-"lose everything, remount fresh" path (`HotReloadService.ResetAllContexts`)
-is internal to the framework and runs automatically when a hook-shape
-change is detected — it is not an API your app calls. Reach for a
-restart only when the targeted migration above doesn't produce the
-result you expect.
-
-### NativeAOT builds
-
-State migration relies on .NET Hot Reload, which is only available in
-JIT debug builds. Under NativeAOT (`PublishAot=true`)
-`MetadataUpdater.IsSupported` is `false`, so the whole migration subsystem
-is statically dead and trims away — there is no hot-reload loop and no
-overhead in a published app.
-
-## Function Component Entry Point
-
-For quick experiments, skip the class entirely. Pass a lambda to
-[`ReactorApp.Run`](components.md):
+To try an idea quickly, you do not need a component class. `ReactorApp.Run`
+also takes an inline function component:
 
 ```csharp snippet="dev-tooling/function-entry"
 ```
 
-This is useful for throwaway prototypes or testing a single interaction.
-You get the same hot-reload behavior — edit the lambda, save, see the
-result. The [recipes folder](recipes/index.md) collects more elaborate
-examples that fit this shape.
+## Edit live
 
-## The `mur` CLI
+Run the app under `dotnet watch`. When you save a file, .NET hot reload
+applies the edit to the running process and Reactor re-renders every
+component. Hook state stays: a counter keeps its value while you change the
+layout around it. If an edit can't be applied in place, `dotnet watch`
+restarts the app.
 
-`mur` is Reactor's repo-aware command-line tool. It is the canonical
-entry point for the localization workflow and a handful of
-repo-maintenance utilities. The subcommands map one-to-one to
-the workflows below.
+The Visual Studio extension and the VS Code extension run the same loop and
+show the live app next to your code.
 
-| Subcommand | Purpose | Common invocation |
-|------------|---------|-------------------|
-| `mur loc` | Run the localization pipeline (`extract`, `translate`, `validate`, `status`, `prune`) | `mur loc extract` |
-| `mur devtools` | **Removed** — prints the winapp equivalent of each old command and exits `1` ([mapping](#winui-devtools-winapp)) | `mur devtools --help` |
-| `mur check` | Repo-health checks (cref validity, namespace policy, "did you mean" suggestions) | `mur check` |
-| `mur doctor` | Verify the install — SDK, `mur`, local feed, templates, plugin | `mur doctor` |
-| `mur upgrade` | Re-pack the framework and refresh the plugin after a `git pull`; checks template availability but does not install the pack (that's `winapp new`) | `mur upgrade` |
-| `mur figma watch` | Poll a Figma file for design changes | `mur figma watch` |
-| `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; scaffolded apps default to the public Reactor preview unless `--reactor-version` is supplied | `mur pack-local` |
-| `mur templates status` | Report whether `dotnet new reactor` resolves (exit `0` available, `1` probe failed, `2` pack too old, `3` pack missing) | `mur templates status` |
+- [Hot reload and live preview](hot-reload.md): what survives a reload, rude
+  edits, and limits.
+- [Visual Studio and VS Code extensions](vs-extension.md): install and use the
+  live preview.
 
-To *install* the template pack, use the Windows App SDK CLI rather than `mur`:
-`winapp new -t reactor -n MyApp` installs it on demand and scaffolds in one
-step, and `winapp new --list` installs it without scaffolding. `bootstrap.ps1`
-drives that same command, so a bootstrapped checkout can go straight to
-`dotnet new reactor`.
+## Inspect the running app
 
-Beyond the subcommands there are four top-level options worth knowing:
-`mur --create <Name>` scaffolds a new Reactor project, `mur --skill`
-prints the embedded `SKILL.md` agent reference, `mur --api` prints the
-`reactor.api.txt` signatures index, and `mur --regen-api` regenerates
-that index from a source checkout.
+The WinUI DevTools in the [winapp CLI](https://github.com/microsoft/winappCli)
+let you look inside a running Debug build. They attach from outside the app, so
+you don't add anything to your project:
 
-The doc pipeline is not part of `mur`: it is a contributor tool for the
-Reactor repository, run from a checkout with
-`dotnet run --project tools/Reactor.DocPipeline -- <command>`. Its
-commands are `compile` (templates + doc apps → `docs/guide/`, the one you
-reach for most often), `check-tier` (tier lint only), `render-diagrams`
-and `new-diagram`. See
-[the doc-pipeline contributor guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
-for the full surface and the `--validate-only`, `--no-screenshots`
-(alias `--skip-screenshots`), `--skip-diagrams`, `--no-build`,
-`--skip-reference`, and `--tier <stub|solid|comprehensive>`
-flags that make the inner loop fast.
-
-## WinUI DevTools (winapp)
-
-The developer tools for a running Reactor app are the WinUI DevTools in the
-[winapp CLI](https://github.com/microsoft/winappCli). Nothing goes in your
-project: keep a Debug build (source mapping is on in Debug) and launch with
-DevTools attached:
-
-<!-- ai:lock -->
 ```
-winapp run . --devtools on --detach
-winapp devtools inspect
+winapp run . --devtools on
 ```
-<!-- /ai:lock -->
 
-DevTools are on by default for WinUI projects outside CI, so a plain
-`winapp run .` attaches them too; `--devtools on` asks for them explicitly and
-fails instead of launching without them. `--devtools` takes a value (`on`, `off`
-or `headless`).
+`winapp devtools inspect` shows the component tree with the line of C# that
+created each element. Other `winapp devtools` commands read and change
+properties, resources, and hook state, and `winapp ui` clicks, types, and takes
+screenshots.
 
-`inspect` shows the tree your C# created — `<Counter>` component rows, element
-kinds, keys, and the `App.cs:67` call site of each element — across every window.
-Reactor selectors such as `"<Counter>/Button"`, `key=t1`, and `App.cs:67` work in
-both `winapp devtools` and `winapp ui`. AI agents use the same CLI with `--json`
-and the `winui-devtools` skill; the MCP server is not carried over. Use `--watch` instead of `--detach` to rebuild on rude edits and re-attach DevTools automatically (winapp doesn't combine the two).
-
-| `mur devtools` (removed) | use instead |
-|---|---|
-| `mur devtools [project]` | `winapp run . --devtools on` (add `--watch` for hot reload with automatic re-attach) |
-| `session list` / `session clean` | `winapp devtools list` / not needed |
-| `version` | `winapp devtools call DevTools.negotiate` (reports the Reactor version) |
-| `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
-| `properties`, `set-property`, `styles` | `winapp devtools get-property`, `set-property` |
-| `resources`, `set-resource` | `winapp devtools get-resource`, `set-resource` |
-| `state` | `winapp devtools get-state`, `set-state`, `rerender` (any component) |
-| `fire` | `winapp devtools invoke-handler <selector> <event>` (for example `OnClick`) |
-| `click`, `type`, `focus`, `invoke`, `scroll`, `wait` | `winapp ui click`, `set-value`, `focus`, `invoke`, `scroll`, `wait-for` |
-| `toggle`, `select`, `expand`, `collapse` | `winapp ui invoke <selector> --action toggle` (`select`, `expand`, `collapse`) |
-| `screenshot`, `windows`, `windows.list`, `windows.activate` | `winapp ui screenshot`, `winapp ui list-windows`, `winapp ui focus -w <hwnd>` |
-| In-app ⚡ dev menu | The DevTools overlay toolbar |
-| `--print-config`, `call <tool>` (MCP) | Not carried over: the matching winapp command with `--json` |
-| `windows.close`, `shutdown`, `call docking.*` | No tool equivalent: app behavior — drive the app's UI with `winapp ui` |
-| `logs` | `winapp devtools logs [--follow]` |
-| `reload` | `winapp run . --devtools on --watch` |
-| References overlay (`call references`) | `winapp devtools get-property <selector>` (References section) |
-| `--component`, `components`, `switch`, `windows.open` | `winapp run . --devtools on -- --preview <Name>` — the preview host lives in the app, so for now the app must reference `Microsoft.UI.Reactor.Devtools` |
-
-`mur devtools --help` prints the complete mapping. Every `mur devtools` command
-prints its winapp equivalent to stderr and exits `1`; none of them runs anything.
-
-## MCP Server
-
-> **Removed.** `mur devtools` no longer launches, supervises or connects to an MCP
-> endpoint, `--print-config` is gone, and the in-app MCP server has been removed
-> from `Microsoft.UI.Reactor.Devtools` (with the `--mcp-port`, `--mcp-transport`,
-> `--devtools-log-level`, `--devtools-logs*` and `--devtools-project` flags, now ignored with
-> a notice, and the `--devtools app|screenshot|tree` verbs: `app` is ignored with a notice and
-> the app runs normally, `screenshot` and `tree` exit `2`). Use
-> [`winapp run . --devtools on`](#winui-devtools-winapp) and the winapp CLI with
-> `--json`; agents load the `winui-devtools` skill.
-
-## VS Code Panel
-
-The Reactor VS Code extension lives in `src/vscode-reactor/` and provides
-a side panel that:
-
-- Lists the running app's component tree.
-- Highlights the source line for any element you click in the tree.
-- Renders the preview window's latest captured frame next to your editor.
-- Toggles a **References** overlay that draws the app's reactive
-  reference graph — `descriptor.Reference`/`.ReferenceList`, the
-  `binding.Reference` bridge, and modifier edges such as `.LabeledBy`
-  or `.XYFocusDown` — and flags reference cycles and perpetually-null
-  (unresolved) references as diagnostics. See
-  [focus &amp; input internals](focus-and-input-internals.md).
-
-The extension launches your project with `--devtools run --vscode` and talks
-to the in-app host in the deprecated `Microsoft.UI.Reactor.Devtools` package, so
-the app must still reference that package for the panel to work. Reactor has
-no special editor requirement beyond the standard C# Dev Kit — the
-panel is additive. For the interactive Visual Studio alternative that
-embeds the real WinUI surface instead of streaming screenshots, see
-[Visual Studio Embedded Preview](vs-extension.md).
-
-When you use **Reactor: Connect to Preview** against an already-running
-preview process, enter both the `CAPTURE_PORT=...` and `CAPTURE_TOKEN=...`
-values from that process's output. The capture server requires the bearer
-token before any endpoint probe, including `/status`.
-
-## A Debug-Only Dev Menu
-
-The in-app dev menu (`DevtoolsMenu(...)` and `UseDevtools()`) has been removed.
-Inspecting and editing a running app is the job of the WinUI DevTools overlay
-toolbar (`winapp run . --devtools on`). For app-specific switches — a debug overlay,
-a "clear cache" command — build an ordinary menu and compile it into Debug builds
-only:
+For your own debug switches, such as a debug overlay or a "clear cache" command,
+build an ordinary menu that only Debug builds compile:
 
 ```csharp snippet="dev-tooling/debug-menu"
 ```
 
-`Observable<T>` is the lightweight INPC cell that backs flags like
-`AppFlags.DebugUI`. Declare them as `static readonly` fields:
+Read [Devtools](devtools.md) for the commands, the overlays, and the deprecated
+`Microsoft.UI.Reactor.Devtools` package that the live previews still use.
 
-```csharp snippet="dev-tooling/app-flags"
+## Catch mistakes early
+
+Reactor's Roslyn analyzers ship inside the `Microsoft.UI.Reactor` package.
+They report `REACTOR_*` diagnostics in the editor and in `dotnet build`, and
+many come with a code fix. For example, `REACTOR_HOOKS_001` flags a hook
+inside an `if`. The fix keeps the hook call unconditional and moves the
+condition into the output:
+
+```csharp snippet="rules-of-reactor/hook-order-good"
 ```
 
-Any component that wants to react to changes subscribes via
-`ctx.UseObservable(AppFlags.DebugUI).Value` **during render** — not inside a
-menu item callback, which runs when the item is clicked rather than during a
-render pass. See [Advanced Patterns](advanced.md) for the broader
-observable-binding story.
+`mur check` runs the same build and adds a hint under each diagnostic.
 
-## Runtime Overlays
+- [Analyzers](analyzers.md): every rule ID, its severity, and the code fixes.
+- [Rules of Reactor](rules-of-reactor.md): the rules behind the most common
+  diagnostics.
 
-- **Reconcile-highlight overlay.** Flashes a rectangle around any
-  element that the reconciler patched on the most recent render. Useful
-  for catching unintended re-renders (the [Rules of Reactor](rules-of-reactor.md)
-  page covers the most common causes). Turn it on from code — for example
-  from a Debug-only menu item — with
-  `ReactorFeatureFlags.HighlightReconcileChanges = true`. It is zero-cost when off.
-- **Keyed-list diagnostics.** `ReactorDiagnostics.RecentKeyedListWarnings`
-  holds the most recent keyed-list bailout diagnostics, newest first; surface them from
-  the same menu if you want them on screen.
-## The Iteration Cycle
+## Work with AI agents
 
-The full inner loop:
+AI coding agents can do every stage of this loop. The Reactor agent plugin and
+the skill kit teach an agent the DSL, the hooks rules, and the tools on this
+page. `mur check` gives the agent build feedback with fix hints, and the
+winapp CLI with `--json` and the `winui-devtools` skill lets it see and drive
+the running app. The docs site also
+publishes `llms.txt` and a Markdown copy of each page.
 
-1. **Run** `dotnet watch run` in your terminal.
-2. **Edit** a component in your editor (with the VS Code panel open
-   if you want screenshots and the component tree alongside).
-3. **Save** the file — `dotnet watch` detects the change and recompiles.
-4. **See** the updated UI in the running window.
+Read [Build with AI](build-with-ai.md) for install steps for each agent.
 
-No build step to invoke manually. The app stays running and the window
-stays positioned where you left it.
+## Debug and measure
 
-```csharp snippet="dev-tooling/iteration-demo"
-```
+In Release builds, Reactor reports swallowed exceptions and failed HRESULTs
+through the `Microsoft-UI-Reactor` EventSource. Capture them with environment
+variables, `dotnet-trace`, the Visual Studio profiler, or in process.
+`winapp devtools logs` shows the warnings and errors among them.
 
-![Iteration demo](screenshot://dev-tooling/iteration-demo)
+- [Diagnostics](diagnostics.md): capture and read Reactor's events and traces.
+- [Performance](performance.md): find and fix slow renders.
+- [Testing](testing.md): unit tests and UI tests for components.
 
-## Patterns
+## How it works
 
-### Per-feature debug flag with a Dev menu toggle
+These pages explain the machinery behind the tools. You do not need them to
+use the tools.
 
-Declare a flag as an `Observable<bool>` in a static class, expose it
-through your Debug-only menu's `ToggleMenuItem`, and read it from any component
-via `ctx.UseObservable(...)`. Flipping the flag re-renders every
-subscribed component — no event-wiring boilerplate. The pattern scales
-to a dozen flags without a config UI.
+- [Devtools internals](devtools-internals.md): the in-app preview host behind
+  the Visual Studio and VS Code previews.
+- [Analyzer architecture](analyzer-architecture.md): how the analyzers and
+  code fixes are built.
+- [Source mapping](source-mapping.md): how a control maps back to the line of
+  code that created it.
+- [Perf instrumentation](perf-instrumentation.md): the EventSource, keywords,
+  and counters.
 
-### Screenshots of your own app
-
-To capture a running app from a script, launch it with
-`winapp run . --devtools on --detach` and take the picture with
-`winapp ui screenshot -a <app>`; neither needs anything in the project.
-Reactor's own doc pipeline works differently: it launches each doc app
-under the in-app preview host (`--preview`, which needs the deprecated
-package) to switch components, and captures the window with winapp's UI
-Automation library. See
-[`docs/contributing/doc-pipeline.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
-for that harness.
-
-## Common Mistakes
-
-### Shipping the devtools switch in Release
-
-Reference the deprecated `Microsoft.UI.Reactor.Devtools` package in Debug only, so
-Release/AOT binaries keep the preview host trimmed; a reference outside Debug gets
-build warning `REACTOR_DEVTOOLS_001`. The `Reactor.DevtoolsSupport` switch follows
-`ReactorDiagnostics`: on in Debug, and in Release only with
-`-p:ReactorDiagnostics=true`, which embeds diagnostics you should not distribute.
-The WinUI DevTools need no package.
-
-### Wiring real app state through `UseState` during inner-loop work
-
-`UseState` resets on every hot reload. If your loop depends on a
-30-second login flow to reach the screen you are iterating on, store
-the relevant state in [`UsePersisted`](persistence.md) (Window scope)
-or in an `Observable<T>` field. The hot reload picks up the new code
-without resetting your state.
-
-### Expecting the WinUI DevTools under a bare `dotnet watch run`
-
-The WinUI DevTools attach only when you launch through
-`winapp run . --devtools on` (add `--watch` for hot reload with automatic
-re-attach). A bare `dotnet watch run` starts the app without them.
 ## Tips
 
-**Keep dotnet watch running.** Don't stop and restart it between
-edits. It handles recompilation and reconnection automatically.
-
-**Use small components.** Smaller components reload faster because
-less of the tree needs to be rebuilt. Extract pieces early.
-
-**Check the terminal.** When hot reload fails (usually a syntax
-error), `dotnet watch` prints the error. Fix it and save — it retries.
-
-**Use [function components](components.md) for experiments.**
-`ReactorApp.Run("Test", ctx => ...)` is the fastest way to try an
-idea. No class boilerplate.
-
-**ARM64 builds for benchmarks.** If you're on ARM64 hardware, build
-with `dotnet run -r win-arm64` to get native performance numbers.
+- Keep `dotnet watch` running in its own terminal. Its output tells you when an
+  edit was applied and when the app restarted.
+- Build small components. A small `Render()` is quick to re-render and easy to
+  inspect.
+- Treat analyzer warnings as bugs. Most of them point at a real runtime
+  problem, such as lost state or a missed update.
+- On an ARM64 machine, pass the runtime explicitly if `dotnet run` picks the
+  wrong one: `dotnet run -r win-arm64`.
 
 ## Next Steps
 
-- **[Getting Started](getting-started.md)** — Previous: create your first app and learn the basics
-- **[Components](components.md)** — Next: component classes, props, function components, composition
-- **[Hooks](hooks.md)** — Learn the state management primitives used inside components
-- **[Testing](testing.md)** — Headless renderer fixtures, snapshot tests, async test patterns
-- **[DevTools Internals](devtools-internals.md)** — How the in-app preview host and the overlays are implemented
+- **[Hot reload and live preview](hot-reload.md)**: edit a running app
+- **[Devtools](devtools.md)**: inspect and drive a running app with winapp
+- **[mur CLI](mur-cli.md)**: every command and its options
+- **[Analyzers](analyzers.md)**: every `REACTOR_*` rule
+- **[Build with AI](build-with-ai.md)**: use Reactor with AI coding agents

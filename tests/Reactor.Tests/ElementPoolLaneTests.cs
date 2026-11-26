@@ -44,6 +44,8 @@ public class ElementPoolLaneTests
         "Rotation" => e.Rotation(30),
         "Translation" => e.Translation(10, 0, 0),
         "CenterPoint" => e.CenterPoint(new global::System.Numerics.Vector3(10, 5, 0)),
+        // Spec 066 layer 5: a non-(0, 0) origin starts its pivot expression at mount.
+        "TransformOrigin" => e.TransformOrigin(0.5f, 0.5f),
         // Takes the visual on the first state change, or needs a live ScrollViewer: see below.
         "InteractionStates" or "ScrollLinked" => null,
         _ => throw new Xunit.Sdk.XunitException(
@@ -83,7 +85,7 @@ public class ElementPoolLaneTests
         // An identity value never takes the visual (spec 066 §3 invariant 2), so a facade write
         // through a ref must keep working on the rented control.
         Assert.False(For(Target().Scale(1f).Rotation(0).Translation(0, 0, 0)
-            .CenterPoint(global::System.Numerics.Vector3.Zero)).VisualLane);
+            .CenterPoint(global::System.Numerics.Vector3.Zero).TransformOrigin(0, 0)).VisualLane);
         Assert.True(For(Target().Scale(1f).Rotation(0.5f)).VisualLane);
     }
 

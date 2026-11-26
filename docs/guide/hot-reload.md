@@ -1,0 +1,229 @@
+
+# Hot reload and live preview
+
+Hot reload applies your code edits to a running app. You save a file, and the
+window updates in place. You keep the same process, the same window, and in
+most cases the same state. Reactor builds on .NET hot reload: `dotnet watch`
+sends the edit to the process, and Reactor re-renders every component against
+its existing hook state.
+
+## What survives a reload
+
+Reactor keeps each component's `RenderContext`, and the hooks stored in it,
+across a reload. Hooks are matched by call order. As long as the order of hook
+calls does not change, `UseState`, `UseReducer`, `UseRef`, `UseMemo`, and
+`UsePersisted` keep their values.
+
+| Edit you make | What happens to state |
+|---|---|
+| Change a `Render()` body; add, remove, or reorder elements | Kept. Reactor patches the existing controls. |
+| Add or remove a field on a record or class stored in a hook | Kept. Reactor copies matching fields to the new shape. A removed field is dropped. A new field gets its default value. |
+| Add or remove a field on a component class | Kept. .NET gives the edited class a new type. Reactor moves the subtree to it and copies the fields that still exist. |
+| Rename a component class, move it to another namespace, or change its key | Reset. Reactor treats it as a different component, so it unmounts the old one and mounts the new one with fresh state. |
+| Change a stored field's type, such as `int` to `Optional<int>` | That field is not copied and gets its default value. Restart if you need the old value. |
+| Add, remove, or reorder hook calls | Reset for that component. Reactor runs pending cleanups and mounts the hooks again from scratch. |
+
+A hook-order reset cannot be avoided. When the hook order changes, the old values no
+longer line up with the new hooks. Reactor resets that component instead of
+showing an error, so the loop keeps running.
+
+> **Caveat:** An effect whose dependencies did not change across a reload does not run
+> again. It keeps the cleanup it captured before the reload. If an effect must
+> run again on every reload, give it a dependency that changes. To keep a value
+> even when the hook order changes, store it with `UsePersisted` and
+> `PersistedScope.Window`, or in a static `Observable<T>` field. See
+> [Persistence](persistence.md).
+
+## Run with hot reload
+
+Start the app with `dotnet watch` from the project folder:
+
+<!-- ai:lock -->
+```
+dotnet watch run
+```
+<!-- /ai:lock -->
+
+`dotnet watch` builds and starts the app, then watches your `.cs` files. Your
+entry point does not need anything special. It is an ordinary `ReactorApp.Run`
+call:
+
+```csharp
+// Program entry point — this is the entire App.cs file:
+// ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
+//
+// Hot reload works when the app is launched under dotnet watch. Inspect the
+// running app with the WinUI DevTools: winapp run . --devtools on
+```
+
+Here is a small app to try it with:
+
+```csharp
+class DevToolingApp : Component
+{
+    public override Element Render()
+    {
+        var (count, setCount) = UseState(0);
+        var (message, setMessage) = UseState("Edit this code and save!");
+
+        return VStack(16,
+            Heading("Preview Mode Demo"),
+            TextBlock(message).FontSize(16),
+            HStack(8,
+                Button("Click me", () => setCount(count + 1)),
+                TextBlock($"Clicked {count} times").SemiBold()
+            ),
+            TextBox(message, setMessage, placeholderText: "Type something",
+                header: "Message")
+                .Width(300)
+        ).Padding(24);
+    }
+}
+```
+
+![A running Reactor window with the heading Preview Mode Demo, a message line, a Click me button next to a click count, and a Message text box.](images/dev-tooling/preview-app.png)
+
+Click the button a few times. Then change the default text of `message`, or
+add a new element, and save. The window updates, and the click count stays.
+
+## The edit loop
+
+<!-- steps -->
+
+1. **Start the app.** Run `dotnet watch run` in a terminal.
+2. **Edit a component.** Change it in your editor.
+3. **Save the file.** `dotnet watch` compiles the change and applies it.
+4. **See the result.** The running window shows the new UI.
+
+<!-- /steps -->
+
+You don't start a build yourself. The app keeps running, and the window stays
+where you left it.
+
+Try it with a list. Add a few items, then change the layout code and save. The
+items stay, because `UseReducer` keeps its value:
+
+```csharp
+class IterationDemo : Component
+{
+    public override Element Render()
+    {
+        var (items, updateItems) = UseReducer(new List<string>());
+        var (input, setInput) = UseState("");
+
+        return VStack(12,
+            Heading("Iteration Cycle Demo"),
+            TextBlock("Add items, then edit this code and save to see hot reload."),
+            HStack(8,
+                TextBox(input, setInput, placeholderText: "New item",
+                    header: "New item")
+                    .Width(200),
+                Button("Add", () =>
+                {
+                    if (!string.IsNullOrWhiteSpace(input))
+                    {
+                        updateItems(list =>
+                        {
+                            var next = new List<string>(list) { input };
+                            return next;
+                        });
+                        setInput("");
+                    }
+                })
+            ),
+            ForEach(items, (item, i) => TextBlock($"  - {item}").WithKey($"{i}-{item}"))
+        ).Padding(24);
+    }
+}
+```
+
+![A Reactor window with the heading Iteration Cycle Demo, a short instruction, and a New item text box with an Add button.](images/dev-tooling/iteration-demo.png)
+
+For quick experiments, skip the component class and pass a function to
+`ReactorApp.Run`. Hot reload works the same way:
+
+```csharp
+// Alternative: inline function component, no class needed
+// ReactorApp.Run("Quick Test", ctx =>
+// {
+//     var (n, setN) = ctx.UseState(0);
+//     return VStack(12,
+//         TextBlock($"Count: {n}").FontSize(20),
+//         Button("+1", () => setN(n + 1))
+//     ).Padding(24);
+// });
+```
+
+See [Components](components.md) for function components, and the
+[recipes](recipes/index.md) for larger examples.
+
+## Rude edits
+
+Some edits cannot be applied to a running process. .NET calls them rude edits.
+When `dotnet watch` sees one, it asks whether to restart the app. A restart
+starts a new process, so all state is lost.
+
+To restart without the prompt, set this environment variable before you run
+`dotnet watch`:
+
+```powershell
+$env:DOTNET_WATCH_RESTART_ON_RUDE_EDIT = "1"
+dotnet watch run
+```
+
+The Visual Studio extension sets this variable for you.
+
+If a reload leaves a component in a bad state after an unusual edit, stop
+`dotnet watch` and start it again. That mounts every hook from scratch.
+
+## How Reactor applies an edit
+
+- Reactor registers a .NET `MetadataUpdateHandler`. After the runtime applies
+  an edit, the handler asks the active host to render again.
+- That render skips memoization, so every component runs `Render()` with the
+  new code, even if its props did not change.
+- If a component's hook order changed, Reactor catches the hook-order error
+  for that pass. It runs the component's cleanups, drops its hook state, and
+  renders it again.
+
+Hot reload needs the JIT. In a [Native AOT](native-aot.md) build, `MetadataUpdater.IsSupported`
+is `false`, so the hot reload code is never used and the trimmer removes it.
+A published app has no hot reload and no cost from it.
+
+## Live preview in your editor
+
+You can also see the running app next to your code. Both editor extensions
+run the app under `dotnet watch`, so hot reload works there too.
+
+| Editor | How the preview works |
+|---|---|
+| Visual Studio 2026 | The real app window is embedded in a tool window. Small edits update in place. After a rude edit, the extension shows the new process in the same place, usually within about 10 seconds. |
+| VS Code | A panel shows screenshots of the running app and a component picker. Click the image to bring the real window to the front. |
+
+See [Visual Studio and VS Code extensions](vs-extension.md) to install and use
+them. The `mur` CLI has no preview command.
+
+To keep the WinUI DevTools attached while you edit, run
+`winapp run . --devtools on --watch` instead of `dotnet watch`. When an edit
+needs a restart, winapp rebuilds the app and attaches DevTools again. See
+[Devtools](devtools.md#start-a-session).
+
+## Tips
+
+- Keep `dotnet watch` running between edits. You don't need to restart it.
+- Read the terminal. If an edit does not compile, `dotnet watch` prints the
+  error. Fix it and save again.
+- Keep components small. A small `Render()` is quick to run again and easy to
+  check.
+- Keep the hook order stable while you iterate. Adding a hook resets that
+  component's state.
+- To change a type's shape without losing data, add a new field instead of
+  changing the type of an existing one.
+
+## Next Steps
+
+- **[Developer tools](dev-tooling.md)**: the whole inner loop
+- **[Visual Studio and VS Code extensions](vs-extension.md)**: live preview in your editor
+- **[Devtools](devtools.md)**: inspect and drive the running app
+- **[Hooks](hooks.md)**: the state that hot reload keeps
+- **[Persistence](persistence.md)**: keep state across reloads and restarts

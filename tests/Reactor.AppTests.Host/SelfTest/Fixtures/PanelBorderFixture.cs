@@ -88,7 +88,7 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                     if (phase is 8 or 10 or 13)
                         for (int i = 0; i < panels.Length; i++)
                         {
-                            Reconciler.SimulatePointerOverForTests(panels[i]!, isOver: true);
+                            InteractionStateApplier.SimulatePointerOverForTests(panels[i]!, isOver: true);
                             H.Check($"PanelBorder_{panels[i]!.GetType().Name}_{phases[phase]}_HoverBeforeUpdate",
                                 ReferenceEquals(panels[i]!.GetValue(brushProperties[i]), hoverBrush));
                         }
@@ -132,10 +132,10 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
 
                     if (phase is 0 or 1 or 7)
                     {
-                        Reconciler.SimulatePointerOverForTests(panel, isOver: true);
+                        InteractionStateApplier.SimulatePointerOverForTests(panel, isOver: true);
                         H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_HoverBrush",
                             ReferenceEquals(panel.GetValue(brushProperties[i]), hoverBrush));
-                        Reconciler.SimulatePointerOverForTests(panel, isOver: false);
+                        InteractionStateApplier.SimulatePointerOverForTests(panel, isOver: false);
                         H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_NormalBrushRestored",
                             ReferenceEquals(panel.GetValue(brushProperties[i]), brush));
                         if (phase == 7)
@@ -144,7 +144,7 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                     }
                     if (phase is 8 or 11)
                     {
-                        Reconciler.SimulatePointerOverForTests(panel, isOver: false);
+                        InteractionStateApplier.SimulatePointerOverForTests(panel, isOver: false);
                         H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_LatestNormalRestored",
                             ReferenceEquals(panel.GetValue(brushProperties[i]), phase == 8 ? darkBrush : null));
                         H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_LocalValueRestored",
@@ -192,9 +192,9 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                 H.Check($"BorderRestore_{name}_NormalComesFromStyle", control.Style is not null
                     && ReferenceEquals(control.GetValue(property), themeBrush)
                     && control.ReadLocalValue(property) == DependencyProperty.UnsetValue);
-                Reconciler.SimulatePointerOverForTests(control, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(control, isOver: true);
                 H.Check($"BorderRestore_{name}_HoverBrush", ReferenceEquals(control.GetValue(property), hoverBrush));
-                Reconciler.SimulatePointerOverForTests(control, isOver: false);
+                InteractionStateApplier.SimulatePointerOverForTests(control, isOver: false);
                 H.Check($"BorderRestore_{name}_NormalBrushRestored", ReferenceEquals(control.GetValue(property), themeBrush));
                 H.Check($"BorderRestore_{name}_LocalBrushReleased", control.ReadLocalValue(property) == DependencyProperty.UnsetValue);
                 control.RequestedTheme = ElementTheme.Dark;

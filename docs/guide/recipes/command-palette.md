@@ -2,12 +2,14 @@
 # Recipe: Command Palette
 
 A command palette is a filter-as-you-type list with a keyboard
-accelerator to open and Enter to execute. In Microsoft.UI.Reactor (Reactor) it's three
-`UseState` hooks, a static catalog of [`Command`](../commanding.md)
+accelerator to open and Enter to execute. In Microsoft.UI.Reactor
+(Reactor) it's three `UseState` hooks, a static catalog of `Command`
 records, and an `OnPreviewKeyDown` handler — no menubar, no modal
-manager, no view model. The palette is just another conditional
-overlay, layered over the page the same way the
-[modal-dialog recipe](modal-dialog.md) layers its confirmation sheet.
+manager, no view model.
+
+The palette is just another conditional overlay, layered over the page
+the same way the [modal-dialog recipe](modal-dialog.md) layers its
+confirmation sheet.
 
 ## Primitives
 

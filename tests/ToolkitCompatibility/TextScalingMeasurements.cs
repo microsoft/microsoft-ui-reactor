@@ -16,7 +16,7 @@ internal static class TextScalingMeasurements
     internal static string? BlockReason(string control, double scale)
     {
         Require(Positive(scale), $"Invalid OS TextScaleFactor={scale}.");
-        if (control != "SettingsCard") return "not-implemented";
+        if (!TextScalingTargets.Supports(control)) return "not-implemented";
         return scale <= 1 ? "approval" : null;
     }
 

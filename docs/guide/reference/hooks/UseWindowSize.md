@@ -1,35 +1,50 @@
 # UseWindowSize
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize`
+Returns (width, height) of the given window and re-renders when the window resizes.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public (double Width, double Height) UseWindowSize()
+public (double Width, double Height) UseWindowSize(Window window)
+```
+
+Declared on [`RenderContext`](../components/RenderContext.md).
+
+**Learn more:** [Windows](../../windows.md), [Advanced Windowing](../../windowing-advanced.md), [Hooks](../../hooks.md)
 
 ## Overloads
 
-- [`UseWindowSize()`](#usewindowsize)
-- [`UseWindowSize(Window)`](#usewindowsizewindow)
+| Overload | Description |
+| --- | --- |
+| [`UseWindowSize()`](#usewindowsize_1) | Parameterless overload — resolves the window whose host renders this component and re-renders on resize. |
+| [`UseWindowSize(Window)`](#usewindowsizewindow) | Returns (width, height) of the given window and re-renders when the window resizes. |
 
-## `UseWindowSize()`
+### `UseWindowSize()`
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize`
+Parameterless overload — resolves the window whose host renders this component and re-renders on resize. Returns `(0, 0)` when the component has no owning window (tray-flyout content, `ReactorHostControl` embeds); no implicit fallback to `PrimaryWindow` or to another open window. (spec 036 §5.2 / §7.1)
 
-### Summary
+```csharp
+public (double Width, double Height) UseWindowSize()
+```
 
-Parameterless overload — resolves the window whose host renders this
-component and re-renders on resize. Returns
-`(0, 0)` when the component has no owning window (tray-flyout content,
-`ReactorHostControl` embeds); no implicit fallback to `PrimaryWindow`
-or to another open window. (spec 036 §5.2 / §7.1)
-
-## `UseWindowSize(Window)`
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize(Microsoft.UI.Xaml.Window)`
-
-### Summary
+### `UseWindowSize(Window)`
 
 Returns (width, height) of the given window and re-renders when the window resizes.
 
+```csharp
+public (double Width, double Height) UseWindowSize(Window window)
+```
 
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `window` | `Window` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected (double Width, double Height) UseWindowSize()
+protected (double Width, double Height) UseWindowSize(Window window)
+```

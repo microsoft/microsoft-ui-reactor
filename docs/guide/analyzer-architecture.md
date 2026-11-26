@@ -1,4 +1,10 @@
 
+# Analyzer Architecture
+
+This page walks through the Reactor analyzer pipeline end-to-end: how a
+diagnostic descriptor wires into the C# compilation, what happens on each
+`InvocationExpression`, and how to add your own rule.
+
 Microsoft.UI.Reactor (Reactor) ships a small Roslyn analyzer suite that catches mistakes the
 type system can't — conditional hook calls, missing list keys,
 hardcoded colors, icon buttons with no accessible name, stale closure
@@ -13,18 +19,13 @@ authoring a new analyzer that hits `SemanticModel.GetSymbolInfo` on
 every `InvocationExpression` — that single change can double build
 time on a large solution.
 
-# Analyzer Architecture
-
-This page walks through the Reactor analyzer pipeline end-to-end:
-how a diagnostic descriptor wires into the C# compilation, what
-happens on each `InvocationExpression`, and how to add your own
-rule. The user-facing catalog of diagnostics lives on the
-[Rules of Reactor](rules-of-reactor.md) page; this is the contributor
-view. The analyzers sit in
-[`src/Reactor.Analyzers/`](https://github.com/microsoft/reactor) and
-reach every Reactor consumer because `Reactor.Analyzers.dll` is packed
-into the `Microsoft.UI.Reactor` NuGet package under
-`analyzers/dotnet/cs`, which the SDK loads automatically.
+The user-facing catalog of diagnostics lives on the [Rules of
+Reactor](rules-of-reactor.md) page; this is the contributor view. The
+analyzers sit in
+[`src/Reactor.Analyzers/`](https://github.com/microsoft/reactor) and reach
+every Reactor consumer because `Reactor.Analyzers.dll` is packed into the
+`Microsoft.UI.Reactor` NuGet package under `analyzers/dotnet/cs`, which the
+SDK loads automatically.
 
 ## The rule pipeline
 
@@ -215,7 +216,7 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_MOD_003` | Warning | The selected generic modifier overload compiles, but the reconciler discards its value on the mounted control. For example, `.Background(...)` on a `Rectangle` has no effect. The rule offers a fix to `.Fill(...)` or `.Stroke(...)` for shapes. | `NoOpModifierAnalyzer.cs` |
 | `REACTOR_MEDIA_001` | Info | WebView2 is a direct child of an auto-layout stack (HStack/VStack/FlexRow/FlexColumn) without explicit .Width/.Height | `UnsizedWebViewInStackAnalyzer.cs` |
 | `REACTOR_ANIM_003` | Warning | async lambda to WithAnimation loses the ThreadStatic scope after await | `AnimationScopeAsyncAnalyzer.cs` |
-| `REACTOR_ANIM_004` | Warning | `.Set` writes a `UIElement` transform facade (`Rotation`, `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix`, the `*Transition` properties) or calls `StartAnimation` on an element whose chain uses a modifier that takes the composition visual (`ModifierTable.VisualOwningModifiers`), so WinUI rejects the write. Since spec 066 layer 4 that includes a non-identity `.Scale`/`.Rotation`/`.Translation`/`.CenterPoint` (a constant identity value doesn't take the visual, unless the `.Set` writes the same facade); also flags a `.Set` `Translation` write that conflicts with `.Translation(...)` (#1642). Ships a fix to `.Rotation`/`.Scale`/`.CenterPoint` and to the `.XxxTransition()` modifiers, which run on the visual since spec 066 layer 2 (spec 066 §9.1) | `FacadeTransformSetAnalyzer.cs` |
+| `REACTOR_ANIM_004` | Warning | `.Set` writes a `UIElement` transform facade (`Rotation`, `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix`, the `*Transition` properties) or calls `StartAnimation` on an element whose chain uses a modifier that takes the composition visual (`ModifierTable.VisualOwningModifiers`), so WinUI rejects the write. Since spec 066 layer 4 that includes a non-identity `.Scale`/`.Rotation`/`.Translation`/`.CenterPoint`, and since layer 5 a `.TransformOrigin` other than `(0, 0)` (a constant identity value doesn't take the visual, unless the `.Set` writes the same facade); also flags a `.Set` `Translation` write that conflicts with `.Translation(...)` (#1642). Ships a fix to `.Rotation`/`.Scale`/`.CenterPoint` and to the `.XxxTransition()` modifiers, which run on the visual since spec 066 layer 2 (spec 066 §9.1) | `FacadeTransformSetAnalyzer.cs` |
 | `REACTOR_LIFECYCLE_002` | Warning | UseEffect(Action) allocates a timer/subscription/event with no returned cleanup | `EffectCleanupAnalyzer.cs` |
 | `REACTOR_LIFECYCLE_003` | Warning | A custom control updates its hosted child with Reconciler.UpdateChild, which skips the element-type check and leaves a replaced control mounted; use Reconcile (ships a rewrite fix) | `ReconcilerUpdateChildAnalyzer.cs` |
 | `REACTOR_MEMO_001` | Info | Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache | `MemoWrapperModifierAnalyzer.cs` |
@@ -231,11 +232,12 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 they now ship — `_002` flags a hook after a single-guard early return, `_003`
 flags an `async`-void `UseEffect` body (spec 060 §4.1).
 
-`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for writes through
-`ApplyModifiers`. When a `ThemeRef` overload has a separate receiver list,
-the rule uses `ThemeControlGate`. For example, the generic brush overload of
-`Foreground` reaches `Control` and `TextBlock`, and the `ThemeRef` overload
-also reaches `RichTextBlock`.
+`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for common modifier writes.
+When a `ThemeRef` overload has a separate receiver list,
+the rule uses `ThemeControlGate`. Generic `Foreground` overloads share a receiver gate for
+`Control`, `TextBlock`, `RichTextBlock`, and `IconElement`. The runtime uses
+the same dependency-property lookup for common foreground brush modifiers, theme bindings,
+and `InteractionStates` foreground overrides.
 
 ## Combined sizing without extra copies
 

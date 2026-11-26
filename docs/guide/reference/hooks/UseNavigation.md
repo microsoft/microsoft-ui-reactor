@@ -1,37 +1,50 @@
 # UseNavigation
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigation``1`
+Child mode: retrieves an ancestor's [`NavigationHandle<TRoute>`](../navigation/NavigationHandle.md) from context. Throws if no ancestor provides one (i.e., no root `UseNavigation` with a `NavigationHost` exists above this component in the tree).
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public NavigationHandle<TRoute> UseNavigation<TRoute>() where TRoute : notnull
+public NavigationHandle<TRoute> UseNavigation<TRoute>(TRoute initial) where TRoute : notnull
+```
+
+Declared on [`RenderContext`](../components/RenderContext.md).
+
+**Learn more:** [Navigation](../../navigation.md), [Hooks](../../hooks.md)
 
 ## Overloads
 
-- [`UseNavigation<T1>()`](#usenavigationt1)
-- [`UseNavigation<T1>(T1)`](#usenavigationt1t1)
+| Overload | Description |
+| --- | --- |
+| [`UseNavigation<TRoute>()`](#usenavigationtroute) | Child mode: retrieves an ancestor's `NavigationHandle<TRoute>` from context. |
+| [`UseNavigation<TRoute>(TRoute)`](#usenavigationtroutetroute) | Root mode: creates a navigation stack with the given initial route. |
 
-## `UseNavigation<T1>()`
+### `UseNavigation<TRoute>()`
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigation``1`
+Child mode: retrieves an ancestor's [`NavigationHandle<TRoute>`](../navigation/NavigationHandle.md) from context. Throws if no ancestor provides one (i.e., no root `UseNavigation` with a `NavigationHost` exists above this component in the tree).
 
-### Summary
+```csharp
+public NavigationHandle<TRoute> UseNavigation<TRoute>() where TRoute : notnull
+```
 
-Child mode: retrieves an ancestor's `NavigationHandle`
-from context. Throws if no ancestor provides one (i.e., no root `UseNavigation`
-with a `NavigationHost` exists above this component in the tree).
+### `UseNavigation<TRoute>(TRoute)`
 
-## `UseNavigation<T1>(T1)`
+Root mode: creates a navigation stack with the given initial route. Returns a stable [`NavigationHandle<TRoute>`](../navigation/NavigationHandle.md) across re-renders. Wire this handle to a `NavigationHost` in the DSL to render route content. The handle is automatically provided to descendants via context so child components can call `UseNavigation<TRoute>()` (parameterless) to access it.
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigation``1(``0)`
+```csharp
+public NavigationHandle<TRoute> UseNavigation<TRoute>(TRoute initial) where TRoute : notnull
+```
 
-### Summary
+**Parameters**
 
-Root mode: creates a navigation stack with the given initial route.
-Returns a stable `NavigationHandle` across re-renders.
-Wire this handle to a `NavigationHost` in the DSL to render route content.
-The handle is automatically provided to descendants via context so child components
-can call `UseNavigation<TRoute>()` (parameterless) to access it.
+| Name | Type | Description |
+| --- | --- | --- |
+| `initial` | `TRoute` |  |
 
+## Use from a class component
 
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected NavigationHandle<TRoute> UseNavigation<TRoute>() where TRoute : notnull
+protected NavigationHandle<TRoute> UseNavigation<TRoute>(TRoute initial) where TRoute : notnull
+```

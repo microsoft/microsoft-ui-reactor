@@ -157,7 +157,7 @@ internal static class ChildReconciler
                 if (ctrl is not null)
                 {
                     children.Insert(live, ctrl);
-                    ApplyAmbientEnterIfActive(ctrl, newEl, ambientKind);
+                    ApplyAmbientEnterIfActive(ctrl, newEl, ambientKind, reconciler);
                     live++;
                 }
                 ni++;
@@ -287,7 +287,7 @@ internal static class ChildReconciler
             if (ctrl is not null)
             {
                 children.Insert(children.Count, ctrl);
-                ApplyAmbientEnterIfActive(ctrl, newChildren[i], ambientKind);
+                ApplyAmbientEnterIfActive(ctrl, newChildren[i], ambientKind, reconciler);
             }
         }
     }
@@ -371,9 +371,10 @@ internal static class ChildReconciler
                 // hazard as Tag). Fetch the control once for either need.
                 if ((newEl.HasCallbacks
                         || Reconciler.IsFlyoutDecorator(newEl)
-                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || GestureDispatch.HasGestureOrDragSlots(newEl.Modifiers)
+                        || GestureDispatch.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && (existingControl ??= children.Get(i)) is FrameworkElement fe)
                 {
                     reconciler.RefreshSkippedChildState(fe, oldEl, newEl);
@@ -658,9 +659,10 @@ internal static class ChildReconciler
                 // (excluded from the skip predicate). Fetch the control once.
                 if ((newEl.HasCallbacks
                         || Reconciler.IsFlyoutDecorator(newEl)
-                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || GestureDispatch.HasGestureOrDragSlots(newEl.Modifiers)
+                        || GestureDispatch.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && map.At(prefixLen) < childCount
                     && (existingControl ??= map.ControlAt(prefixLen)) is FrameworkElement fe)
                 {
@@ -712,9 +714,10 @@ internal static class ChildReconciler
                 // #721 — refresh Tag + cached gesture/drag dispatch closures on skip.
                 if ((newEl.HasCallbacks
                         || Reconciler.IsFlyoutDecorator(newEl)
-                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
-                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
-                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        || GestureDispatch.HasGestureOrDragSlots(newEl.Modifiers)
+                        || GestureDispatch.HasGestureOrDragSlots(oldEl.Modifiers)
+                        || Reconciler.CallSiteChangedOnSkip(oldEl, newEl)
+                        || Reconciler.KeyframesRebuiltOnSkip(oldEl, newEl))
                     && map.At(oldIdx) >= 0
                     && map.At(oldIdx) < childCount
                     && (existingControl ??= map.ControlAt(oldIdx)) is FrameworkElement fe)
@@ -764,7 +767,7 @@ internal static class ChildReconciler
                 if (ctrl is not null)
                 {
                     children.Insert(panelIndex++, ctrl);
-                    ApplyAmbientEnterIfActive(ctrl, newChildren[newStart + i], ambientKind);
+                    ApplyAmbientEnterIfActive(ctrl, newChildren[newStart + i], ambientKind, reconciler);
                 }
             }
             return;
@@ -1098,7 +1101,7 @@ internal static class ChildReconciler
             var ctrl = _reconciler.Mount(_newChildren[_newStart + newIdx], _requestRerender);
             if (ctrl is null) return false;
             _children.Insert(panelIdx, ctrl);
-            ApplyAmbientEnterIfActive(ctrl, _newChildren[_newStart + newIdx], _ambientKind);
+            ApplyAmbientEnterIfActive(ctrl, _newChildren[_newStart + newIdx], _ambientKind, _reconciler);
             return true;
         }
 
@@ -1349,11 +1352,11 @@ internal static class ChildReconciler
     /// continue to win when set; this is purely a default for the
     /// transactional case.
     /// </summary>
-    private static void ApplyAmbientEnterIfActive(UIElement ctrl, Element element, AnimationKind? ambientKind)
+    private static void ApplyAmbientEnterIfActive(UIElement ctrl, Element element, AnimationKind? ambientKind, Reconciler reconciler)
     {
         if (ambientKind is not { } kind) return;
         if (element.ElementTransition is not null) return;
-        Reconciler.ApplyAmbientEnterAnimation(ctrl, kind);
+        Reconciler.ApplyAmbientEnterAnimation(ctrl, kind, reconciler);
     }
 
     /// <summary>

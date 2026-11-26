@@ -1,12 +1,15 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/).
 
 # Status and Info
 
-Microsoft.UI.Reactor (Reactor)'s status and info controls report what the app is doing without stealing
-focus. Reach for them when the user needs to know something — a save
-succeeded, a long operation is running, a feature exists — and doesn't
-need to decide anything. For controls that demand a choice
-(Save / Discard / Cancel), use [Dialogs and Flyouts](dialogs-and-flyouts.md).
+Microsoft.UI.Reactor (Reactor)'s status and info controls report what the
+app is doing without stealing focus. Reach for them when the user needs to
+know something — a save succeeded, a long operation is running, a feature
+exists — and doesn't need to decide anything.
+
+For controls that demand a choice (Save / Discard / Cancel), use [Dialogs
+and Flyouts](dialogs-and-flyouts.md).
+
+> **WinUI reference:** For the full property surface and design guidance, see [Controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/).
 
 ## Reference
 

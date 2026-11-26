@@ -42,7 +42,7 @@ $packagesProps = Join-Path $repoRoot 'Directory.Packages.props'
 # (gh api repos/github/copilot-sdk/compare/v<old>...v<new>) and confirm that
 # CopilotSkipCliDownload still gates the native CLI download, and that
 # CopilotCliReleaseBaseUrl / COPILOT_CLI_DOWNLOAD_BASE_URL / CopilotCliBinaryPath
-# still behave as Directory.Build.props and README.md describe. Then bump this.
+# still behave as Directory.Build.props and CONTRIBUTING.md describe. Then bump this.
 $reviewedSdkVersion = '1.0.34'
 $sdkPinned = [regex]::Match(
     [IO.File]::ReadAllText($packagesProps),

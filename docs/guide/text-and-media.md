@@ -1,4 +1,8 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Text Controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls).
+
+# Text and Media
+
+This page covers display text, inline rich text, rich-text editing, and
+media controls in Reactor.
 
 Text and media controls are the display, rich-text, and media half of the Microsoft.UI.Reactor (Reactor)
 catalog: surfaces that show content the user is reading, watching, or
@@ -17,12 +21,11 @@ toward composition: rich layouts come from many small text elements in a
 manually-tuned `Inline` records. Skim the modifier tables before the
 prose, then jump to the control you need.
 
-# Text and Media
-
-This page covers display text, inline rich text, rich-text editing, and media controls in
-Reactor. For single-line input controls (`TextBox`, `PasswordBox`),
-see [Forms](forms.md). For data-bound collections, see
+For single-line input controls (`TextBox`, `PasswordBox`), see
+[Forms](forms.md). For data-bound collections, see
 [Collections](collections.md).
+
+> **WinUI reference:** For the full property surface and design guidance, see [Text Controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls).
 
 ## Text variants
 

@@ -240,8 +240,31 @@ public static partial class ElementExtensions
     public static T Rotation<T>(this T el, float degrees) where T : Element =>
         ModifyVisual(el, new VisualModifiers { Rotation = degrees });
 
+    /// <summary>
+    /// Sets the pivot for <c>.Scale()</c> and <c>.Rotation()</c> in pixels from the element's
+    /// leading top corner. Combined with <see cref="TransformOrigin{T}(T, float, float)"/>, it is an
+    /// offset added to the size-relative origin, like CSS <c>calc(50% + 10px)</c>.
+    /// </summary>
     public static T CenterPoint<T>(this T el, global::System.Numerics.Vector3 center) where T : Element =>
         ModifyVisual(el, new VisualModifiers { CenterPoint = center });
+
+    /// <summary>
+    /// Sets the pivot for <c>.Scale()</c> and <c>.Rotation()</c> as a fraction of the element's
+    /// laid-out size: <c>(0.5f, 0.5f)</c> is the centre, <c>(0, 0)</c> the leading top corner. The pivot
+    /// follows resizes and size animations, and <c>x</c> is flow-relative, so <c>0</c> is the right
+    /// edge in a right-to-left layout. A <c>.CenterPoint()</c> on the same element is added as a pixel
+    /// offset. Without this modifier the pivot is the <c>.CenterPoint()</c> value, or the leading top
+    /// corner.
+    /// <para><b>Grow from the centre on hover:</b>
+    /// <c>Border(card).TransformOrigin(0.5f, 0.5f).InteractionStates(s =&gt; s.PointerOver(scale: 1.05f))</c></para>
+    /// </summary>
+    /// <remarks>
+    /// Spec 066 §8. The pivot is an expression on the element's composition visual, so the modifier
+    /// takes the visual (like the other transform modifiers). While <c>.LayoutAnimation()</c> animates
+    /// the size, the pivot follows the animating size, not the final layout size.
+    /// </remarks>
+    public static T TransformOrigin<T>(this T el, float x, float y) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { TransformOrigin = new global::System.Numerics.Vector2(x, y) });
 
     // ── Typography (any Control or TextBlock) ─────────────────────
     // These set font properties via ElementModifiers, so they work on ANY element
@@ -1381,7 +1404,7 @@ public static partial class ElementExtensions
 
     /// <summary>
     /// Sets the foreground from a WinUI theme resource on <see cref="WinUI.Control"/>,
-    /// <see cref="WinUI.TextBlock"/>, or <see cref="WinUI.RichTextBlock"/>.
+    /// <see cref="WinUI.TextBlock"/>, <see cref="WinUI.RichTextBlock"/>, or <see cref="WinUI.IconElement"/>.
     /// WinUI updates the brush when the element's effective theme changes.
     /// For example, <c>RichTextBlock("Hello").Foreground(Theme.PrimaryText)</c>.
     /// </summary>

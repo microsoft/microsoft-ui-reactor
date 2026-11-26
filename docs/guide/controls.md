@@ -1,6 +1,11 @@
 
 # Controls
 
+Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the
+return value of a factory like `TextBlock(...)` or `Button(...)` — a
+plain element you compose, chain modifiers onto, and return from
+`Render()`.
+
 ```csharp
 class ControlsCatalogApp : Component
 {
@@ -12,10 +17,7 @@ class ControlsCatalogApp : Component
 }
 ```
 
-Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the
-return value of a factory like `TextBlock(...)` or `Button(...)` — a
-plain element you compose, chain modifiers onto, and return from
-`Render()`. The ten categories below cover the full set Reactor
+The ten categories below cover the full set Reactor
 exposes today. Pick a category, open its detail page, and you'll find
 the factory signature, modifier matrix, and screenshots for every
 control inside it.
@@ -44,7 +46,7 @@ pick off a shelf. `CommandHost` and `NavigationHost` are wiring emitted by
 `ValidationRule`, and `ValidationVisualizer` are the
 [forms](forms.md) validation decorators; `Semantic` is the
 [accessibility](accessibility.md) annotation wrapper; `XamlHost` and
-`XamlPage` are the [XAML interop](xaml-developers.md) hosts; and
+`XamlPage` are the [XAML interop](xaml-developers.md#host-xaml-inside-reactor) hosts; and
 `AnnounceRegion` is internal — it exists only to back the
 [`UseAnnounce`](accessibility.md) hook and has no public factory. A unit
 test (`ControlCatalogCompletenessTests`) fails the build when a newly

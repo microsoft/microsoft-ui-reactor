@@ -14,6 +14,11 @@ goal: |
 tier: comprehensive
 ---
 
+# Perf Instrumentation
+
+This page covers what Reactor publishes, where to read it, and how to get a
+clean trace.
+
 Microsoft.UI.Reactor (Reactor) publishes a structured account of its internal work — every
 reconcile pass, every component render, every state write, every
 effect flush — through one managed
@@ -30,14 +35,9 @@ allocation-heavy mechanism; the managed EventSource lives in
 through both pipes simultaneously with no per-event allocation when
 no consumer is listening.
 
-# Perf Instrumentation
-
-This page covers what Reactor publishes, where to read it, and how to
-get a clean trace. The deeper sampling machinery
-lives in
-[spec 031 (frame-aligned sampling)](https://github.com/microsoft/reactor)
-— this page links to that for the design rationale and focuses on
-what the runtime emits today.
+The deeper sampling machinery lives in [spec 031 (frame-aligned
+sampling)](https://github.com/microsoft/reactor) — this page links to that
+for the design rationale and focuses on what the runtime emits today.
 
 ## The emission pipeline
 

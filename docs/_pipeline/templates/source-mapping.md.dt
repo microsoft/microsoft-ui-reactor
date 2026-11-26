@@ -14,13 +14,14 @@ tier: solid
 
 # Source Mapping
 
-"Source mapping" in Microsoft.UI.Reactor (Reactor) is the chain that ties a runtime artifact —
-an ETW event, a `--preview` overlay highlight, a thrown exception —
-back to the C# source that produced it. Two granularities ship today:
-*component* attribution, where every render emits an ETW event carrying
-the component's type name, and *per-element* attribution, where each DSL
-call site carries the file, line and column that produced it. This page covers
-both.
+"Source mapping" in Microsoft.UI.Reactor (Reactor) is the chain that ties a
+runtime artifact — an ETW event, a `--preview` overlay highlight, a thrown
+exception — back to the C# source that produced it.
+
+Two granularities ship today: *component* attribution, where every render
+emits an ETW event carrying the component's type name, and *per-element*
+attribution, where each DSL call site carries the file, line and column that
+produced it. This page covers both.
 
 > **Status.** Per-element source tagging ships as `Element.CallSite` plus
 > `Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap`. There are two
@@ -166,7 +167,7 @@ already stores -> `Element.CallSite`. It returns `null` when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.
 
-A Native AOT app in diagnostics mode (`REACTOR_DIAGNOSTICS=1`) does not give an
+A [Native AOT](native-aot.md) app in diagnostics mode (`REACTOR_DIAGNOSTICS=1`) does not give an
 element a back-pointer just for its call site: no managed inspector can load into
 the process to read it, and it costs about 1 KB per control. `GetSource` then reads
 the location from the control's published `ReactorSource` value and returns the same

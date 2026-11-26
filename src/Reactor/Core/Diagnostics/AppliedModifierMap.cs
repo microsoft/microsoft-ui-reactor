@@ -17,7 +17,7 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <c>Visual</c> bucket records (their members are listed individually), event handlers,
 /// gesture and drag configs, <c>OnMountAction</c>/<c>OnUnmountAction</c>, <c>Ref</c>,
 /// <c>Backdrop</c> (a window property). <c>Scale</c>/<c>Rotation</c>/<c>Translation</c>/
-/// <c>CenterPoint</c> aren't DPs: the reconciler writes them to the element's composition
+/// <c>CenterPoint</c>/<c>TransformOrigin</c> aren't DPs: the reconciler writes them to the element's composition
 /// visual (spec 066 layer 4; <c>Rotation</c> as <c>RotationAngle</c>, in radians), so they are mapped
 /// to its properties. The <c>UIElement</c> facades read identity for them.
 /// <c>AppliedModifierMapTests</c> fails when a new modifier is neither mapped nor listed
@@ -67,6 +67,13 @@ internal static class AppliedModifierMap
             : Is<WinUI.TextBlock>(t) ? "TextBlock." + property
             : null;
 
+    private static string? ForegroundOwner(Type t) =>
+        Is<WinUI.Control>(t) ? "Control.Foreground"
+        : Is<WinUI.TextBlock>(t) ? "TextBlock.Foreground"
+        : Is<WinUI.RichTextBlock>(t) ? "RichTextBlock.Foreground"
+        : Is<WinUI.IconElement>(t) ? "IconElement.Foreground"
+        : null;
+
     private static string? BackgroundOwner(Type t) =>
         Is<WinUI.Panel>(t) ? "Panel.Background"
         : Is<WinUI.Control>(t) ? "Control.Background"
@@ -104,6 +111,8 @@ internal static class AppliedModifierMap
         new("Rotation", m => m.Rotation, Always("Visual.RotationAngle")),
         new("Translation", m => m.Translation, Always("Visual.Translation")),
         new("CenterPoint", m => m.CenterPoint, Always("Visual.CenterPoint")),
+        // Spec 066 §8: an expression on Visual.CenterPoint fed by the visual's ReactorOrigin property.
+        new("TransformOrigin", m => m.TransformOrigin, Always("Visual.CenterPoint")),
         new("IsVisible", m => m.IsVisible, Always("UIElement.Visibility")),
         new("RichToolTip", m => m.RichToolTip, Always("ToolTipService.ToolTip")),
         // A rich tooltip wins over the string form, so ToolTip is only applied without one.
@@ -118,7 +127,7 @@ internal static class AppliedModifierMap
         new("BorderThickness", m => m.BorderThickness, BorderOwner("BorderThickness")),
         new("BorderInlineStart", m => m.BorderInlineStart, BorderOwner("BorderThickness")),
         new("Background", m => m.Background, BackgroundOwner),
-        new("Foreground", m => m.Foreground, ControlOrTextBlock("Foreground")),
+        new("Foreground", m => m.Foreground, ForegroundOwner),
         new("AutomationName", m => m.AutomationName, Always("AutomationProperties.Name")),
         new("AutomationId", m => m.AutomationId, Always("AutomationProperties.AutomationId")),
         new("IsDragRegion", m => m.IsDragRegion, Always("TitleBar.IsDragRegion")),
@@ -194,7 +203,9 @@ internal static class AppliedModifierMap
             // replaces every inner contributor, while an inline-edge overlay builds on it.
             foreach (var m in levelRows)
             {
-                bool wholeValue = !IsEdgeOverlay(m.Modifier);
+                // CenterPoint and TransformOrigin both feed Visual.CenterPoint (pivot = size × origin +
+                // offset, spec 066 §8.1), so neither replaces the other's contribution.
+                bool wholeValue = !IsEdgeOverlay(m.Modifier) && m.Modifier is not ("CenterPoint" or "TransformOrigin");
                 merged.RemoveAll(prior => prior.Modifier == m.Modifier
                     || (wholeValue && string.Equals(prior.Property, m.Property, StringComparison.Ordinal)));
             }
@@ -222,7 +233,7 @@ internal static class AppliedModifierMap
         // An explicit, non-empty .AutomationName(...) is reported as itself and suppresses the
         // default; an empty one does not, because the apply path treats an empty name as absent.
         if (source.Modifiers?.AutomationName is { Length: > 0 }) return null;
-        if (Reconciler.DefaultAutomationNameFromCaption(Reconciler.ResolveCaptionForElement(source)) is not { } name)
+        if (AccessibilityApplier.DefaultAutomationNameFromCaption(AccessibilityApplier.ResolveCaptionForElement(source)) is not { } name)
             return null;
         if (!string.Equals(liveName, name, StringComparison.Ordinal)) return null;
         return new AppliedModifier(DefaultAutomationNameModifier, "AutomationProperties.Name", name);

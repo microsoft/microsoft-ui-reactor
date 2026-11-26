@@ -12,7 +12,7 @@ namespace Microsoft.UI.Reactor.Core;
 // FooterMenuItems + SelectedTag menu reconciler (.Imperative), the IsPaneOpen DP observation
 // behind OnPaneOpenChanged (issue #916), and all 6 wired events.
 // Every event is hand-coded on purpose: a control holds exactly one event-payload box
-// (Reconciler.GetOrCreateControlEventPayload keys ReactorState.ControlEventState by payload
+// (ModifierEvents.GetOrCreateControlEventPayload keys ReactorState.ControlEventState by payload
 // type), so mixing the generator's private per-element payload with V1.NavigationViewEventPayload
 // would make each pass evict the other's box and re-subscribe on every reconcile.
 public partial record NavigationViewElement

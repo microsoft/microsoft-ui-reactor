@@ -67,7 +67,7 @@ internal static class SkipPathGestureDragFixtures
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("SkipPan_TargetMounted", rect is not null);
 
-            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            var state = rect is not null ? GestureDispatch.DebugTryGetGestureState(rect) : null;
             H.Check("SkipPan_GestureStateCached", state?.Pan is not null);
 
             // Dispatch through the cached pan config exactly as the manipulation
@@ -118,7 +118,7 @@ internal static class SkipPathGestureDragFixtures
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("SkipKPan_TargetMounted", rect is not null);
 
-            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            var state = rect is not null ? GestureDispatch.DebugTryGetGestureState(rect) : null;
             H.Check("SkipKPan_GestureStateCached", state?.Pan is not null);
 
             state?.Pan?.OnChanged(default);
@@ -179,7 +179,7 @@ internal static class SkipPathGestureDragFixtures
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("SkipDrop_TargetMounted", rect is not null);
 
-            var state = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            var state = rect is not null ? DragDropDispatch.DebugTryGetDndState(rect) : null;
             H.Check("SkipDrop_DndStateCached", state?.Target is not null);
 
             // Post-fix the cached target carries the latest closure; pre-fix it is the stale first.
@@ -238,7 +238,7 @@ internal static class SkipPathGestureDragFixtures
 
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("MidGesture_TargetMounted", rect is not null);
-            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            var state = rect is not null ? GestureDispatch.DebugTryGetGestureState(rect) : null;
             H.Check("MidGesture_GestureStateCached", state?.Pan is not null);
 
             // Capture the once-per-lifetime trampoline delegates + simulate an in-flight
@@ -309,7 +309,7 @@ internal static class SkipPathGestureDragFixtures
             await Harness.Render();
             var rect0 = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("AddGesture_NoStateInitially",
-                rect0 is null || Reconciler.DebugTryGetGestureState(rect0)?.Pan is null);
+                rect0 is null || GestureDispatch.DebugTryGetGestureState(rect0)?.Pan is null);
 
             // Add the gesture on a skip-eligible render.
             H.ClickButton("AddGestureBtn");
@@ -317,7 +317,7 @@ internal static class SkipPathGestureDragFixtures
 
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("AddGesture_TargetMounted", rect is not null);
-            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            var state = rect is not null ? GestureDispatch.DebugTryGetGestureState(rect) : null;
 
             // Post-fix: the add-on-skip routed to the full handler → gesture wired.
             H.Check("AddGesture_Wired", state?.Pan is not null);
@@ -361,7 +361,7 @@ internal static class SkipPathGestureDragFixtures
             await Harness.Render();
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("RemoveDrag_TargetMounted", rect is not null);
-            var state = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            var state = rect is not null ? DragDropDispatch.DebugTryGetDndState(rect) : null;
             H.Check("RemoveDrag_SourceWiredInitially", state?.Source is not null);
             H.Check("RemoveDrag_CanDragInitially", rect is not null && rect.CanDrag);
 
@@ -373,7 +373,7 @@ internal static class SkipPathGestureDragFixtures
             H.ClickButton("RemoveDragBtn");
             await Harness.Render();
 
-            var state2 = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            var state2 = rect is not null ? DragDropDispatch.DebugTryGetDndState(rect) : null;
             // Post-fix: in-flight guard preserves Source so the pending DropCompleted can
             // still fire OnEnd + Unregister. Pre-fix the config-only null stranded it.
             H.Check("RemoveDrag_SourcePreservedMidDrag", ReferenceEquals(state2?.Source, inflightSource));
@@ -408,13 +408,13 @@ internal static class SkipPathGestureDragFixtures
             await Harness.Render();
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
             H.Check("RemoveDragIdle_SourceWiredInitially",
-                rect is not null && Reconciler.DebugTryGetDndState(rect)?.Source is not null);
+                rect is not null && DragDropDispatch.DebugTryGetDndState(rect)?.Source is not null);
 
             // No ActiveTransferId set → not in flight.
             H.ClickButton("RemoveDragBtn2");
             await Harness.Render();
 
-            var state2 = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            var state2 = rect is not null ? DragDropDispatch.DebugTryGetDndState(rect) : null;
             H.Check("RemoveDragIdle_SourceCleared", state2?.Source is null);
             H.Check("RemoveDragIdle_CanDragCleared", rect is not null && !rect.CanDrag);
         }
@@ -459,7 +459,7 @@ internal static class SkipPathGestureDragFixtures
             // Post-fix: ManipulationMode widened to include translation; the cached Pan config exists.
             H.Check("AddPan_ManipulationWidened",
                 rect is not null && rect.ManipulationMode.HasFlag(ManipulationModes.TranslateX));
-            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            var state = rect is not null ? GestureDispatch.DebugTryGetGestureState(rect) : null;
             H.Check("AddPan_PanConfigCached", state?.Pan is not null);
             H.Check("AddPan_PinchStillCached", state?.Pinch is not null);
         }
@@ -498,7 +498,7 @@ internal static class SkipPathGestureDragFixtures
             // Post-fix: CanDrag set (source wired) while DropTarget's AllowDrop is preserved.
             H.Check("AddSource_CanDragSet", rect is not null && rect.CanDrag);
             H.Check("AddSource_AllowDropPreserved", rect is not null && rect.AllowDrop);
-            var state = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            var state = rect is not null ? DragDropDispatch.DebugTryGetDndState(rect) : null;
             H.Check("AddSource_SourceCached", state?.Source is not null);
             H.Check("AddSource_TargetStillCached", state?.Target is not null);
         }
@@ -532,7 +532,7 @@ internal static class SkipPathGestureDragFixtures
 
             await Harness.Render();
             var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
-            var state = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            var state = rect is not null ? DragDropDispatch.DebugTryGetDndState(rect) : null;
             H.Check("MidDragWithTarget_SourceWiredInitially", state?.Source is not null);
             H.Check("MidDragWithTarget_TargetWiredInitially", state?.Target is not null);
             H.Check("MidDragWithTarget_CanDragInitially", rect is not null && rect.CanDrag);
@@ -544,7 +544,7 @@ internal static class SkipPathGestureDragFixtures
             H.ClickButton("RemoveSourceBtn");
             await Harness.Render();
 
-            var state2 = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            var state2 = rect is not null ? DragDropDispatch.DebugTryGetDndState(rect) : null;
             // Post-fix: Source preserved (guard reached via per-slot routing) so the pending
             // DropCompleted still fires OnEnd + Unregister; DropTarget stays live; CanDrag cleared.
             H.Check("MidDragWithTarget_SourcePreserved", ReferenceEquals(state2?.Source, inflightSource));
@@ -591,7 +591,7 @@ internal static class SkipPathGestureDragFixtures
             H.Check("RemoveFlags_ManipulationCleared",
                 rect is not null && rect.ManipulationMode == ManipulationModes.None);
             H.Check("RemoveFlags_HoldingDisabled", rect is not null && !rect.IsHoldingEnabled);
-            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            var state = rect is not null ? GestureDispatch.DebugTryGetGestureState(rect) : null;
             H.Check("RemoveFlags_GestureConfigsNulled", state is null || (state.Pan is null && state.LongPress is null));
         }
     }

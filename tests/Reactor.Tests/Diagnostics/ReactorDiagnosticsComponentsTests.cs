@@ -733,6 +733,15 @@ public class ReactorDiagnosticsComponentsTests
         Assert.Contains(new AppliedModifier("BorderInlineStart", owner + ".BorderThickness", inline), applied);
     }
 
+    [Theory]
+    [InlineData(typeof(WinUI.RichTextBlock), "RichTextBlock.Foreground")]
+    [InlineData(typeof(WinUI.AnimatedIcon), "IconElement.Foreground")]
+    public void AppliedModifierMap_ResolvesForegroundOwners(Type controlType, string property)
+    {
+        var foreground = Assert.Single(AppliedModifierMap.Entries, entry => entry.Modifier == "Foreground");
+        Assert.Equal(property, foreground.Target(controlType));
+    }
+
     [Fact]
     public void AppliedProperty_ValuesAreText()
     {
@@ -820,6 +829,22 @@ public class ReactorDiagnosticsComponentsTests
         Assert.DoesNotContain(merged, p => p.Modifier == "DefaultAutomationName");
     }
 
+    [Fact]
+    public void DescribeChain_KeepsBothPivotContributors_AcrossDecoratorLevels()
+    {
+        // Spec 066 §8.1: the pivot is size × origin + the CenterPoint offset, so an outer origin
+        // doesn't replace an inner CenterPoint (or the reverse); a later same modifier still does.
+        var crossLevel = Flyout(Button("Go").CenterPoint(new global::System.Numerics.Vector3(10, 0, 0)), TextBlock("menu"))
+            .TransformOrigin(0.5f, 0.5f);
+        var sameModifier = Flyout(Button("Go").TransformOrigin(0, 0), TextBlock("menu")).TransformOrigin(1, 1);
+
+        static string[] Pivot(Element e) => AppliedModifierMap
+            .DescribeChain(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(e), typeof(WinUI.Button), null)
+            .Where(p => p.Property == "Visual.CenterPoint").Select(p => p.Modifier).ToArray();
+
+        Assert.Equal(new[] { "CenterPoint", "TransformOrigin" }, Pivot(crossLevel));
+        Assert.Equal(new[] { "TransformOrigin" }, Pivot(sameModifier));
+    }
     [Fact]
     public void DescribeChain_KeepsEveryContributorToAComposedProperty()
     {

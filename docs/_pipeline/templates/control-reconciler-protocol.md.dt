@@ -14,6 +14,13 @@ goal: |
 tier: comprehensive
 ---
 
+# The Control Reconciler Protocol
+
+This page documents the data path between the reconciler and the WinUI
+control it edits. It is for anyone extending Reactor with a new native
+control, or debugging why an existing element does not update the way it
+should.
+
 Microsoft.UI.Reactor (Reactor) draws the visible part of a frame by handing
 each immutable element record off to a per-control-type plug-in called a
 **handler**. The handler knows two things the [reconciler](reconciliation.md)
@@ -27,16 +34,11 @@ every control you add yourself dispatches through the same tight loop.
 Read this page before adding a new native control or before reaching for
 a debugger when an existing one mis-updates.
 
-# The Control Reconciler Protocol
-
-This page documents the data path between
-[`Reconciler.Reconcile`](reconciliation.md#reconcile-the-entry-point)
-and the WinUI control it edits. The audience is anyone extending
-Reactor with a new native control, or anyone debugging why an
-existing element does not update the way it should. The companion
-[Extending Reactor with Native Controls](extending-reactor-controls.md)
-walks through adding a control end-to-end; this page is the
-reference under that recipe.
+The path starts at
+[`Reconciler.Reconcile`](reconciliation.md#reconcile-the-entry-point). The
+companion [Extending Reactor with Native
+Controls](extending-reactor-controls.md) walks through adding a control
+end-to-end; this page is the reference under that recipe.
 
 ## Dispatch — one handler per element type
 
@@ -108,7 +110,7 @@ pool. If you stash per-control state in a field on the handler
 instance, it survives pool rent — and that is almost certainly a bug.
 Per-control state lives on the **control**, either as an attached
 state DP or as the typed event payload box
-([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-writesuppressed)),
+([`ModifierEvents.GetOrCreateControlEventPayload`](#echo-suppression-and-writesuppressed)),
 both of which the pool reset contract clears. The handler instance is
 a stateless interpreter.
 <!-- /ai:caveat -->
@@ -270,7 +272,7 @@ wrappers supply this callback for public, writable `IList<object>`
 properties. Read-only and concrete native `ItemCollection` properties
 keep their existing sink. The framework supplies the WinRT exposure for
 its observable list with `GeneratedWinRTExposedExternalType`, including indirect
-Native AOT collection boundaries. XAML metadata is separate: full generated wrappers
+[Native AOT](native-aot.md) collection boundaries. XAML metadata is separate: full generated wrappers
 statically register a unique publicly constructible provider from the control's
 assembly, so code-only Native AOT apps can use templated Toolkit controls without
 app-side roots. Custom or undiscoverable providers still need explicit registration (see
@@ -332,7 +334,7 @@ the suppress counter on entry — every controlled prop in every built-in
 handler is echo-safe without the handler author having to think
 about it. Hand-authored trampolines (the ones that bypass
 `OnCustomEvent` for performance) follow the same shape; see
-`Reconciler.GetOrCreateControlEventPayload` for the per-control
+`ModifierEvents.GetOrCreateControlEventPayload` for the per-control
 payload box that anchors the trampoline for the control's lifetime.
 
 ## Element identity via the tag

@@ -1,13 +1,26 @@
 # UseSystemBackButton
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseSystemBackButton``1(Microsoft.UI.Reactor.Navigation.NavigationHandle{``0},Microsoft.UI.Xaml.Window)`
+Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content to call [`NavigationHandle.GoBack`](../navigation/NavigationHandle.md#goback). Unsubscribes on unmount.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public void UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) where TRoute : notnull
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content
-to call `NavigationHandle.GoBack`. Unsubscribes on unmount.
+**Learn more:** [Navigation](../../navigation.md), [Hooks](../../hooks.md)
 
+## Parameters
 
+| Name | Type | Description |
+| --- | --- | --- |
+| `nav` | [`NavigationHandle<TRoute>`](../navigation/NavigationHandle.md) |  |
+| `window` | `Window` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected void UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) where TRoute : notnull
+```

@@ -4,21 +4,400 @@ app: thinking-in-reactor
 order: 1.5
 audience: beginner
 goal: |
-  Mental-model essay for new readers: UI as a function of state, why
-  there is no XAML, how components compose, when to reach for hooks.
-  Reactor's equivalent of React's "Thinking in React" essay. Authored
-  in Phase 2.
-tier: stub
+  The mental model for new readers. UI is a function of state; components
+  and Render(); elements are cheap immutable descriptions, not controls;
+  state lives in hooks (call-order rule); the render, diff and patch cycle;
+  one-way data flow; keys; effects for side effects only. Then a worked
+  example that builds a filterable product list in six steps.
+tier: comprehensive
 ---
 
 # Thinking in Reactor
 
-Coming soon — this page is the mental-model essay that frames Microsoft.UI.Reactor (Reactor)
-for new readers: UI as a function of state, why there is no XAML, when
-to reach for hooks, and how components compose. See
-[the AI Author Skill](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/_pipeline/ai-author-skill.md) for the planned
-surface and the spec-041 §7.1 layout.
+Reactor asks you to think about UI in a new way. You don't create controls
+and then change them one property at a time. Instead, you write a function
+that describes what the screen should look like for the current state. When
+the state changes, Microsoft.UI.Reactor (Reactor) runs that function again
+and updates the real WinUI controls for you.
 
-In the meantime, [Getting Started](getting-started.md) covers the same
-ground from the hands-on direction, and [Components](components.md) and
-[Hooks](hooks.md) cover the building blocks.
+This page explains that model:
+components, elements, hooks, the render cycle, data flow, keys, and effects.
+Then it builds a small filterable product list step by step, so you can see
+how the ideas fit together. The steps follow React's
+[Thinking in React](https://react.dev/learn/thinking-in-react) guide. If you
+know XAML and MVVM, read [Coming from XAML](xaml-developers.md) after this
+page.
+
+## The core ideas
+
+| Idea | What it means | Learn more |
+|------|---------------|------------|
+| UI is a function of state | `Render()` returns the UI for the current state. You change state, not controls. | [Components](components.md) |
+| Elements are descriptions | `TextBlock("Hi")` returns an immutable record. It is not a control. | [Reconciliation](reconciliation.md) |
+| State lives in hooks | `UseState` keeps a value between renders. Call hooks in the same order on every render. | [Hooks](hooks.md) |
+| A state change re-renders | A setter schedules a new render. The reconciler then patches only what changed. | [Reactivity Model](reactivity-model.md) |
+| Data flows down, events flow up | A parent passes props to a child. The child calls a callback to ask for a change. | [Components](components.md#lifted-state) |
+| Keys give identity | A key tells the reconciler which list item is which between renders. | [Collections](collections.md) |
+| Effects are for side effects | `UseEffect` runs after a render, for work outside the UI tree. | [Effects and Lifecycle](effects.md) |
+
+## UI is a function of state
+
+In code-behind, you find a control and change it: you set
+`favoriteButton.Content` to new text in a click handler. In Reactor you don't
+do that. You write a component. Its `Render()` method reads the current state
+and returns a description of the UI. Reactor calls `Render()` again each time
+the state changes.
+
+```csharp snippet="thinking-in-reactor/ui-from-state"
+```
+
+`UseState(false)` returns the current value and a setter. A click calls the
+setter with the new value. Reactor then runs `Render()` again, and this time
+`Render()` returns a button with the other text. No line of code changes the
+button's text. You only change the state, and the UI follows.
+
+## Elements describe, controls display
+
+`TextBlock(...)`, `Button(...)` and `VStack(...)` are factory methods. They
+return *elements*. An element is a small, immutable C# record that describes
+one piece of UI. It is cheap to create. It is not a WinUI control, and it is
+not on screen.
+
+```csharp snippet="thinking-in-reactor/elements-are-values"
+```
+
+- **Modifiers return new records.** `.FontSize(28)` and `.Bold()` work like a
+  C# `with` expression. The original element does not change.
+- **A new tree on every render is normal.** Elements are cheap, so `Render()`
+  builds the whole tree each time. You don't need to keep old elements around.
+- **The reconciler owns the controls.** It creates a WinUI control when an
+  element first appears and updates that control on later renders. Don't keep
+  your own reference to a control and change it. If you need the real control,
+  for example to move focus, use an element ref (`UseElementRef`).
+
+## What happens when state changes
+
+Every update in Reactor follows the same cycle.
+
+![The Reactor render cycle. A setter changes state, Render returns a new element tree, the reconciler diffs it against the old tree, and only the changed properties are patched on the WinUI controls. User input calls a setter again.](images/thinking-in-reactor/render-cycle.svg)
+
+1. **State changes.** Your code calls a setter, for example
+   `setFilterText("pen")`. The setter compares the new value with the current
+   one. If they are equal, nothing else happens.
+2. **Render.** Reactor schedules a render. Several setter calls in the same
+   event handler are batched into one render. `Render()` runs and returns a
+   new element tree.
+3. **Diff.** The reconciler walks the new tree and the old tree together. It
+   matches each new element with the old element in the same place, or with
+   the same key.
+4. **Patch.** For a matched element, the reconciler sets only the properties
+   that changed on the existing control. It creates controls for new elements
+   and removes controls for elements that are gone. A text box the user is
+   typing in stays the same WinUI control, so it keeps its focus.
+
+A child component with props is skipped when its props are equal to last
+time. [Reconciliation](reconciliation.md) explains the diff in depth, and
+[Reactivity Model](reactivity-model.md) explains setters and batching.
+
+## Hooks hold state in call order
+
+Local variables in `Render()` are gone when the method returns. Hooks keep
+values between renders. Reactor stores hook values in slots, in the order you
+call the hooks: the first `UseState` call is slot 0, the second is slot 1, and
+so on. So call every hook at the top of `Render()`, on every render, in the
+same order. Never call a hook inside an `if`, a loop, or after an early
+`return`.
+
+```csharp
+// Don't: a hook inside an if changes the slot of every hook after it.
+public override Element Render()
+{
+    var (showDetails, setShowDetails) = UseState(false);
+    if (showDetails)
+    {
+        var (note, setNote) = UseState(""); // REACTOR_HOOKS_001
+    }
+    return ...;
+}
+```
+
+Call the hook every time, and use the condition when you build the elements.
+The `REACTOR_HOOKS_001` analyzer warns about this at build time. At run time,
+a changed hook order can throw a `HookOrderException`.
+[Rules of Reactor](rules-of-reactor.md) lists all the rules.
+
+Treat state values as immutable. To change a list in state, create a new list
+and pass it to the setter. If you change the old list in place and pass the
+same object back, the setter sees an equal value and does not re-render.
+
+## Data flows down, events flow up
+
+A component that takes input derives from `Component<TProps>`. `TProps` is
+usually a record. The parent creates the child with
+`Component<TChild, TProps>(props)`, and the child reads `this.Props`. A child
+never changes its props.
+
+When a child needs to change something its parent owns, the parent passes a
+callback down as a prop, and the child calls it. Data goes down through props.
+Requests for change go up through callbacks. This is *one-way data flow*. It
+makes a value easy to trace: follow the props up until you reach the component
+that owns the state. Step 6 of the worked example below shows this in code.
+
+## Keys give list items an identity
+
+When you render a list with `ForEach`, give each item a key with
+`.WithKey(...)`. Use a stable id from your data, not the position in the list.
+The reconciler uses the key to match old and new items. Without keys it
+matches by position. Then, when you filter or sort, a row's control and its
+component state stay at the same position and now belong to a different item.
+
+The `REACTOR_DSL_001` analyzer warns when a `ForEach` item has no key. Items
+whose type implements `IReactorKeyed` get their key from the data
+automatically. See [Collections](collections.md) and
+[Identity and Key](reconciliation.md#identity-and-key).
+
+## Effects are for side effects
+
+`Render()` must be pure. It reads state and props and returns elements.
+It does not write to files, call services, start timers, or log. That work
+goes in `UseEffect`. An effect runs after the new UI is committed, and runs
+again only when one of its dependencies changes.
+
+```csharp snippet="thinking-in-reactor/effect-side-effect"
+```
+
+Don't use an effect to compute a value from state. Compute it in `Render()`
+instead. [Effects and Lifecycle](effects.md) covers cleanup, async work, and
+dependency rules.
+
+## Worked example: a filterable product list
+
+This example builds a product list with a search box and an "only in stock"
+check box. The product data is a fixed list. In a real app it would come from
+a service or a file.
+
+```csharp snippet="thinking-in-reactor/data-model"
+```
+
+### Step 1: Sketch the UI
+
+Start with a sketch of the screen. Then draw a box around each part that has
+one job. Each box becomes a component.
+
+![A sketch of the product catalog. An outer ProductCatalog box holds a SearchBar box, with a search text box and an in-stock check box, and a ProductList box with six ProductRow boxes. Out-of-stock product names are red.](images/thinking-in-reactor/catalog-sketch.svg)
+
+### Step 2: Break the UI into components
+
+The sketch gives four components:
+
+```text
+ProductCatalog          the whole page
+├── SearchBar           the search text and the check box
+└── ProductList         the products that match
+    └── ProductRow      one product (one per item)
+```
+
+Use one component for one job. If a component starts to do two jobs, split
+it. The smallest piece, `ProductRow`, takes one product as its props and
+shows it. An out-of-stock name uses the `Theme.SystemCritical` color token, so
+it reads well in light and dark themes.
+
+```csharp snippet="thinking-in-reactor/product-row"
+```
+
+### Step 3: Build a static version
+
+Build a version that shows the data but has no state yet. Pass the data down
+with props. A static version is quick to write, and it shows the shape of the
+UI before you add behavior.
+
+```csharp snippet="thinking-in-reactor/static-children"
+```
+
+```csharp snippet="thinking-in-reactor/static-root"
+```
+
+`ProductList` keys each row with the product id. The text box has an
+automation name so screen readers can announce it. A placeholder is not
+enough, and the `REACTOR_A11Y_003` analyzer warns when a text box has no
+accessible name. The search box and check box show values from props, but
+they don't change anything yet.
+
+### Step 4: Find the minimal state
+
+State is data that changes over time and that you can't compute from other
+data. Ask three questions about each piece of data:
+
+| Data | Passed in or fixed? | Can be computed? | State? |
+|------|---------------------|------------------|--------|
+| The product list | Yes, fixed | No | No |
+| The search text | No, the user types it | No | **Yes** |
+| The check box value | No, the user sets it | No | **Yes** |
+| The products that match | No | Yes, from the three items above | No |
+
+So the minimal state is two values: the search text and the check box value.
+Keep it that small. Every extra piece of state is something that can get out
+of sync.
+
+### Step 5: Decide where the state lives
+
+For each piece of state:
+
+1. Find every component that reads it.
+2. Find their closest common parent.
+3. Put the state there.
+
+`SearchBar` shows both values, and `ProductList` filters with both values.
+Their closest common parent is `ProductCatalog`, so the state goes there:
+
+```csharp snippet="thinking-in-reactor/state-owner"
+```
+
+`ProductList` now takes the two values as props and computes the matching
+products during `Render()`. The filtered list is derived data, so it is not
+stored in state:
+
+```csharp snippet="thinking-in-reactor/derived-list"
+```
+
+The app now filters correctly when the state changes. But the state never
+changes yet, because the text box and check box have no callbacks.
+
+### Step 6: Add inverse data flow
+
+`SearchBar` can't change state that `ProductCatalog` owns. Instead,
+`ProductCatalog` passes callbacks down, and `SearchBar` calls them when the
+user types or clicks.
+
+```csharp snippet="thinking-in-reactor/inverse-search-bar"
+```
+
+```csharp snippet="thinking-in-reactor/inverse-root"
+```
+
+Here is what happens when the user types "pen":
+
+1. The text box calls `Props.OnFilterTextChange("pen")`. That is
+   `setFilterText`, so the state in `ProductCatalog` changes.
+2. `ProductCatalog` renders again and passes new props to `SearchBar` and
+   `ProductList`.
+3. `ProductList` filters again and returns one row, for "Gel pen".
+4. The reconciler matches rows by key. It keeps the "Gel pen" row and removes
+   the rows that no longer match.
+
+`UseState` setters keep the same identity on every render. That is why the
+root can pass them straight into the props record: the record still compares
+equal when the data is the same. A new lambda on every render would make the
+props unequal every time. For that case, see
+[Callback props and memoization](components.md#callback-props-and-memoization).
+
+<!-- ai:caveat -->
+A child component that derives from `Component<TProps>` re-renders when its
+props change or when its own state changes. Reactor compares the old and new
+props with `Equals()`. For a record, that compares field by field. A field of
+type `IReadOnlyList<T>` compares by reference, not by content. If a parent
+builds a new list on every render and passes it as a prop, the child re-renders
+every time, even when the items are the same. In this example
+`Catalog.Products` is the same object on every render, so `ProductList`
+re-renders only when the search text or the check box changes. A component
+without props (`Component`) does not re-render when its parent does. It
+re-renders only from its own state.
+<!-- /ai:caveat -->
+
+## Patterns
+
+### Lift state to the closest common parent
+
+When two components need the same value, move the state up to their closest
+common parent and pass it down as props, as step 5 does. The
+[Lifted state](components.md#lifted-state) pattern and the
+[master-detail recipe](recipes/master-detail.md) show the same idea with a
+shared selection.
+
+### Derive, don't store
+
+If you can compute a value from props or state, compute it in `Render()`.
+`ProductList` filters on every render instead of keeping a filtered list in
+state. For a slow computation, wrap it in `UseMemo` with the values it depends
+on. See [Hooks](hooks.md).
+
+### Pass setters down as callbacks
+
+A child that edits a parent's value takes the value and a callback in its
+props. Pass the `UseState` setter itself when no extra logic is needed. Name
+the callback for what happened, for example `OnFilterTextChange`.
+
+### Keep components small
+
+A component should do one job. Small components are easier to read and test,
+and a component that receives the same props is skipped during a render.
+
+## Common Mistakes
+
+### Storing derived data in state
+
+```csharp
+// Don't: the filtered list is a copy that must be kept in sync.
+var (filterText, setFilterText) = UseState("");
+var (visible, setVisible) = UseState(Catalog.Products);
+UseEffect(() => setVisible(Filter(Catalog.Products, filterText)), filterText);
+```
+
+This renders twice for each change: once with the old list, and again after
+the effect sets the new list. Compute the list in `Render()` instead, as
+`ProductList` does in step 5.
+
+### Copying props into state
+
+```csharp
+// Don't: the initial value is used only on the first render.
+var (text, setText) = UseState(Props.FilterText);
+```
+
+`UseState` reads its argument only when the component first mounts. Later
+changes to `Props.FilterText` are ignored. Read the prop directly, or lift the
+state to the parent that owns it.
+
+### Changing state in place
+
+```csharp
+// Don't: the same list object is passed back, so nothing re-renders.
+items.Add(newItem);
+setItems(items);
+```
+
+The setter compares the new value with the old one, finds the same object,
+and skips the render. Create a new list instead, for example
+`setItems([.. items, newItem])`. The `REACTOR_HOOKS_010` analyzer flags this
+pattern.
+
+### Using the list index as a key
+
+```csharp
+// Don't: after filtering, index 0 is a different product.
+ForEach(visible, (p, i) => Component<ProductRow, ProductRowProps>(new(p)).WithKey(i.ToString()))
+```
+
+Keys must follow the data, not the position. Use an id from the item, such as
+`p.Id`. See [Using array index as a key](reconciliation.md#using-array-index-as-a-key).
+
+## Tips
+
+- Start with a static version, then add state. It is easier to see which data
+  really changes.
+- Keep state minimal. If you can compute a value, don't store it.
+- Keep `Render()` fast and free of side effects. It can run many times.
+- Read the analyzer warnings. `REACTOR_HOOKS_001`, `REACTOR_DSL_001`,
+  `REACTOR_HOOKS_010` and `REACTOR_A11Y_003` catch the mistakes on this page
+  when you build.
+- Give every input control a header or an automation name.
+
+## Next Steps
+
+- [Your first app](getting-started.md): build and run a Reactor app.
+- [Components](components.md): props, `ShouldUpdate`, and composition.
+- [Hooks](hooks.md): every hook and the rules they follow.
+- [Reactivity Model](reactivity-model.md): setters, batching, and why there is no `INotifyPropertyChanged`.
+- [Reconciliation](reconciliation.md): how the diff and patch work.
+- [Rules of Reactor](rules-of-reactor.md): the rules the analyzers enforce.
+- [Coming from XAML](xaml-developers.md): map XAML and MVVM concepts to Reactor.

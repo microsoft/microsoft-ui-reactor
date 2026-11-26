@@ -60,9 +60,11 @@ Component.Render() → Element tree (records)
 
 ### Reconciler is split across partial classes
 
-- `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
+- `Reconciler.cs` — orchestration: the `Reconcile` entry, component rendering, child reconciliation, `CanUpdate`
 - `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
 - `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
+- `Reconciler.<Topic>.cs` — one file per concern (`Modifiers`, `Keyframes`, `Transitions`, `CompositionState`, `Unmount`, `ReactorState`, `Flyouts`, …). Put new code in the matching topic file, not `Reconciler.cs`, so unrelated PRs don't conflict
+- Per-control helpers that need none of the reconciler's private state live in standalone `internal static` classes beside it, so the compiler keeps them out of that state: `ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents` (event trampolines, `ModifierEventHandlerState`, control event payloads), `ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`, `InteractionStateApplier` (`.InteractionStates()` handlers and state transitions; its tracker lives on `CompositionState`). Public entry points that predate the split (`ApplyThemeBindings`, `ApplyResourceOverrides`, `Apply`/`UpdateDefaultAutomationName`) stay on `Reconciler` as forwarders in `Reconciler.StaticForwarders.cs`. `ThemeBindingApplier` (style caches), `GestureDispatch` and `DragDropDispatch` (per-element state tables) still own process-wide static state. Source-parsing gates and the reviewer-manifest gate find these files through `ReconcilerSource.HelperFiles` in `tests/Reactor.Tests/AnalyzerTests/ReconcilerSource.cs`, so add a new helper file there too
 
 ### Hooks follow React rules
 
@@ -74,11 +76,11 @@ Echo handling is a documented hybrid (spec-047 §8.3). Synchronous, exact-compar
 
 ### Element pooling
 
-`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. Each type has two lanes (spec 066 §7): a control whose composition visual was taken (marked by the native `ReactorState.VisualTaken`, set by every `AnimationHelper.GetElementVisual`) permanently refuses the facade transforms and XAML implicit transitions, so it is reset and pooled in a visual lane that only a mount which takes the visual at mount, with no setters or mount callbacks, rents from.
+`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. Each type has two lanes (spec 066 §7): a control whose composition visual was taken (marked by the native `CompositionState.VisualTaken`, reached through `ReactorState.Composition` and set by every `AnimationHelper.GetElementVisual`) permanently refuses the facade transforms and XAML implicit transitions, so it is reset and pooled in a visual lane that only a mount which takes the visual at mount, with no setters or mount callbacks, rents from.
 
 ### Per-element state via attached DP
 
-`ReactorAttached.StateProperty` stores `ReactorState` (Element pointer + `ModifierEventHandlerState` — the routed-input family, lazily allocated — + per-control `ControlEventStateBox` for control-intrinsic events) on native elements — not `FrameworkElement.Tag` or a CWT.
+`ReactorAttached.StateProperty` stores `ReactorState` (Element pointer + `ModifierEventHandlerState` — the routed-input family, lazily allocated — + per-control `ControlEventStateBox` for control-intrinsic events) on native elements — not `FrameworkElement.Tag` or a CWT. Composition and animation bookkeeping (visual handoff, channel ownership, keyframe triggers, interaction-state trackers) lives in the lazily allocated `ReactorState.Composition` (`CompositionState`), never in a static table keyed by the control: hosts can run on separate UI threads.
 
 ## Key Conventions
 
@@ -340,7 +342,9 @@ point of return: stop and ship.
     marked block, not the JSON; an unclosed/nested marker or an id naming no control fails
     generation. Spec 064.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, skip
-  equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
+  equality, `Merge`, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
+  helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
+  gates scan it), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via

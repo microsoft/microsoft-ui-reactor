@@ -1,4 +1,9 @@
 
+# Architecture Overview
+
+This page maps Reactor's runtime end-to-end so the rest of the
+Under-the-hood track has a shared diagram to point at.
+
 Microsoft.UI.Reactor (Reactor) is a declarative shell over WinUI. You write a `Component` whose
 `Render()` method returns an immutable tree of element records — value
 types that describe what you want on screen, not the WinUI controls that
@@ -14,14 +19,10 @@ reading this page as "Reactor wraps XAML" — the element tree is not a
 shadow XAML graph, it is a new authoring surface that happens to
 materialize WinUI.
 
-# Architecture Overview
-
-This page maps Reactor's runtime end-to-end so the rest of the
-Under-the-hood track has a shared diagram to point at. Read it once,
-then jump to the section you care about: [Reactivity
-Model](reactivity-model.md), [Reconciliation](reconciliation.md),
-[Hooks Internals](hooks-internals.md), or
-[Effects Scheduling](effects-scheduling.md).
+Read it once, then jump to the section you care about: [Reactivity
+Model](reactivity-model.md), [Reconciliation](reconciliation.md), [Hooks
+Internals](hooks-internals.md), or [Effects
+Scheduling](effects-scheduling.md).
 
 ## The render loop
 
@@ -229,6 +230,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
         if (control is FrameworkElement realizedElement)
             Reconciler.GetOrCreateReactorState(realizedElement).RealizationTheme = realizationTheme.Theme;
         _keyByControl[control] = key;
+        _controlByKey[key] = control;
         _lastElementByControl[control] = element;
         if (_keyByControl.Count > _maxRealized) _maxRealized = _keyByControl.Count;
 
@@ -367,8 +369,14 @@ The reconciler is split across partial files: `Reconciler.Mount.cs`
 and `Reconciler.Update.cs` hold the dispatch logic plus the
 composition-primitive handlers, registered descriptors/handlers hold
 per-control mount/update logic, and [`ChildReconciler.cs`](reconciliation.md)
-holds the keyed-vs-positional child diff. There is one reconciler instance per host; component
-recursion shares the dispatch.
+holds the keyed-vs-positional child diff. The remaining reconciler concerns
+each have their own `Reconciler.<Topic>.cs` partial (`Modifiers`, `Unmount`,
+`Keyframes`, `Transitions`, `ReactorState`, …), while `Reconciler.cs` keeps the
+orchestration. Helpers that need none of the reconciler's private state
+(`ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents`,
+`ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`,
+`InteractionStateApplier`) are separate `internal static` classes. There is
+one reconciler instance per host; component recursion shares the dispatch.
 
 ## Hooks — slot table per RenderContext
 
@@ -409,7 +417,7 @@ synchronous handler that calls three setters produces one re-render.
 ### Tracing a render end-to-end
 
 When you need to know what happened on a single frame, turn on the
-[reconcile-highlight overlay](dev-tooling.md#runtime-overlays) and watch the ETW
+[reconcile-highlight overlay](devtools.md#in-app-dev-menu) and watch the ETW
 `ReactorEventSource` provider. The keywords are split so you can subscribe
 to `State`, `Render`, `Reconcile`, and `Effect` independently — each
 roughly corresponds to one box on the diagram above. The
@@ -492,8 +500,11 @@ or diagnostics.
 
 **`Reconciler.cs` is partial on purpose.** Don't grep for a Mount
 implementation in `Reconciler.cs` itself — the dispatch lives there,
-the handlers live in `Reconciler.Mount.cs`. Same for Update / gestures
-/ drag-drop.
+the handlers live in `Reconciler.Mount.cs`. Same for Update, and for
+modifiers, unmount and animations, which each have their own
+`Reconciler.<Topic>.cs`. Events, gestures, drag-drop and interaction states
+live in `ModifierEvents.cs`, `GestureDispatch.cs`, `DragDropDispatch.cs` and
+`InteractionStateApplier.cs`.
 
 **The element pool is opt-in by type.** If a custom control needs
 pooling, the type must be in `ElementPool.PoolableTypes` and survive a
@@ -505,7 +516,7 @@ the current set.
 
 ## Next Steps
 
-- **[Reactor vs XAML](reactor-vs-xaml.md)** — Same diagram, but mapped onto the XAML concepts you already know.
+- **[Coming from XAML](xaml-developers.md)** — The XAML concepts you already know, mapped onto Reactor.
 - **[Reactivity Model](reactivity-model.md)** — Zooms into the state-setter → re-render arrow.
 - **[Reconciliation](reconciliation.md)** — Zooms into the diff box.
 - **[Hooks Internals](hooks-internals.md)** — Zooms into the slot table.
