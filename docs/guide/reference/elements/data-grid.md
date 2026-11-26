@@ -42,3 +42,7 @@ Namespace: `Microsoft.UI.Reactor.Controls`. Package: `Microsoft.UI.Reactor.Advan
 | `ShowHeaders` | `bool` | Whether to show column headers. |
 | `ShowSearch` | `bool` | Whether to show the search bar above the grid. |
 | `Source` | [`IDataSource<T>`](../data/IDataSource.md) | The data source providing rows. |
+
+**`OnRowChanged`**
+
+Invoked on the thread that committed the edit — the UI thread for a keyboard, blur or click-away commit — because the grid routes commits through a `UseMutation` handle that runs its mutator synchronously. Do not rely on that as a guarantee: when no commit dispatcher is installed the grid offloads this callback to a thread-pool thread instead (see `DataGridComponent<T>.HandleAsyncCommit` for both contracts and when each applies). Marshal your own UI work rather than assuming UI-thread affinity. Whatever the returned [`Task`](https://learn.microsoft.com/dotnet/api/system.threading.tasks.task) awaits internally resumes wherever its own context says. On both of the grid's own commit paths a faulted task is caught and surfaced in the row's error banner with the edit reverted — but a custom [`DataGridState.CommitDispatcher`](../controls/data-grid.md#commitdispatcher) takes over invoking this callback, and owes callers that handling itself.

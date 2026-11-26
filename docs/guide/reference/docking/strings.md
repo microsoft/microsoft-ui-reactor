@@ -204,7 +204,7 @@ Namespace: `Microsoft.UI.Reactor.Docking`. Package: `Microsoft.UI.Reactor.Advanc
 
 Spec 045 §2.21. The contract:
 
-- `Resolver` is invoked with a key (e.g. `Docking.DropTarget.Center`) and the English default. It returns the localized string, or null to fall back to the default.
+- `Resolver` is invoked with the key alone (e.g. `Docking.DropTarget.Center`). It returns the localized string, or null to fall back to the English default, which [`DockingStrings.Get`](#get) supplies itself.
 - The resolver is called from the UI thread during render / hit-test paths — keep it allocation-light and side-effect-free.
 - Apps wiring a resolver supply a stable delegate (not a fresh allocation per render); a typical pattern captures the `IntlAccessor` once and calls `accessor.Message(MessageKey)` inside.
 

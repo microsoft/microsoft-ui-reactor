@@ -31,6 +31,10 @@ public class ReferenceMultiAssemblyTests
   <assembly><name>Microsoft.UI.Reactor.Advanced</name></assembly>
   <members>
     <member name="T:Microsoft.UI.Reactor.Charting.ChartElement"><summary>Describes a chart.</summary></member>
+    <member name="P:Microsoft.UI.Reactor.Charting.ChartElement.OnPick">
+      <summary>Runs when a point is picked.</summary>
+      <remarks>Runs on a worker thread, so marshal UI work yourself.</remarks>
+    </member>
     <member name="M:Microsoft.UI.Reactor.Advanced.Factories.Chart">
       <summary>Creates a chart. Put it in a <see cref="T:Microsoft.UI.Reactor.Core.StackElement"/>.</summary>
     </member>
@@ -76,6 +80,11 @@ public class ReferenceMultiAssemblyTests
             DocId = ChartId, Namespace = "Microsoft.UI.Reactor.Charting", Name = "ChartElement", DisplayName = "ChartElement",
             Kind = ApiTypeKind.Record, Declaration = "public record ChartElement : Element", BaseDocId = ElementId,
         };
+        chart.Members.Add(new ApiMember
+        {
+            DocId = "P:Microsoft.UI.Reactor.Charting.ChartElement.OnPick", Kind = ApiMemberKind.Property, Name = "OnPick",
+            DeclaringType = chart, Signature = "public Action? OnPick { get; init; }", ShortSignature = "OnPick", ReturnType = "Action?",
+        });
         var factories = StaticClass(Advanced, "Factories");
         factories.Members.Add(new ApiMember
         {
@@ -179,6 +188,10 @@ public class ReferenceMultiAssemblyTests
         var body = Body(r, location.RelativePath);
         Assert.Contains("Namespace: `Microsoft.UI.Reactor.Charting`. Package: `Microsoft.UI.Reactor.Advanced`. Inherits from [`Element`]", body);
         Assert.Contains("**Created by:** [`Chart`]", body);
+
+        // A property's remarks (a callback's threading contract) follow the property table.
+        Assert.Contains("| `OnPick` | `Action?` | Runs when a point is picked. |", body);
+        Assert.Contains("**`OnPick`**\n\nRuns on a worker thread, so marshal UI work yourself.", body);
 
         // Core pages stay as they were: no package note.
         Assert.DoesNotContain("Package:", Body(r, "reference/elements/buttons.md"));

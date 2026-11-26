@@ -1251,7 +1251,7 @@ internal static partial class CompileCommand
     internal static IEnumerable<string> EnumerateReactorXmlCandidates(string repoRoot, ReferenceAssembly? assembly = null)
     {
         assembly ??= CoreAssembly;
-        var binDir = Path.Combine(repoRoot, "src", assembly.ProjectDir, "bin");
+        var binDir = Path.Join(repoRoot, "src", assembly.ProjectDir, "bin");
         if (!Directory.Exists(binDir)) return Array.Empty<string>();
 
         return Directory.EnumerateFiles(binDir, assembly.AssemblyName + ".xml", new EnumerationOptions
@@ -1360,7 +1360,7 @@ internal static partial class CompileCommand
     /// </remarks>
     internal static IEnumerable<string> EnumerateReactorSources(string repoRoot, ReferenceAssembly? assembly = null)
     {
-        var srcDir = Path.Combine(repoRoot, "src", (assembly ?? CoreAssembly).ProjectDir);
+        var srcDir = Path.Join(repoRoot, "src", (assembly ?? CoreAssembly).ProjectDir);
         if (!Directory.Exists(srcDir)) return Array.Empty<string>();
 
         return Directory.EnumerateFiles(srcDir, "*.cs", new EnumerationOptions

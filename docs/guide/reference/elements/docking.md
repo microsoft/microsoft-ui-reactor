@@ -55,6 +55,102 @@ Namespace: `Microsoft.UI.Reactor.Docking`. Package: `Microsoft.UI.Reactor.Advanc
 | `SplitRatios` | `Dictionary<string, double[]>?` | Optional externally-owned ratio store for split-pane sizing. When supplied, the native renderer uses this dictionary instead of its internal [`DockSplit`](../docking/layout-model.md#docksplit)-ratio cache. Keys are tree-position paths (e.g. `"0"`, `"0/0"`, `"0/1"`); values are per-child ratio arrays summing to ~1.0. |
 | `TopSide` | `IReadOnlyList<DockableContent>?` | Tool windows pinned to the top edge (auto-hide). |
 
+**`LayoutStrategy`**
+
+Spec 045 §5.3.6 (Phase 2 addition).
+
+**`OnActiveContentChanged`**
+
+Spec 045 §5.3.5.
+
+**`OnContentDocked`**
+
+Spec 045 §5.3.5.
+
+**`OnContentDocking`**
+
+Spec 045 §5.3.5.
+
+**`OnContentFloated`**
+
+Spec 045 §5.3.5.
+
+**`OnContentFloating`**
+
+Spec 045 §5.3.5.
+
+**`OnDocumentClosed`**
+
+Spec 045 §5.3.5.
+
+**`OnDocumentClosing`**
+
+Spec 045 §5.3.5.
+
+**`OnDropTargetConfirmed`**
+
+Spec 045 §2.3.
+
+**`OnDropTargetHovered`**
+
+Spec 045 §2.3.
+
+**`OnDropTargetsDismissed`**
+
+Spec 045 §2.3.
+
+**`OnFloatingWindowClosed`**
+
+Spec 045 §5.3.5.
+
+**`OnFloatingWindowCreated`**
+
+Spec 045 §5.3.5.
+
+**`OnLayoutChanged`**
+
+Spec 045 §5.3.5.
+
+**`OnLayoutChanging`**
+
+Spec 045 §5.3.5.
+
+**`OnLiveLayoutChanged`**
+
+Spec 045 §2.4. The host still also fires the canonical [`DockManager.OnContentDocked`](#dockmanager) for the per-pane event; this companion event carries the whole tree.
+
+**`OnSplitterDragCompleted`**
+
+Spec 045 §2.1 — companion to [`DockManager.SplitRatios`](#dockmanager) for live introspection.
+
+**`OnToolWindowClosed`**
+
+Spec 045 §5.3.5.
+
+**`OnToolWindowClosing`**
+
+Spec 045 §5.3.5.
+
+**`OnToolWindowHidden`**
+
+Spec 045 §5.3.5.
+
+**`OnToolWindowHiding`**
+
+Spec 045 §5.3.5.
+
+**`OperationLog`**
+
+Spec 045 diagnostic infrastructure.
+
+**`ShowDropTargets`**
+
+Spec 045 §2.3.
+
+**`SplitRatios`**
+
+Spec 045 §2.1 escape hatch. Exposed for app-driven resize (e.g. slider-driven layout demos) and for tests that need to inspect or mutate ratios without going through pointer/keyboard events.
+
 **Remarks**
 
 See spec 045 §4.3 for the committed API surface, §4.4 for the wrapper behavior, §5 for the Phase 2 rewrite, and §6.4 for the Phase 3 rename to `DockHost`.

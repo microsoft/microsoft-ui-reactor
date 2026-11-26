@@ -560,6 +560,16 @@ internal sealed class ReferenceRenderer
                     sb.Append(" | ").Append(DocMarkdown.Cell(SummaryMd(p.DocId, w.Md))).Append(" |");
                 }
                 w.Add(sb.ToString());
+                // The table keeps one line per property, so remarks (a callback's
+                // threading contract, for example) follow it.
+                foreach (var p in props)
+                {
+                    if (Eff(p.DocId).Remarks is not { } remarks) continue;
+                    var md = w.Md.Block(remarks);
+                    if (md.Length == 0) continue;
+                    w.Add($"**{DocMarkdown.CodeSpan(p.Name)}**");
+                    w.Add(md);
+                }
             }
             var others = owned.Where(m => m.Kind is not ApiMemberKind.Property and not ApiMemberKind.Constructor)
                 .OrderBy(m => m.Name, StringComparer.Ordinal).ThenBy(m => m.DocId, StringComparer.Ordinal).ToList();

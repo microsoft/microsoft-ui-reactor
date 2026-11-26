@@ -26,16 +26,17 @@ public sealed class ReferenceNavTests
         var inputs = new List<ReferenceInput>();
         foreach (var assembly in CompileCommand.ReferenceAssemblies)
         {
-            var choice = CompileCommand.FindAssemblyXml(root, assembly);
-            var dll = choice is null ? null : Path.ChangeExtension(choice.Value.Path, ".dll");
-            if (choice is null || !File.Exists(dll))
+            var why = $"This check needs {assembly.AssemblyName}.xml and .dll under src/{assembly.ProjectDir}/bin. " +
+                $"Run `dotnet build src/{assembly.ProjectDir}` (or the docs compile) first.";
+            if (CompileCommand.FindAssemblyXml(root, assembly) is not { } choice
+                || Path.ChangeExtension(choice.Path, ".dll") is not { } dll
+                || !File.Exists(dll))
             {
-                var why = $"This check needs {assembly.AssemblyName}.xml and .dll under src/{assembly.ProjectDir}/bin. " +
-                    $"Run `dotnet build src/{assembly.ProjectDir}` (or the docs compile) first.";
                 Assert.False(RunningInCi, why);
                 Assert.Skip(why);
+                return;
             }
-            inputs.Add(new ReferenceInput(choice.Value.Path, dll));
+            inputs.Add(new ReferenceInput(choice.Path, dll));
         }
 
         var map = ReferenceMap.Load(Path.Join(root, "docs", "_pipeline", "reference-map.yaml"));
