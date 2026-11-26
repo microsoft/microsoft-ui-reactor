@@ -26,8 +26,10 @@ namespace Microsoft.UI.Reactor.Core;
 /// gesture mid-interaction. <see cref="GestureDispatch.RefreshGestureDragStateOnSkip"/> (#721)
 /// refreshes their closures on the skip path instead.</para>
 /// <para><b>Lifecycle callbacks.</b> <c>.Ref</c>, <c>OnUnmountAction</c> and
-/// <c>OnUpdateAction</c> compare by reference: ApplyModifiers re-registers the latest teardown and
-/// runs the update action on every non-skip Update, so a changed closure must decline the skip.
+/// <c>OnUpdateAction</c> compare by reference. A <c>.Ref</c> swap must reach ApplyModifiers so it
+/// clears the old cell and binds the new one, or the skip strands a stale <c>ElementRef</c>; and
+/// ApplyModifiers re-registers the latest teardown and runs the update action on every non-skip
+/// Update, so a changed closure must decline the skip.
 /// <c>OnMountAction</c> fires once at mount (gated on <c>oldM is null</c>), so a later change is
 /// inert and it is not compared.</para>
 /// <para><b>Flyouts and the rich tooltip</b> decline the skip whenever set (full mode), and compare

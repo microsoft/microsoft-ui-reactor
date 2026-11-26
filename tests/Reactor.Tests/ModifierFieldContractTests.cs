@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <summary>
 /// Spec 067 §10.1: every modifier field is declared once in <c>ModifierSchema.Slots</c>
 /// (<c>src/Reactor.Analyzers/Modifiers/ModifierSchema.cs</c>) with the way the shallow-skip gate
-/// compares it, and the hand-written <c>Merge</c> and skip-equality code is checked against that
+/// compares it, and the <c>Merge</c> and skip-equality code is checked against that
 /// declaration for every field. A new field with no declaration fails
 /// <see cref="Every_Modifier_Field_Is_Declared_Exactly_Once"/>, so it can't ship half-wired
 /// (the class of bug behind spec 059's <c>IsDragRegion</c>, #976's <c>OnUpdateAction</c> and
@@ -26,7 +26,11 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 /// <remarks>
 /// Added in layer 0 with a literal table; layer 1 moved that table into the schema unchanged, so
-/// these tests now check the schema's skip declarations against the code. Brush and FontFamily fields can't
+/// these tests now check the schema's skip declarations against the code. Since layer 2 that code
+/// (<c>ModifierEquality</c> and the four <c>Merge</c> bodies) is generated from the same schema,
+/// so the independent oracle for the skip policy itself is <c>ModifierSkipPolicySnapshotTests</c>;
+/// these tests still check the emitted code against the record shapes and the per-kind behaviour.
+/// Brush and FontFamily fields can't
 /// be constructed headless, so their merge and equality checks run in the
 /// <c>ModifierFieldContract_BrushAndFont</c> selftest.
 /// </remarks>
@@ -92,7 +96,8 @@ public class ModifierFieldContractTests
                 $"{bucket}: undeclared [{string.Join(", ", actual.Except(declared))}], "
                 + $"declared but missing [{string.Join(", ", declared.Except(actual))}]. "
                 + "Add a slot to ModifierSchema.Slots (src/Reactor.Analyzers/Modifiers/ModifierSchema.cs) with its SkipEquality "
-                + "(and a Reason if NotCompared), wire it into Merge and ModifiersEqualCore, and update "
+                + "(and a Reason if NotCompared), run `dotnet run --project tools/Reactor.ModifierGen` to regenerate "
+                + "Merge and ModifierEquality, add its ModifierSkipPolicySnapshotTests.Frozen row, and update "
                 + "ModifierApplyOrderTests' frozen order. A Brush or FontFamily field also needs a CheckField line "
                 + "in ModifierFieldContractFixture and an entry in ModifierFieldContractSelfTestFields (Reactor.AppTests.Host).");
         }
@@ -231,6 +236,22 @@ public class ModifierFieldContractTests
             Assert.True(visible[i] == Element.ModifiersVisiblyEqual(a, b), $"{id} ({f.Skip}) {pair}: ModifiersVisiblyEqual(a, b) should be {visible[i]}.");
             Assert.True(visible[i] == Element.ModifiersVisiblyEqual(b, a), $"{id} ({f.Skip}) {pair}: ModifiersVisiblyEqual(b, a) should be {visible[i]}.");
         }
+    }
+
+    [Theory]
+    [InlineData("Layout", true)]
+    [InlineData("Visual", true)]
+    // Accessibility has no empty sentinel: AccessibilityEqual treats an empty bucket and a missing
+    // one as different, in both modes. Pinned as today's behaviour, not endorsed.
+    [InlineData("Accessibility", false)]
+    public void An_Empty_Bucket_Compares_Against_A_Missing_One(string bucket, bool equal)
+    {
+        var empty = EmptyBucket(Enum.Parse<Bucket>(bucket));
+        var missing = new ElementModifiers();
+        Assert.Equal(equal, Element.ModifiersEqual(empty, missing));
+        Assert.Equal(equal, Element.ModifiersEqual(missing, empty));
+        Assert.Equal(equal, Element.ModifiersVisiblyEqual(empty, missing));
+        Assert.Equal(equal, Element.ModifiersVisiblyEqual(missing, empty));
     }
 
     [Fact]
