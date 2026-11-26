@@ -147,5 +147,5 @@ setup — a WPF host has to reproduce it.
   view-models from WPF.
 - **[Threading and Dispatch](/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch)** — How Reactor's
   hook setters auto-marshal across dispatchers.
-- **[XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)** — Migration cookbook for
+- **[Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)** — Migration guide for
   WPF/XAML pages moving to Reactor's declarative shell.

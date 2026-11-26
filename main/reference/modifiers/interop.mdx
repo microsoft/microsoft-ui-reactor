@@ -7,7 +7,7 @@ sidebar:
 
 Modifiers are extension methods that return a changed copy of the element, so you can chain them.
 
-**Learn more:** [Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)
+**Learn more:** [Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)
 
 ## `CoreWebView2Initialized` [#corewebview2initialized]
 

@@ -402,7 +402,7 @@ nothing about the item type beyond how to render it and how to identify it.
 
 When two siblings need to coordinate, push the state up to their common
 parent and pass `(value, setter)` down. This is the
-[recipes/master-detail](/microsoft-ui-reactor/main/recipes/master-detail) pattern: the master list
+[recipes/master-detail](/microsoft-ui-reactor/main/guides/recipes/master-detail) pattern: the master list
 and the detail panel both react to a shared `selectedId`, owned by the
 parent. The siblings stay pure — they take props in, call back out. See
 [hooks](/microsoft-ui-reactor/main/guides/hooks) for the `UseState` shape this pattern composes from.
@@ -456,7 +456,7 @@ class SideEffectsInRenderDont : Component
 ```
 
 `Render()` may be called any number of times per user action — once per
-state change, plus diagnostic renders the [devtools](/microsoft-ui-reactor/main/guides/dev-tooling) may
+state change, plus diagnostic renders the [devtools](/microsoft-ui-reactor/main/tools) may
 trigger. Side effects must move into [`UseEffect`](/microsoft-ui-reactor/main/guides/effects) so they
 run exactly once per commit. Diagnostic counters belong in
 [`UseRef`](/microsoft-ui-reactor/main/guides/hooks), which mutates without scheduling a re-render.
@@ -531,7 +531,7 @@ function from (state + props) to elements.
 ## Next Steps [#next-steps]
 
 - **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — Next: deep dive into [UseState](/microsoft-ui-reactor/main/reference/hooks/UseState), [UseReducer](/microsoft-ui-reactor/main/reference/hooks/UseReducer), [UseEffect](/microsoft-ui-reactor/main/reference/hooks/UseEffect), and all the hooks
-- **[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling)** — Previous: hot reload and preview mode for faster iteration
+- **[Dev Tooling](/microsoft-ui-reactor/main/tools)** — Previous: hot reload and preview mode for faster iteration
 - **[Layout](/microsoft-ui-reactor/main/guides/layout)** — Arrange components with VStack, HStack, Grid, and responsive patterns
 - **[Styling and Theming](/microsoft-ui-reactor/main/guides/styling)** — Apply colors, typography, and themes to your components
 - **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — How the diff matches components across renders and why keys matter

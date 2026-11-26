@@ -211,7 +211,7 @@ already recorded.
 Independently of the handler, every component failure — a `Render()` or an
 effect flush that throws, at any depth including the host's root — is also
 reported on the `Microsoft-UI-Reactor` ETW `RenderError` event (`Errors`
-keyword), naming the component — see [diagnostics](/microsoft-ui-reactor/main/guides/diagnostics). The event is
+keyword), naming the component — see [diagnostics](/microsoft-ui-reactor/main/tools/diagnostics). The event is
 emitted before the handler runs, so it fires once per throw whatever the handler
 does, including when it calls `Propagate()`. Errors an `ErrorBoundary` catches
 are reported there too, even though they never reach the handler. `Reconcile`

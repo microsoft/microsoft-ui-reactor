@@ -24,7 +24,7 @@ first trace.
 | Reconcile-highlight overlay | Dev menu | Flashing rectangle per re-render | Finding which component re-rendered without taking a trace |
 
 The reconcile-highlight overlay is documented in
-[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling); reach for it first when "something
+[Dev Tooling](/microsoft-ui-reactor/main/tools); reach for it first when "something
 feels slow" is the only signal you have. A profile trace is the next
 step up: it costs more to set up but gives you elapsed microseconds
 per span and a complete hierarchy you can sort.
@@ -62,13 +62,13 @@ public static class Keywords
 The seven that cover the render loop: `Reconcile` covers reconcile-pass
 boundaries and the child-list diff, `Render` covers per-component render
 timing and the effect-flush boundary, `State` covers `UseState` writes,
-`Mcp` covers [devtools](/microsoft-ui-reactor/main/guides/dev-tooling) tool dispatch, `Lifecycle` covers
+`Mcp` covers [devtools](/microsoft-ui-reactor/main/tools) tool dispatch, `Lifecycle` covers
 mount and unmount, `Errors` is severity-Error events, and `EventDispatch`
 covers the trampoline that fans WinUI routed events out to your Reactor
 callbacks. The rest (`Hosting` through `HotReload`, and `RenderDetail` for
 the per-component `ComponentRendered` notification) are covered in
 [Perf instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation) and
-[Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics). The values are power-of-two flags on
+[Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics). The values are power-of-two flags on
 `EventKeywords`, so `Reconcile | Render` is `0x3` and
 `Reconcile | Render | EventDispatch` is `0x43`.
 
@@ -172,7 +172,7 @@ bail-out is working. Low `elementsSkipped` with a long pass usually
 means the [`UseMemo`](/microsoft-ui-reactor/main/guides/hooks) deps array is unstable: a new array
 or a new closure as a dep makes every render look new, and the
 bail-out can't fire. The [reconcile-highlight
-overlay](/microsoft-ui-reactor/main/guides/dev-tooling) catches this cheaper than a trace — flick
+overlay](/microsoft-ui-reactor/main/tools) catches this cheaper than a trace — flick
 it on and watch which component flashes every time you type.
 
 > **Caveat:** Debug builds disable several of the reconciler's bail-out optimizations
@@ -287,7 +287,7 @@ shrinks by roughly an order of magnitude — a 30-second session that
 was 1.2 GB becomes ~80 MB.
 
 **Reach for the overlay before a trace.** The
-[reconcile-highlight](/microsoft-ui-reactor/main/guides/dev-tooling) overlay costs nothing to
+[reconcile-highlight](/microsoft-ui-reactor/main/tools) overlay costs nothing to
 enable and will solve "which component is re-rendering too much"
 without you ever opening a profiler. A trace is the right tool when
 you need elapsed microseconds; the overlay is the right tool when
@@ -302,7 +302,7 @@ the framework-overhead number, not the absolute number.
 ## Next Steps [#next-steps]
 
 - **[Perf Instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation)** — Under-the-hood companion: why each event exists, the IsEnabled gate, how to add a new event id.
-- **[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling)** — The reconcile-highlight overlay plus the rest of the `mur` CLI.
+- **[Dev Tooling](/microsoft-ui-reactor/main/tools)** — The reconcile-highlight overlay plus the rest of the `mur` CLI.
 - **[DevTools Internals](/microsoft-ui-reactor/main/how-it-works/devtools-internals)** — How the overlay reads the same provider events the profilers do.
 - **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — What the `ReconcileStop` counters describe; how to read the keyed child-list diff.
 - **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — Where `UseMemo` deps come from and what makes them unstable.

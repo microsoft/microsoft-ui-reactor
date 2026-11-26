@@ -7,7 +7,7 @@ sidebar:
 
 `ReactorApp` starts the app and opens its first window. The other types here describe windows, the tray icon, the taskbar and the ways to host Reactor inside an existing WinUI app.
 
-**Learn more:** [Windows](/microsoft-ui-reactor/main/guides/windows), [Advanced Windowing](/microsoft-ui-reactor/main/guides/windowing-advanced)
+**Learn more:** [Windows](/microsoft-ui-reactor/main/guides/windows), [Advanced Windowing](/microsoft-ui-reactor/main/guides/windowing-advanced), [Desktop integration](/microsoft-ui-reactor/main/guides/desktop-integration)
 
 ## Types [#types]
 

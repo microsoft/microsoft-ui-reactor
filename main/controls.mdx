@@ -45,7 +45,7 @@ pick off a shelf. `CommandHost` and `NavigationHost` are wiring emitted by
 `ValidationRule`, and `ValidationVisualizer` are the
 [forms](/microsoft-ui-reactor/main/controls/forms) validation decorators; `Semantic` is the
 [accessibility](/microsoft-ui-reactor/main/guides/accessibility) annotation wrapper; `XamlHost` and
-`XamlPage` are the [XAML interop](/microsoft-ui-reactor/main/get-started/xaml-developers) hosts; and
+`XamlPage` are the [XAML interop](/microsoft-ui-reactor/main/get-started/xaml-developers#host-xaml-inside-reactor) hosts; and
 `AnnounceRegion` is internal — it exists only to back the
 [`UseAnnounce`](/microsoft-ui-reactor/main/guides/accessibility) hook and has no public factory. A unit
 test (`ControlCatalogCompletenessTests`) fails the build when a newly
@@ -528,5 +528,5 @@ modifiers, and the "Don't" cases.
   `FlexPanel` compose any control into a real screen.
 - **[Styling](/microsoft-ui-reactor/main/guides/styling)** — `ThemeRef` tokens, modifier chaining, and
   named styles applied across the catalog.
-- **[Recipes](/microsoft-ui-reactor/main/recipes)** — Real-world compositions that pull
+- **[Recipes](/microsoft-ui-reactor/main/guides/recipes)** — Real-world compositions that pull
   controls together into common shapes.

@@ -7,7 +7,7 @@ sidebar:
 
 Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.
 
-**Learn more:** [Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)
+**Learn more:** [Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)
 
 ## `MapControl` [#mapcontrol]
 

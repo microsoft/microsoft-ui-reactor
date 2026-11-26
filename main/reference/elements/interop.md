@@ -7,7 +7,7 @@ sidebar:
 
 Element records are immutable descriptions of a control. You usually create them with a factory method and change them with modifiers.
 
-**Learn more:** [Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)
+**Learn more:** [Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)
 
 ## `MapControlElement` [#mapcontrolelement]
 

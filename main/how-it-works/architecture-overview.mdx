@@ -418,7 +418,7 @@ synchronous handler that calls three setters produces one re-render.
 ### Tracing a render end-to-end [#tracing-a-render-end-to-end]
 
 When you need to know what happened on a single frame, enable the
-reconcile overlay from the [dev menu](/microsoft-ui-reactor/main/guides/dev-tooling) and watch the ETW
+reconcile overlay from the [dev menu](/microsoft-ui-reactor/main/tools) and watch the ETW
 `ReactorEventSource` provider. The keywords are split so you can subscribe
 to `State`, `Render`, `Reconcile`, and `Effect` independently — each
 roughly corresponds to one box on the diagram above. The
@@ -517,7 +517,7 @@ the current set.
 
 ## Next Steps [#next-steps]
 
-- **[Reactor vs XAML](/microsoft-ui-reactor/main/get-started/reactor-vs-xaml)** — Same diagram, but mapped onto the XAML concepts you already know.
+- **[Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)** — The XAML concepts you already know, mapped onto Reactor.
 - **[Reactivity Model](/microsoft-ui-reactor/main/how-it-works/reactivity-model)** — Zooms into the state-setter → re-render arrow.
 - **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — Zooms into the diff box.
 - **[Hooks Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Zooms into the slot table.

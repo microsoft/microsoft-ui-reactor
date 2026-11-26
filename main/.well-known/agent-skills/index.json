@@ -3,7 +3,7 @@
   "skills": [
     {
       "description": "Read the Reactor docs instead of answering from memory. Declarative UI framework for native Windows desktop apps in pure C#. Use when a task involves Reactor: how it works, how to set it up or configure it, or its API.",
-      "digest": "sha256:0ef591ab49d24c7f1d43216b218579efb8cc5ecd4fbee3a3dacfa9ab39e26155",
+      "digest": "sha256:263c1bc691eff382965b3f7a032697d2a5abf2b221cbeeca5bbde9b7b64a2981",
       "name": "reactor",
       "type": "skill-md",
       "url": "/microsoft-ui-reactor/main/.well-known/agent-skills/reactor/SKILL.md"

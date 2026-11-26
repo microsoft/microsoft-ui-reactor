@@ -42,7 +42,7 @@ The picker methods (`PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`
 reserve no state slot and must run from UI-thread event handlers, not during
 `Render()`. Call them directly inside the handler. Cancellation returns `null` for
 single-file, folder, and save dialogs, or an empty list for multiple selections. See
-[Pickers](/microsoft-ui-reactor/main/guides/windows#pickers) for the full options and the open/folder/save pattern:
+[File and folder pickers](/microsoft-ui-reactor/main/guides/desktop-integration#file-and-folder-pickers) for the full options and the open/folder/save pattern:
 
 ```csharp
 // Pickers are not hooks: call them directly from UI-thread event handlers.
@@ -650,7 +650,7 @@ catalogs the full set of custom-hook conventions.
 
 When a parent and child both need to read the same value, hoist the
 `UseState` to the parent and pass `(value, setter)` down as a prop. The
-[recipes/master-detail](/microsoft-ui-reactor/main/recipes/master-detail) walkthrough shows the
+[recipes/master-detail](/microsoft-ui-reactor/main/guides/recipes/master-detail) walkthrough shows the
 classic shape — the master list and the detail panel both react to the
 shared selection state. This is the same pattern XAML developers reach
 for with shared view models; here the state lives in the parent

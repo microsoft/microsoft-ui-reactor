@@ -15,7 +15,7 @@ public sealed class ReactorHostControl : ContentControl, IDisposable
 
 Namespace: `Microsoft.UI.Reactor.Hosting`. Inherits from [`ContentControl`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.contentcontrol).
 
-**Learn more:** [Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)
+**Learn more:** [Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)
 
 ## Constructors [#constructors]
 

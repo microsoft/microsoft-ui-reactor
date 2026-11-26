@@ -1,0 +1,702 @@
+<!DOCTYPE html><html dir="ltr" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="astro-view-transitions-enabled" content="true"><meta name="astro-view-transitions-fallback" content="animate"><script type="module" src="/microsoft-ui-reactor/main/_astro/ClientRouter.astro_astro_type_script_index_0_lang.5_s3_L-3.js"></script><script>(()=>{const sel='body link[rel="stylesheet"]';document.addEventListener("astro:before-preparation",(e)=>{const load=e.loader;e.loader=async()=>{await load();const links=[...e.newDocument.querySelectorAll(sel)].filter((l)=>!document.head.querySelector('link[rel="stylesheet"][href="'+l.getAttribute("href")+'"]'));await Promise.all(links.map((l)=>new Promise((done)=>{const c=document.createElement("link");for(const a of l.attributes){c.setAttribute(a.name,a.value);}c.onload=done;c.onerror=done;document.head.append(c);})));};});document.addEventListener("astro:before-swap",(e)=>{for(const l of e.newDocument.querySelectorAll(sel)){e.newDocument.head.append(l);}});})();</script><title>0.1.0-preview.12 - Reactor</title><link href="/microsoft-ui-reactor/main/favicon.png" rel="icon" type="image/png"><style>@font-face{font-family:Inter-bee4a7829ca556b7;src:url("/microsoft-ui-reactor/main/_astro/fonts/91753f8d8da3aeb7.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 700;font-style:italic;}@font-face{font-family:Inter-bee4a7829ca556b7;src:url("/microsoft-ui-reactor/main/_astro/fonts/e868cdf4720e9ea5.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 700;font-style:normal;}@font-face{font-family:"Inter-bee4a7829ca556b7 fallback: Arial";src:local("Arial");font-display:swap;font-weight:400 700;font-style:italic;size-adjust:107.7766%;ascent-override:89.885%;descent-override:22.3806%;line-gap-override:0%;}@font-face{font-family:"Inter-bee4a7829ca556b7 fallback: Arial";src:local("Arial");font-display:swap;font-weight:400 700;font-style:normal;size-adjust:107.7766%;ascent-override:89.885%;descent-override:22.3806%;line-gap-override:0%;}:root{--blume-ff-inter:Inter-bee4a7829ca556b7,"Inter-bee4a7829ca556b7 fallback: Arial",ui-sans-serif,system-ui,sans-serif;}</style><link rel="preload" href="/microsoft-ui-reactor/main/_astro/fonts/e868cdf4720e9ea5.woff2" as="font" type="font/woff2" crossorigin><style>@font-face{font-family:"Geist Mono-55651197e5cb41ba";src:url("/microsoft-ui-reactor/main/_astro/fonts/89a9b6ed1259cb6e.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 600;font-style:italic;}@font-face{font-family:"Geist Mono-55651197e5cb41ba";src:url("/microsoft-ui-reactor/main/_astro/fonts/181a29443484632f.woff2") format("woff2");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400 600;font-style:normal;}@font-face{font-family:"Geist Mono-55651197e5cb41ba fallback: Courier New";src:local("Courier New");font-display:swap;font-weight:400 600;font-style:italic;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}@font-face{font-family:"Geist Mono-55651197e5cb41ba fallback: Courier New";src:local("Courier New");font-display:swap;font-weight:400 600;font-style:normal;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}:root{--blume-ff-geist-mono:"Geist Mono-55651197e5cb41ba","Geist Mono-55651197e5cb41ba fallback: Courier New",ui-monospace,"SF Mono",Menlo,monospace;}</style><link rel="preload" href="/microsoft-ui-reactor/main/_astro/fonts/181a29443484632f.woff2" as="font" type="font/woff2" crossorigin><link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12"><meta name="description" content="25 added, 6 changed, 1 deprecated, 3 removed and 16 fixed."><meta property="og:type" content="article"><meta property="og:site_name" content="Reactor"><meta property="og:title" content="0.1.0-preview.12 - Reactor"><meta property="og:description" content="25 added, 6 changed, 1 deprecated, 3 removed and 16 fixed."><meta property="og:url" content="https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12"><meta property="article:published_time" content="2026-07-14T00:00:00.000Z"><meta property="og:image" content="https://microsoft.github.io/microsoft-ui-reactor/main/og/changelog/v0-1-0-preview-12.png"><meta property="og:image:type" content="image/png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="0.1.0-preview.12 - Reactor"><meta name="twitter:image" content="https://microsoft.github.io/microsoft-ui-reactor/main/og/changelog/v0-1-0-preview-12.png"><meta name="twitter:image:alt" content="0.1.0-preview.12 - Reactor"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="0.1.0-preview.12 - Reactor"><meta name="twitter:description" content="25 added, 6 changed, 1 deprecated, 3 removed and 16 fixed."><link href="/microsoft-ui-reactor/main/changelog/rss.xml" rel="alternate" title="Reactor — Changelog" type="application/rss+xml"><link href="/microsoft-ui-reactor/main/agent-readability.json" rel="describedby" type="application/json"><link href="/microsoft-ui-reactor/main/llms.txt" rel="describedby" type="text/plain"><link href="/microsoft-ui-reactor/main/.well-known/ai-catalog.json" rel="ai-catalog" type="application/ai-catalog+json"><link href="/microsoft-ui-reactor/main/.well-known/ard.json" rel="ard" type="application/json"><link href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12.md" rel="alternate" type="text/markdown"><script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@id":"https://microsoft.github.io#website","@type":"WebSite","name":"Reactor","url":"https://microsoft.github.io/microsoft-ui-reactor/main"},{"@id":"https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12#page","@type":"TechArticle","inLanguage":"en","name":"0.1.0-preview.12","url":"https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12","headline":"0.1.0-preview.12","description":"25 added, 6 changed, 1 deprecated, 3 removed and 16 fixed.","datePublished":"2026-07-14T00:00:00.000Z","isPartOf":{"@id":"https://microsoft.github.io#website"},"image":"https://microsoft.github.io/microsoft-ui-reactor/main/og/changelog/v0-1-0-preview-12.png"}]}</script><script data-mode="system">(()=>{const ds=document.currentScript?.dataset;const m=ds?.mode??"system";const fixed=ds?.fixed!==undefined;const apply=()=>{const r=document.documentElement;let s=null;let blocked=false;try{s=fixed?null:localStorage.getItem("blume-theme");}catch{blocked=true;}const sys=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.theme=s??(blocked&&r.dataset.theme?r.dataset.theme:m==="system"?sys:m);};apply();document.addEventListener("astro:before-swap",(e)=>{const t=document.documentElement.dataset.theme;if(t){e.newDocument.documentElement.dataset.theme=t;}});document.addEventListener("astro:after-swap",apply);let printed=null;addEventListener("beforeprint",()=>{const r=document.documentElement;if(r.dataset.theme==="dark"){printed="dark";r.dataset.theme="light";}});addEventListener("afterprint",()=>{if(printed){document.documentElement.dataset.theme=printed;printed=null;}});})();</script><script type="module" data-root="/microsoft-ui-reactor/" data-version="main" src="/microsoft-ui-reactor/main/js/version-menu.js"></script><link rel="stylesheet" href="/microsoft-ui-reactor/main/_astro/WebMcp.Dl_j0HnA.css"><style>.medium-zoom-overlay{opacity:0;will-change:opacity;transition:opacity .3s;position:fixed;inset:0}.medium-zoom--opened .medium-zoom-overlay{cursor:pointer;cursor:zoom-out;opacity:1}.medium-zoom-image{cursor:pointer;cursor:zoom-in;transition:transform .3s cubic-bezier(.2,0,.2,1)!important}.medium-zoom-image--hidden{visibility:hidden}.medium-zoom-image--opened{cursor:pointer;cursor:zoom-out;will-change:transform;position:relative}@media (prefers-reduced-motion:reduce){.medium-zoom-image,.medium-zoom-overlay{transition:none!important}}[data-blume-page-actions-mount]>[data-blume-page-actions]{border-top:1px solid var(--blume-border);margin-top:0;padding:.5rem}[data-blume-page-actions-mount] [data-blume-scroll-top]{display:none}[data-blume-page-actions-mount] :is([data-blume-page-actions]>:is(a,button),summary){border-radius:.375rem;padding-inline:.5rem}[data-blume-page-actions-mount] [data-blume-menu]{margin:0;border-width:0;width:auto;min-width:0;max-width:none;box-shadow:none;background-color:#0000;border-inline-start-width:1px;border-radius:0;margin-inline-start:.5rem;padding:0;padding-inline-start:.5rem;position:static}[data-blume-page-actions-mount] [data-blume-menu]>:hover{background-color:#0000}.medium-zoom-overlay{backdrop-filter:blur(4px);z-index:100}.medium-zoom-image--opened{z-index:101}@media (prefers-reduced-motion:reduce){html .medium-zoom-image,html .medium-zoom-overlay{transition-duration:1ms!important}}
+</style><link rel="stylesheet" href="/microsoft-ui-reactor/main/_astro/_..BzU5SHcW.css"><script type="module" src="/microsoft-ui-reactor/main/_astro/page.DZ88yi4l.js"></script></head><body class="bg-background font-sans text-foreground antialiased" data-blume-code-copy="" data-blume-image-zoom data-i18n-copied="Copied!" data-i18n-copy-code="Copy code" data-i18n-diagram-error="Could not render this diagram." data-i18n-show-less="Show less" data-i18n-show-more="Show more"><a class="absolute start-[-999px] top-0 z-[100] bg-accent px-4 py-2 text-accent-foreground focus:start-0" href="#blume-content">Skip to content</a><span hidden id="blume-new-tab-hint">Opens in a new tab</span><div class="relative flex items-center justify-center gap-x-2 gap-y-0.5 bg-foreground px-10 py-3 text-center text-background text-sm max-sm:flex-wrap dark:border-border dark:border-b dark:bg-background dark:text-foreground [:where([data-blume-banner-hidden])_&amp;]:hidden" data-banner-key="You're reading the docs for the unreleased main branch." data-blume-banner><span dir="auto">You&#39;re reading the docs for the unreleased main branch.</span><a class="inline-flex items-center gap-1 font-medium underline underline-offset-2" href="https://microsoft.github.io/microsoft-ui-reactor/">Go to the latest release<svg aria-hidden="true" class="rtl:-scale-x-100" height="14" width="14"><use href="#blume-i-arrow-right"></use></svg></a></div><header class="sticky top-0 z-40 flex h-16 items-center gap-2 bg-background/90 px-4 backdrop-blur sm:gap-3 md:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)]" data-blume-header><div class="flex min-w-0 items-center gap-2 sm:gap-3 lg:col-start-1"><button aria-controls="blume-nav-drawer" aria-expanded="false" aria-label="Toggle navigation" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden" data-blume-nav-toggle type="button"><svg aria-hidden="true" height="20" width="20"><use href="#blume-i-menu"></use></svg></button><a class="inline-flex min-w-0 items-center gap-2 font-semibold text-base text-foreground" href="/microsoft-ui-reactor/main"><span aria-hidden="true" class="inline-flex h-5 shrink-0 items-center [&amp;&gt;svg]:h-5 [&amp;&gt;svg]:w-auto"><svg width="113" height="113" viewBox="0 0 113 113" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M75.2982 9.4165H37.7014C32.655 9.4165 27.9919 12.1087 25.4687 16.479L6.73909 48.9199C5.40851 51.2246 4.70801 53.8387 4.70801 56.4998H56.4997C56.4997 56.2013 56.5783 55.965 56.7276 55.7065L82.3607 11.3089C80.2485 10.0896 77.8214 9.4165 75.2982 9.4165Z" fill="url(#paint0_linear_413_1660)"/>
+<path d="M75.2982 103.583H37.7014C32.655 103.583 27.9919 100.891 25.4688 96.5208L6.73909 64.0799C5.41802 61.7917 4.71794 59.1414 4.70801 56.5H56.4997C56.4997 56.7241 56.5585 57.001 56.6706 57.195L82.3602 101.691C80.2485 102.911 77.8214 103.583 75.2982 103.583Z" fill="url(#paint1_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint2_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint3_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint4_linear_413_1660)"/>
+<path d="M106.26 64.0793L87.5307 96.5202C86.2694 98.7054 84.4727 100.471 82.3605 101.69L56.6709 57.1943C56.5589 57.0003 56.5 56.7805 56.5 56.5563C56.5 56.2578 56.5786 55.9645 56.7279 55.706L82.361 11.3086C84.4727 12.5279 86.2694 14.2935 87.5307 16.4787L106.26 48.9194C107.591 51.2242 108.292 53.8382 108.292 56.4994C108.292 59.1605 107.591 61.7751 106.26 64.0793Z" fill="url(#paint5_linear_413_1660)"/>
+<path d="M56.5329 23.5415L47.0189 40.0206L37.8088 55.9824C37.718 56.1396 37.6702 56.3219 37.6702 56.5036L37.6718 56.5568H19.2475L19.2471 56.4998C19.2471 55.8972 19.4022 55.2945 19.7124 54.7516C21.3281 51.9252 24.7123 46.0561 28.1969 40.0207H28.1856L36.3406 25.8957C37.1817 24.4389 38.736 23.5415 40.4181 23.5415H56.5329Z" fill="#D9D9D9"/>
+<path d="M56.5329 23.5415L47.0189 40.0206L37.8088 55.9824C37.718 56.1396 37.6702 56.3219 37.6702 56.5036L37.6718 56.5568H19.2475L19.2471 56.4998C19.2471 55.8972 19.4022 55.2945 19.7124 54.7516C21.3281 51.9252 24.7123 46.0561 28.1969 40.0207H28.1856L36.3406 25.8957C37.1817 24.4389 38.736 23.5415 40.4181 23.5415H56.5329Z" fill="url(#paint6_linear_413_1660)"/>
+<path d="M56.5329 23.5415L47.0189 40.0206L37.8088 55.9824C37.718 56.1396 37.6702 56.3219 37.6702 56.5036L37.6718 56.5568H19.2475L19.2471 56.4998C19.2471 55.8972 19.4022 55.2945 19.7124 54.7516C21.3281 51.9252 24.7123 46.0561 28.1969 40.0207H28.1856L36.3406 25.8957C37.1817 24.4389 38.736 23.5415 40.4181 23.5415H56.5329Z" fill="url(#paint7_linear_413_1660)"/>
+<path d="M47.0008 73.0118H47.0077L37.8088 57.0181C37.7275 56.8768 37.6807 56.7191 37.6718 56.5576L37.6702 56.5044H19.2471C19.2478 57.1056 19.4029 57.7069 19.7124 58.2484C21.3309 61.08 24.7242 66.9649 28.2151 73.0109H28.2039L36.3405 87.1038C37.1815 88.5606 38.7359 89.458 40.418 89.458H56.5371L47.0008 73.0118Z" fill="#D9D9D9"/>
+<path d="M47.0008 73.0118H47.0077L37.8088 57.0181C37.7275 56.8768 37.6807 56.7191 37.6718 56.5576L37.6702 56.5044H19.2471C19.2478 57.1056 19.4029 57.7069 19.7124 58.2484C21.3309 61.08 24.7242 66.9649 28.2151 73.0109H28.2039L36.3405 87.1038C37.1815 88.5606 38.7359 89.458 40.418 89.458H56.5371L47.0008 73.0118Z" fill="url(#paint8_linear_413_1660)"/>
+<path d="M65.7881 40.0207L75.3201 56.5333L65.8064 73.011L66.3159 73.8971L75.2966 89.4582L92.5724 59.5485L93.3172 58.2443C93.6261 57.7028 93.7805 57.1016 93.7805 56.5003C93.7805 55.899 93.6261 55.2983 93.3172 54.7563L92.5653 53.4399L84.8347 40.0543H84.8291L75.2966 23.5415L65.7881 40.0207Z" fill="#D9D9D9"/>
+<path d="M65.7881 40.0207L75.3201 56.5333L65.8064 73.011L66.3159 73.8971L75.2966 89.4582L92.5724 59.5485L93.3172 58.2443C93.6261 57.7028 93.7805 57.1016 93.7805 56.5003C93.7805 55.899 93.6261 55.2983 93.3172 54.7563L92.5653 53.4399L84.8347 40.0543H84.8291L75.2966 23.5415L65.7881 40.0207Z" fill="url(#paint9_linear_413_1660)"/>
+<defs>
+<linearGradient id="paint0_linear_413_1660" x1="32.958" y1="11.7707" x2="12.7748" y2="43.7692" gradientUnits="userSpaceOnUse">
+<stop stop-color="#3BD5FF"/>
+<stop offset="1" stop-color="#0FAFFF"/>
+</linearGradient>
+<linearGradient id="paint1_linear_413_1660" x1="32.958" y1="56.5" x2="29.3476" y2="104.055" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0FAFFF"/>
+<stop offset="1" stop-color="#0078D4"/>
+</linearGradient>
+<linearGradient id="paint2_linear_413_1660" x1="56.5" y1="11.3086" x2="134.478" y2="55.9923" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0FAFFF"/>
+<stop offset="1" stop-color="#0078D4"/>
+</linearGradient>
+<linearGradient id="paint3_linear_413_1660" x1="56.5" y1="11.3086" x2="134.478" y2="55.9923" gradientUnits="userSpaceOnUse">
+<stop stop-color="#3BD5FF"/>
+<stop offset="1" stop-color="#0FAFFF"/>
+</linearGradient>
+<linearGradient id="paint4_linear_413_1660" x1="56.5" y1="11.3086" x2="134.478" y2="55.9923" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0FAFFF"/>
+<stop offset="1" stop-color="#0078D4"/>
+</linearGradient>
+<linearGradient id="paint5_linear_413_1660" x1="60.8161" y1="11.3086" x2="135.234" y2="50.3988" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0078D4"/>
+<stop offset="1" stop-color="#004695"/>
+</linearGradient>
+<linearGradient id="paint6_linear_413_1660" x1="37.8901" y1="23.5415" x2="44.9841" y2="54.955" gradientUnits="userSpaceOnUse">
+<stop offset="0.173594" stop-color="#E6F9FE"/>
+<stop offset="1" stop-color="#9DEAFF"/>
+</linearGradient>
+<linearGradient id="paint7_linear_413_1660" x1="19.2471" y1="23.5415" x2="52.0195" y2="60.5532" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FEFEFE"/>
+<stop offset="1" stop-color="#E6F9FE"/>
+</linearGradient>
+<linearGradient id="paint8_linear_413_1660" x1="19.2471" y1="60.6039" x2="47.1774" y2="96.7004" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E6F9FE"/>
+<stop offset="1" stop-color="#9DEAFF"/>
+</linearGradient>
+<linearGradient id="paint9_linear_413_1660" x1="65.7881" y1="23.5415" x2="113.219" y2="43.6839" gradientUnits="userSpaceOnUse">
+<stop stop-color="#9DEAFF"/>
+<stop offset="1" stop-color="#3BD5FF"/>
+</linearGradient>
+</defs>
+</svg>
+</span><span class="truncate">Reactor</span></a><div class="flex items-center gap-1.5 hidden shrink-0 lg:block"><details class="group relative" data-blume-dropdown><summary aria-label="Version: main" class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground group-open:bg-muted group-open:text-foreground list-none [&amp;::-webkit-details-marker]:hidden"><span>main</span><svg aria-hidden="true" class="transition-transform group-open:rotate-180" height="14" width="14"><use href="#blume-i-chevron-down"></use></svg></summary><div class="absolute z-50 mt-2 rounded-blume border border-border bg-background p-1 shadow-xl min-w-56 max-w-[calc(100vw-1rem)] start-0" data-blume-dropdown-panel><a aria-current="true" class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="/microsoft-ui-reactor/main"><span class="flex-1"><span class="flex items-center gap-2">main<span class="rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">unreleased</span></span></span><svg aria-hidden="true" height="14" width="14"><use href="#blume-i-check"></use></svg></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/latest/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.18<span class="rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">latest</span></span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.17</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.16</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.15/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.15</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.14/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.14</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.13</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.12/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.12</span></span></a></div></details><script type="module" src="/microsoft-ui-reactor/main/_astro/NavSelector.astro_astro_type_script_index_0_lang.DvTlaxVU.js"></script></div></div><nav aria-label="Sections" class="hidden shrink-0 gap-1 md:flex lg:col-start-2"><a aria-current="page" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main">Home</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/get-started">Get started</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/guides/components">Guides</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/controls">Controls</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/tools">Tools</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/reference">API reference</a><a class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/how-it-works/architecture-overview">How it works</a></nav><div class="flex-1 lg:hidden"></div><div class="flex shrink-0 items-center gap-1 lg:col-start-3 lg:justify-self-end"><a class="hidden rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:text-foreground sm:inline-flex" href="/microsoft-ui-reactor/main/changelog">Changelog</a><script type="module" src="/microsoft-ui-reactor/main/_astro/Search.astro_astro_type_script_index_0_lang.BhThJ-a_.js"></script><blume-search class="contents" data-i18n-all="All" data-i18n-ask="Assistant" data-i18n-ask-hint="Get an instant answer from AI" data-i18n-dev="Search is available in the production build." data-i18n-empty="No results found." data-i18n-error="Something went wrong. Please try again." data-i18n-latest="latest" data-i18n-popular="Popular" data-i18n-results="Results"><button aria-keyshortcuts="Meta+K Control+K" aria-label="Search" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" data-blume-search-open data-blume-tooltip="Search (⁦⌘K⁩)" data-label="Search" type="button"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-search"></use></svg></button><dialog aria-label="Search docs" class="mx-auto mt-[8vh] mb-auto h-[min(480px,90dvh)] w-[min(62.5rem,94vw)] flex-col overflow-hidden rounded-blume border border-border bg-background/80 p-0 text-foreground shadow-2xl outline-none backdrop-blur-xl backdrop:bg-black/30 open:flex sm:mt-auto" data-blume-search-dialog><div class="flex items-center gap-2.5 border-border border-b px-4 py-3 text-muted-foreground"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-search"></use></svg><input aria-autocomplete="list" aria-controls="blume-search-listbox" aria-expanded="false" aria-label="Search docs" autocomplete="off" class="flex-1 border-0 bg-transparent text-foreground text-sm pointer-coarse:text-base focus:outline-none [&amp;::-webkit-search-cancel-button]:appearance-none" data-blume-search-input placeholder="Search documentation…" role="combobox" type="search"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.7rem]">Esc</kbd></div><div class="grid min-h-0 flex-1 md:grid-cols-[22rem_minmax(0,1fr)]" data-blume-search-grid><div class="flex min-h-0 flex-col md:border-border md:border-e"><div class="flex max-h-[5.75rem] flex-wrap gap-1.5 overflow-x-hidden overflow-y-auto overscroll-contain border-border border-b px-3 py-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent" data-blume-search-filters hidden></div><div aria-label="Search docs" class="min-h-0 flex-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overflow-y-auto p-2" data-blume-search-results id="blume-search-listbox" role="listbox"></div><p class="m-0 px-4 py-6 text-center text-muted-foreground text-sm" data-blume-search-message hidden></p></div><div class="hidden min-h-0 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overflow-y-auto p-5 md:block" data-blume-search-preview></div></div><div class="flex items-center justify-between gap-3 border-border border-t px-3 py-2 text-muted-foreground text-xs"><span></span><div class="flex items-center gap-3"><span class="flex items-center gap-1"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]">↑</kbd><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]">↓</kbd>navigate</span><span class="flex items-center gap-1"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]">↵</kbd>open</span><span class="flex items-center gap-1 max-md:hidden"><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[0.65rem]" data-blume-search-preview-kbd dir="ltr">⌘J</kbd>preview</span></div></div></dialog><script data-blume-search-popular type="application/json">[{"href":"/microsoft-ui-reactor/main/reference","label":"API reference"},{"href":"/microsoft-ui-reactor/main/reference/hooks","label":"Hooks"},{"href":"/microsoft-ui-reactor/main/reference/hooks/UseCollection","label":"UseCollection"},{"href":"/microsoft-ui-reactor/main/reference/hooks/UseExternalStore","label":"UseExternalStore"},{"href":"/microsoft-ui-reactor/main/reference/hooks/UseObservable","label":"UseObservable"},{"href":"/microsoft-ui-reactor/main/reference/hooks/UseObservableProperty","label":"UseObservableProperty"}]</script></blume-search><button aria-label="Toggle theme" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" data-blume-theme-toggle data-blume-tooltip="Toggle theme" type="button"><span class="inline-flex dark:hidden"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-sun"></use></svg></span><span class="hidden dark:inline-flex"><svg aria-hidden="true" height="18" width="18"><use href="#blume-i-moon"></use></svg></span></button></div></header><script>(()=>{const dr=()=>{const h=document.querySelector("[data-blume-header]");if(h){document.documentElement.style.setProperty("--blume-drawer-top",h.getBoundingClientRect().bottom+"px");}};const save=(k,v)=>{try{localStorage.setItem(k,v);}catch{}};document.addEventListener("click",(e)=>{const t=e.target.closest("[data-blume-theme-toggle]");if(t){const d=document.documentElement;const next=d.dataset.theme==="dark"?"light":"dark";const s=document.createElement("style");s.appendChild(document.createTextNode("*,*::before,*::after{transition:none!important}"));document.head.appendChild(s);d.dataset.theme=next;window.getComputedStyle(d).opacity;setTimeout(()=>document.head.removeChild(s),1);save("blume-theme",next);}const n=e.target.closest("[data-blume-nav-toggle]");if(n){const d=document.documentElement;const open=d.toggleAttribute("data-blume-nav-open");if(open){dr();}}const b=e.target.closest("[data-blume-banner-dismiss]");if(b){document.documentElement.setAttribute("data-blume-banner-hidden","");requestAnimationFrame(dr);const bar=b.closest("[data-blume-banner]");const k=bar&&bar.getAttribute("data-banner-key");if(k){save("blume-banner:"+k,"1");}}});addEventListener("resize",()=>{const d=document.documentElement;if(!d.hasAttribute("data-blume-nav-open")){return;}if(matchMedia("(min-width:64rem)").matches){d.removeAttribute("data-blume-nav-open");}else{dr();}});})();</script><div class="mx-auto grid grid-cols-1 items-start lg:grid-cols-[17.5rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1fr)_17.5rem]" data-blume-doc-grid><aside aria-label="Primary" data-blume-nav-drawer id="blume-nav-drawer" class="fixed top-[var(--blume-drawer-top,4rem)] start-0 z-[35] h-[calc(100dvh-var(--blume-drawer-top,4rem))] w-64 max-w-[80vw] -translate-x-[105%] overflow-y-auto border-border border-e bg-background px-5 pt-4 pb-6 transition-transform rtl:translate-x-[105%] [:where([data-blume-nav-open])_&amp;]:translate-x-0! lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100dvh-4rem)] lg:w-auto lg:max-w-none lg:translate-x-0! lg:scrollbar-thin lg:scrollbar-thumb-border lg:scrollbar-track-transparent lg:border-e-0 lg:bg-transparent lg:px-4"><div class="mb-4 flex flex-col gap-2 border-border border-b pb-4 lg:hidden"><details class="group relative w-full" data-blume-dropdown><summary aria-label="Version: main" class="inline-flex h-9 w-full cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background px-3 text-muted-foreground text-sm transition-colors hover:border-foreground hover:text-foreground list-none [&amp;::-webkit-details-marker]:hidden"><span class="flex-1 text-start">main</span><svg aria-hidden="true" class="transition-transform group-open:rotate-180" height="14" width="14"><use href="#blume-i-chevron-down"></use></svg></summary><div class="absolute z-50 mt-2 rounded-blume border border-border bg-background p-1 shadow-xl inset-x-0" data-blume-dropdown-panel><a aria-current="true" class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="/microsoft-ui-reactor/main"><span class="flex-1"><span class="flex items-center gap-2">main<span class="rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">unreleased</span></span></span><svg aria-hidden="true" height="14" width="14"><use href="#blume-i-check"></use></svg></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/latest/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.18<span class="rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">latest</span></span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.17</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.16</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.15/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.15</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.14/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.14</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.13/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.13</span></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.12/"><span class="flex-1"><span class="flex items-center gap-2">0.1.0-preview.12</span></span></a></div></details></div><nav aria-label="Sections" class="mb-4 border-border border-b pb-4 md:hidden"><ul class="m-0 list-none p-0"><li><a aria-current="page" class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main"><span class="flex-1 truncate">Home</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/get-started"><span class="flex-1 truncate">Get started</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/guides/components"><span class="flex-1 truncate">Guides</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/controls"><span class="flex-1 truncate">Controls</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/tools"><span class="flex-1 truncate">Tools</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/reference"><span class="flex-1 truncate">API reference</span></a></li><li><a class="flex items-center gap-2 rounded-[0.65rem] px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground" href="/microsoft-ui-reactor/main/how-it-works/architecture-overview"><span class="flex-1 truncate">How it works</span></a></li></ul></nav><nav data-blume-nav-tree><ul class="m-0 list-none space-y-px p-0"><li class="mt-0"><p class="blume-nav-heading"><span class="truncate">Changelog</span></p><div class="space-y-0.5"><ul class="m-0 list-none space-y-px p-0"><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-18">0.1.0-preview.18</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-17">0.1.0-preview.17</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-16">0.1.0-preview.16</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-15">0.1.0-preview.15</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-14">0.1.0-preview.14</a></li><li><a class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-13">0.1.0-preview.13</a></li><li><a aria-current="page" class="blume-nav-link truncate" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12">0.1.0-preview.12</a></li></ul></div></li></ul></nav></aside><script>(()=>{const drawer=()=>document.querySelector("[data-blume-nav-drawer]");const center=()=>{const n=drawer();const s=n&&(n.querySelector("[data-blume-nav-tree]")||n);if(!s)return;let l=null;for(const a of s.querySelectorAll('a[aria-current="page"]')){if(a.getClientRects().length){l=a;break;}}if(!l)return;const r=n.getBoundingClientRect();const t=l.getBoundingClientRect();if(t.top>=r.top&&t.bottom<=r.bottom)return;n.scrollTop+=t.top-r.top-(n.clientHeight-t.height)/2;};let saved=-1;document.addEventListener("astro:before-swap",()=>{const n=drawer();saved=n?n.scrollTop:-1;});document.addEventListener("astro:after-swap",()=>{const n=drawer();if(n&&saved>=0){n.scrollTop=saved;}center();});center();})();</script><main class="px-6 pt-6 pb-10 lg:px-8 xl:px-10" id="blume-content"><nav aria-label="Breadcrumb" class="mb-2 text-muted-foreground text-sm mx-auto max-w-content"><span>Changelog</span></nav><details class="group mx-auto mb-6 max-w-content rounded-blume border border-border xl:hidden"><summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 font-medium text-foreground text-sm [&amp;::-webkit-details-marker]:hidden"><span>On this page</span><svg aria-hidden="true" class="text-muted-foreground transition-transform group-open:rotate-180" height="16" width="16"><use href="#blume-i-chevron-down"></use></svg></summary><blume-toc class="block"><ul class="m-0 list-none border-border border-t p-2"><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#added">Added</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#changed-breaking">Changed (breaking)</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#deprecated">Deprecated</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#removed">Removed</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block rounded-md px-2 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#fixed">Fixed</a></li></ul></blume-toc><div data-blume-page-actions-mount></div></details><article class="prose mx-auto max-w-content" data-pagefind-body dir="ltr"><h1>0.1.0-preview.12</h1><p class="text-lg text-muted-foreground">25 added, 6 changed, 1 deprecated, 3 removed and 16 fixed.</p><h2 id="added"><a class="blume-heading-anchor" href="#added">Added</a></h2>
+<ul>
+<li>
+<p><strong><code>UseExternalStore&lt;TSnapshot&gt;</code> hook — first-class subscribe/getSnapshot
+interop (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/761">#761</a>).</strong> Standardizes the external-store subscription bridge
+(subscribe to change notifications, read the latest snapshot during render)
+that previously required hand-rolled <code>UseEffect</code> + <code>UseReducer</code> boilerplate.
+Re-renders only when a notification yields a snapshot the comparer treats as
+different; accepts an optional <code>IEqualityComparer&lt;TSnapshot&gt;</code>. <code>subscribe</code>
+must be a stable delegate and <code>getSnapshot</code> must return a cached value, per
+the same guidance React gives for <code>useSyncExternalStore</code>.</p>
+</li>
+<li>
+<p><strong>TitleBar drag regions — <code>.AutoRefreshDragRegions()</code> and <code>.IsDragRegion()</code>
+(spec 059).</strong> Windows App SDK bumped 2.0.1 → 2.1.3; custom <code>TitleBar</code> content
+now auto-excludes interactive controls from the window drag region by default.
+Override per element with <code>.IsDragRegion(false)</code> (force clickable) /
+<code>.IsDragRegion(true)</code> (force draggable), and set <code>.AutoRefreshDragRegions()</code> to
+re-derive regions when content changes across renders.</p>
+</li>
+<li>
+<p><strong><code>DockFloatingWindowClosedEventArgs.Reason</code> — close-reason discriminator
+for floating-window closes (spec 045 §5.3.5, issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/417">#417</a>).</strong> A new
+<code>required DockFloatingCloseReason Reason { get; init; }</code> on
+<code>DockFloatingWindowClosedEventArgs</code>, with enum values <code>ContentClosed</code>
+(content is gone — safe to release per-document resources tied to
+<code>Content</code>), <code>MigratedToHost</code>, and <code>MigratedToFloat</code> (the pane is alive in
+its new dock/float position — the close is synthetic and resources must
+<strong>not</strong> be released). Previously every floating <code>Window.Closed</code> — including
+the synthetic close Reactor fires right after a cross-window dock-back —
+surfaced as one indistinguishable event, so consumers disposed live state
+(SwapChainPanel, Win2D, file handles) out from under a still-mounted,
+redocked page. The reason is stashed on the window holder
+(<code>DockFloatingTracker.SetPendingClose</code>) immediately before the synthetic
+<code>Close()</code> and read once by the <code>Closed</code> handler; a window with no stash
+reports <code>ContentClosed</code>. The migrated reason is scoped to the <strong>specific</strong>
+consumed pane (<code>DockDragSession.LastConsumedPane</code>), so a multi-pane float
+that loses one tab to a dock-back still reports <code>ContentClosed</code> for a later
+genuine close of its surviving tabs. <code>Reason</code> is intentionally <code>required</code>:
+there is exactly one internal raise site, so it can never silently default a
+migration to a wrong reason.</p>
+</li>
+<li>
+<p><strong>Command debouncing: <code>Command.DebounceMs</code> (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/136">#136</a>).</strong>
+Commands can declare a leading-edge debounce window via <code>DebounceMs</code> (default
+<code>0</code> = off) to absorb double-clicks without reaching for <code>Task.Delay</code>. When
+routed through <code>UseCommand</code>, the first fire is accepted and any subsequent fire
+within the window is dropped; <code>IsDebouncing</code> drives <code>IsEnabled = false</code> so the
+bound control visibly disables and then re-enables when the window elapses. For
+async commands the disabled window is the longer of the lambda’s lifetime
+(<code>IsExecuting</code>) and <code>DebounceMs</code>. Debounce state lives in the <code>UseCommand</code> hook
+store, so a raw <code>new Command { DebounceMs = … }</code> bound directly (not through
+<code>UseCommand</code>) is inert. <code>UseCommand</code> now consumes a stable hook shape regardless
+of the command’s sync/async/debounce shape.</p>
+</li>
+<li>
+<p><strong>Uniform <code>Command</code> binding across the six command buttons (issues <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/153">#153</a>, <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/637">#637</a>).</strong>
+The typed <code>Command</code> property on <code>ButtonElement</code>, <code>HyperlinkButtonElement</code>,
+<code>RepeatButtonElement</code>, <code>ToggleButtonElement</code>, <code>SplitButtonElement</code>, and
+<code>ToggleSplitButtonElement</code> is now <code>public { get; init; }</code> on every element and
+binds uniformly: a bare <code>new ButtonElement(cmd.Label) { Command = cmd }</code> (or
+<code>with { Command = cmd }</code>) invokes <code>Execute</code>/<code>ExecuteAsync</code> on click/toggle and
+applies the command’s <code>IsEnabled</code> + Description / Accelerator / AccessKey
+identically to the <code>Button(Command)</code> factory and the <code>.Command(cmd)</code> modifier —
+closing the <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/153">#153</a> footgun where a record-init command carried metadata but never
+dispatched. Dispatch flows from the typed property through a click trampoline
+instead of a pre-baked <code>OnClick</code> closure, so each command-bound construct
+allocates less (Button ~176 → ~88 B per construct) while the <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/153">#153</a> reconcile
+fast-path still skips re-applying an unchanged command. The <code>.Command(cmd)</code>
+modifier makes the command fully take over (clearing any conflicting click /
+toggle callback), and <code>ButtonElement</code>’s <code>IsDisabledFocusable</code> coercion is
+preserved exactly. A <code>DebounceMs</code> command now re-disables across the debounce
+window on every command button, not just via the factory path.</p>
+</li>
+<li>
+<p><strong><code>ReactorApp.RegisterAllBuiltIns()</code> — opt-in bulk registration of the built-in
+control catalog (spec 048 §3.4, issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/486">#486</a>).</strong> Built-in handler registration is
+now lazy — each factory registers its own control on first use — so the trimmer
+can drop controls an app never reaches. That broke the documented direct-record
+construction idiom (<code>new TextBlockElement(…) { … }</code>, the “Hot loops” pattern in
+<code>docs/guide/advanced.md</code>), which bypasses factories and so never triggers
+registration. Call <code>RegisterAllBuiltIns()</code> once at startup to register the whole
+catalog and keep that idiom working; apps that build UI exclusively through
+factories don’t need it, and a trimmed/NativeAOT build that never calls it still
+drops unused controls. Relatedly, the reconciler now throws an actionable
+<code>InvalidOperationException</code> (instead of silently mounting nothing) when it meets
+an element record whose handler was never registered.</p>
+</li>
+<li>
+<p><strong><code>Callbacks&lt;T&gt;</code> — keep delegate props out of memo comparison (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/151">#151</a>).</strong>
+An opt-in, always-equal wrapper record (<code>Equals</code> returns <code>true</code>, <code>GetHashCode</code>
+returns <code>0</code>) for the delegate (callback) portion of a component’s props. Because
+<code>Component&lt;TProps&gt;.ShouldUpdate</code> memoizes on <code>!Equals(oldProps, newProps)</code> and
+<code>Action</code>/<code>Func</code> fields compare by reference, a parent passing freshly-allocated
+callbacks each render forced the child to re-render even when no data changed.
+Declaring <code>Callbacks&lt;MyCallbacks&gt; Cb</code> on the props record excludes the callbacks
+slot from equality, so only data fields drive re-renders — replacing the old
+hand-written <code>Equals</code>/<code>GetHashCode</code> workaround. The reconciler still refreshes the
+child’s live <code>Props</code> on a memo-skip, so handlers reading <code>Props.Cb.Value.OnX</code> at
+dispatch time always invoke the current delegate, never a stale one.</p>
+</li>
+<li>
+<p>New optional package <code>Microsoft.UI.Reactor.Devtools</code> for the <code>--devtools</code> runtime surface (spec 051 Phase 2).</p>
+</li>
+<li>
+<p><strong>Hot reload: tree-wide hook-order recovery (spec 049 §5, Phase 1).</strong>
+Editing a <strong>non-root</strong> component under .NET Hot Reload to add, remove,
+or reorder a hook now recovers in a single re-render instead of replacing
+that component’s subtree with the render-error fallback. The reconciler,
+while inside a hot-reload pass, catches the resulting <code>HookOrderException</code>,
+resets just that child’s hook state, and re-renders it once — so the edit
+applies and sibling/descendant state is preserved. Steady-state
+(non-hot-reload) rendering is byte-for-byte unchanged: the new recovery arm
+is gated on a <code>HotReloadService.WithinUpdatePass</code> filter that is only true
+during a hot-reload-triggered render. Also fixes a latent effect-cleanup
+leak where a staged <code>PendingCleanup</code> (from an effect whose deps changed in
+the same render that later threw) was not drained on context teardown.</p>
+</li>
+<li>
+<p><strong>Hot reload: live state migration across record/class shape changes
+(spec 049 §6, Phase 2).</strong> Editing a record or class that a hook stores
+(<code>UseState</code> / <code>UseReducer</code> / <code>UseRef</code> / <code>UseMemo</code> / <code>UsePersisted</code>) now
+migrates the live value onto the new shape instead of resetting it. At the
+start of each hot-reload pass — before any <code>Render()</code> runs — every live
+<code>RenderContext</code> value-swaps the hook cells whose stored type the runtime
+reported as updated, copying fields by name onto a freshly-constructed
+instance (<code>ReactorHotReloadCopier</code>); fields that can’t be mapped are dropped
+with a log line rather than throwing. Cycle-guarded and block-listed against
+native handles (<code>IntPtr</code> / <code>Compositor</code> / <code>Visual</code> / <code>UIElement</code>). Devtools
+hook snapshots carry a <code>Migrated</code> flag so the inspector can show which cells
+were value-swapped.</p>
+</li>
+<li>
+<p><strong>Hot reload: subtree migration on component-identity change (spec 049 §7,
+Phase 3).</strong> Renaming a component type or otherwise changing its identity
+under hot reload now migrates the existing subtree onto the new component
+instance — preserving its hook state, its live <code>RenderContext</code>, and the
+underlying WinUI controls — instead of unmounting and remounting from
+scratch. Triggered from the reconciler’s <code>!CanUpdate</code> boundary
+(<code>TryHotReloadMigrateComponent</code>): it constructs the new instance, copies
+fields with the same <code>ReactorHotReloadCopier</code>, transfers the render context,
+swaps the component on the node, and re-renders once into the preserved
+wrapper control. Adds a <code>HotReloadService.ResetAllContexts()</code> escape hatch
+for a forced “lose everything, remount fresh” reload when targeted migration
+misbehaves.</p>
+</li>
+<li>
+<p><strong>Hot reload: NativeAOT no-op gating (spec 049 §8).</strong> All reflection-bearing
+migration branches (Phase 2 value swap, Phase 3 subtree migration, the host
+<code>MigrateHotReloadState</code> entry points) route through
+<code>HotReloadService.IsHotReloadLive</code> (= <code>MetadataUpdater.IsSupported &amp;&amp;</code>
+in-pass), so under NativeAOT the entire migration subsystem is statically
+dead and trims away with zero retail overhead.</p>
+</li>
+<li>
+<p><strong>Docking content types &amp; reserved document area (spec 046).</strong>
+Additive amendment to spec 045’s <code>DockNode</code> algebra so apps can
+express the IDE-class document-area / tool-window-strip distinction:
+<code>DockGroupRole</code> ({ <code>General</code>, <code>DocumentArea</code>, <code>ToolWindowStrip</code> }) on
+<code>DockTabGroup</code>; <code>[Flags] DockSides</code> mask on <code>ToolWindow.AllowedSides</code>.
+<code>Dock(content, Center)</code> now prefers <code>DocumentArea</code> for documents and
+<code>ToolWindowStrip</code> for tool windows (falls back to any accepting group
+with a <code>DockOperationLog</code> diagnostic). An empty <code>DocumentArea</code>
+survives as a visible reserved well when it’s the only one in the
+tree; empty split arms next to a non-empty sibling cull so split-drag
+residue collapses cleanly. Drag-drop overlay dims targets that
+reject the payload’s category or violate <code>AllowedSides</code>; <code>PinToSide</code>
+validates against the mask. New public <code>DockLayoutOps</code> façade
+(<code>InsertPaneAtTarget</code> / <code>RemovePane</code> / <code>MovePaneToTarget</code> /
+<code>FindContainer</code>) for programmatic open/close that respects the new
+routing + cull rules. New <code>DockHostModel.Dock(content, DockTabGroup, target)</code> overload for explicit group placement. JSON round-trip for
+<code>role</code> and <code>allowedSides</code>, omitted at defaults; old layouts
+deserialize unchanged. Defaults (<code>Role = General</code> / <code>AllowedSides = All</code>) keep spec-045 behavior for layouts that don’t opt in. Bug-fix
+swept three Scene-J regressions surfaced during manual review:
+splitter cursor tracking in 3+ child splits (pair extent now uses
+measured leading + trailing size, not the whole panel), open-doc-
+after-split losing the new doc (host invalidates the drag-modified
+shape override when <code>manager.Layout</code>’s leaf-key set changes between
+renders), and close-non-last-in-split leaving an empty arm
+(refined prune rule above).</p>
+</li>
+<li>
+<p><strong>Docking (spec 045).</strong> First-class window-docking surface under
+<code>Microsoft.UI.Reactor.Docking</code>. Phase 1 shipped via a vendored WinUI.Dock
+renderer in the <code>Microsoft.UI.Reactor.Docking.Xaml</code> package; Phase 2 replaces
+it with a Reactor-native renderer using the same public surface. Covers:
+<code>Document</code> / <code>ToolWindow</code> sealed records, <code>DockSplit</code> / <code>DockTabGroup</code> /
+<code>DockableContent</code> node algebra, 15 cancellable lifecycle events on
+<code>DockManager</code>, layout-strategy hooks (<code>IDockLayoutStrategy</code>), tab tear-out
+and 9-target drop overlay, keyboard chords (Ctrl+PageUp/Down,
+Ctrl+F4/W close, Ctrl+Shift+M move, Ctrl+Tab navigator, Alt+F7 hidden-pane
+picker), per-tab pin, AOT-clean v2 JSON layout persistence with migration
+ladder, multi-display floating-window clamp, UIA live-region announcements,
+RTL + high-contrast theming, full localization routing, perf budgets,
+and <code>docking.list</code> / <code>docking.snapshot</code> / <code>docking.dock</code> MCP tools.</p>
+</li>
+<li>
+<p><strong>Keyed-list reconciliation &amp; animation (spec 042).</strong> Templated
+<code>ListView</code> / <code>GridView</code> / <code>FlipView</code> / <code>LazyVStack</code> / <code>LazyHStack</code> now
+surface incremental WinUI deltas for keyed updates — only affected
+containers animate. New <code>IReactorKeyed</code> identity convention lets
+2-arg overloads omit the key selector. Ambient <code>Animations.Animate(kind, () =&gt; setItems(...))</code> propagates animation intent through inserts / moves /
+removes on both templated and hand-built keyed children (<code>FlexColumn</code> etc.).
+New <code>REACTOR_DSL_001</code> codefix and <code>ReactorDiagnostics</code> devtools dialog
+catch missing <code>.WithKey</code> and duplicate-key bailouts. Closes
+microsoft-ui-reactor#198.</p>
+</li>
+<li>
+<p><strong>Property &amp; event API scrub (spec 039).</strong> Every callback property in the
+inventory now has a matching fluent extension (<code>OnClick</code> → <code>.Click(handler)</code>,
+~60 callbacks). Named-style helpers (<code>.AccentButton()</code>, <code>.SubtleButton()</code>,
+<code>.TextLink()</code>, InfoBar <code>.Informational()</code> / <code>.Success()</code> / <code>.Warning()</code> /
+<code>.Error()</code>). Type-ramp factories <code>Title</code> / <code>Subtitle</code> / <code>Body</code> /
+<code>BodyStrong</code> / <code>BodyLarge</code>. <code>Card(child)</code> theme-aware factory. New events:
+<code>CalendarView.OnSelectedDatesChanged</code>; <code>Frame.OnNavigated</code> /
+<code>OnNavigating</code> / <code>OnNavigationFailed</code>; <code>ScrollView.OnViewChanged</code>;
+<code>WebView2.OnWebMessageReceived</code>; <code>MediaPlayerElement.OnMediaOpened</code> /
+<code>OnMediaEnded</code> / <code>OnMediaFailed</code>; <code>ContentDialog.OnOpened</code>;
+<code>Image.OnImageOpened</code> / <code>OnImageFailed</code>; <code>ComboBox.OnDropDownOpened</code> /
+<code>OnDropDownClosed</code>; universal multi-select <code>OnSelectionChanged</code> on
+list/grid surfaces.</p>
+</li>
+<li>
+<p><strong>Common content-alignment and border fluents (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/774">#774</a>).</strong> New
+<code>.HorizontalContentAlignment(...)</code>, <code>.VerticalContentAlignment(...)</code>,
+<code>.BorderBrush(...)</code>, and <code>.BorderThickness(...)</code> modifiers (with
+<code>Thickness</code>-aware overloads) expose common layout/styling that previously
+required a <code>.Set(...)</code> fallback, without adding control-specific wrappers.</p>
+</li>
+<li>
+<p><strong><code>mur check</code> — fast feedback with skill pointers (spec 038).</strong> <code>mur check</code> is the build (same exit code as <code>dotnet build</code>) plus two
+enrichments: skill pointers for known <code>REACTOR_*</code> IDs and did-you-mean
+<code>→ try:</code> suggestions for unknown identifiers. Three suggester tiers:
+Tier-1 analyzer-ID hints, Tier-2 Roslyn semantic suggester (CS1061 /
+CS0103 / CS0117 / CS1503 / CS7036), Tier-3 precision rules anchored on
+Roslyn <code>ISymbol</code> binding (<code>GridSizeFactoryParensRule</code>,
+<code>GridSizePxRenameRule</code>, <code>TextBlockStyleHintRule</code>,
+<code>ThemeBackgroundSuffixRule</code>, <code>ThemeRawResourceKeyRule</code>,
+<code>ButtonOnClickFactoryMoveRule</code>).
+Workflow modes: default iteration mode
+suppresses cosmetic noise; <code>mur check --final</code> is an optional pre-merge
+sweep; <code>--strict</code>, <code>--quiet</code>, and <code>mur check -- &lt;msbuild-args&gt;</code>
+passthrough also supported. <code>--trace &lt;path&gt;</code> writes JSONL diagnostic
+rows; <code>MUR_TELEMETRY=1</code> opt-in logs per-suggestion telemetry locally.
+Validated end-to-end across multi-arm EC1/EC2/EC3 evals.</p>
+</li>
+<li>
+<p><strong>Build-time guardrail analyzer suite (spec 060).</strong> The analyzer package now
+ships dozens of <code>REACTOR_*</code> diagnostics — the suite spans roughly 60 rules —
+that catch Reactor-specific footguns at compile time across hooks, theming,
+accessibility, keys/DSL, collections, controlled inputs, threading,
+performance, docking, navigation, animation, and lifecycle. Examples:
+<code>REACTOR_EVENT_001</code> (event wired via <code>.Set(+=)</code> re-subscribes every render —
+<a href="https://github.com/microsoft/microsoft-ui-reactor/issues/763">#763</a>), <code>REACTOR_POOL_001</code>, <code>REACTOR_ITEMS_001</code>, <code>REACTOR_CTRL_001</code>,
+<code>REACTOR_THREAD_001</code> / <code>_002</code>, <code>REACTOR_STATE_001</code>, and the <code>REACTOR_DYM_*</code>
+did-you-mean family. Several ship codefixes; all surface through <code>mur check</code>.</p>
+</li>
+<li>
+<p><strong>Multi-window, tray, and shell integration (spec 036).</strong> First-class
+<code>ReactorWindow</code> and <code>ReactorTrayIcon</code> as peers, with
+<code>ReactorApp.OpenWindow</code> / <code>OpenTrayIcon</code> / <code>Windows</code> / <code>TrayIcons</code> /
+<code>FindWindow</code> / <code>WindowOpened</code> / <code>WindowClosed</code> /
+<code>TrayIconOpened</code> / <code>TrayIconClosed</code> / <code>Exit</code> / <code>ShutdownPolicy</code>. Per-window
+DPI awareness via WM_DPICHANGED / WM_GETMINMAXINFO. Window lifecycle
+events (<code>Activated</code>, <code>SizeChanged</code>, <code>StateChanged</code>, <code>Closing</code>, <code>Closed</code>)
+with cancellable <code>UseClosingGuard</code>. New hooks: <code>UseDpi</code>, <code>UseWindowSize</code>,
+<code>UseBreakpoint</code>, <code>UseWindow</code>, <code>UseWindowState</code>, <code>UseIsActive</code>,
+<code>UseOpenWindow</code>, <code>UseTrayIcon</code>. Per-window <code>WindowPersistedScope</code>.
+Pluggable <code>IWindowPersistenceStore</code> (packaged + JSON fallback). Owned
+windows (<code>WindowSpec.Owner</code>), <code>TaskbarProgress</code>, <code>TaskbarOverlay</code>,
+thumbnail toolbars, <code>JumpList</code>, <code>LaunchActivation</code> parsing for File /
+Protocol / Toast activations. Devtools <code>windows.list</code> /
+<code>windows.activate</code> / <code>windows.close</code> / <code>windows.open</code> MCP tools.</p>
+</li>
+<li>
+<p><strong>Element allocation reduction (spec 034).</strong> Bucketed <code>ElementModifiers</code>
+(<sub>−11% bytes/tick on the 4,900-cell stress grid), direct-record-initializer
+idiom for inner cell loops (</sub>−60% bytes/cell), and <code>UseMemoCells</code> /
+<code>UseMemoCellsByKey</code> / <code>UseMemoCellsByIndex</code> cell-level memoization with
+<code>REACTOR_HOOKS_007</code> analyzer + codefix. ReactorOptimized at 10% mutation
+reaches 17.1 Effective Refresh/s — within noise of DirectX (17.2) and
+WPF (17.9) on the stocks-grid bench.</p>
+</li>
+<li>
+<p><strong>Typed-arity <code>UseEffect</code> / <code>UseMemo</code> / <code>UseCallback</code> overloads (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/688">#688</a>).</strong>
+Re-introduces <code>d1</code> / <code>d2</code> / <code>d3</code> overloads for 1–3 value-typed dependencies,
+avoiding the <code>params object[]</code> allocation and per-dep boxing on the
+unchanged-deps render path while staying behaviorally identical to the <code>params</code>
+form.</p>
+</li>
+<li>
+<p><strong>Public echo-suppression extension point (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/206">#206</a>).</strong> Authors of custom
+value controls can route a controlled write through the stable <code>WriteSuppressed</code>
+primitive to suppress the WinUI change echo, instead of reaching into reconciler
+internals — the same mechanism Reactor’s built-in value controls use.</p>
+</li>
+<li>
+<p><strong>Opt-in cross-container row memoization for virtualized lists (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/327">#327</a>).</strong>
+Wrapping a realized row in a keyed <code>Memo(key, factory)</code> lets the reconciler
+reuse the row’s rendered subtree across container recycles when the key is
+unchanged, cutting redundant per-row reconciliation on fast scroll (see the
+<code>/perf</code> row-memoization leg, <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/764">#764</a>, for the measured win).</p>
+</li>
+<li>
+<p><strong>XAML/WinUI interop response (spec 033).</strong> New <code>GridSize</code> value type
+with <code>Auto</code> / <code>Star(weight)</code> / <code>Px(pixels)</code> smart constructors and
+invariant-culture <code>Parse</code>. New <code>IPersistedStateScope</code> interface with
+<code>PersistedScope.Window</code> / <code>PersistedScope.Application</code> and LRU-backed
+scopes with memory-pressure trimming. <code>RenderEachTime(...)</code> and
+<code>Memo(...)</code> factories replace the soft-deprecated <code>Func(...)</code>.
+<code>ElementRef&lt;T&gt;</code> typed-ref wrapper + <code>UseElementRef&lt;T&gt;()</code> hook.
+<code>.Backdrop(BackdropKind)</code> modifier for declarative Mica / Acrylic.
+<code>Expr(Func&lt;Element?&gt;)</code> factory for inline block-expression bodies.</p>
+</li>
+</ul>
+<h2 id="changed-breaking"><a class="blume-heading-anchor" href="#changed-breaking">Changed (breaking)</a></h2>
+<ul>
+<li>
+<p><strong><code>AsyncValue&lt;T&gt;.Match</code> success arm renamed <code>data</code> → <code>loaded</code>; omitted
+<code>reloading</code> now falls through to <code>loading()</code>.</strong> The success delegate parameter
+was renamed (source-breaking for named-argument callers; no back-compat
+overload is possible because overloads can’t differ by parameter name alone).
+When the value is <code>Reloading</code> and no <code>reloading:</code> handler is supplied, <code>Match</code>
+now renders the <code>loading()</code> arm instead of reusing the success arm
+(<code>(reloading ?? data)(r.Previous)</code>). Pass <code>reloading:</code> explicitly to keep the
+last-known value visible during a refresh (stale-while-revalidate).
+(issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/548">#548</a>, spec 020 §5.1)</p>
+</li>
+<li>
+<p><strong><code>ReactorApp.Run</code> devtools parameters removed (spec 051 §13).</strong> The
+<code>devtools:</code> and <code>preview:</code> overload parameters are gone. Enable devtools
+capability in the app project with <code>&lt;RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" /&gt;</code>, then launch
+with <code>--devtools</code> to activate a session.</p>
+</li>
+<li>
+<p><strong><code>.Margin(double, double)</code> and <code>.Padding(double, double)</code> parameter
+order swapped</strong> from <code>(horizontal, vertical)</code> to <code>(vertical, horizontal)</code>
+to match CSS shorthand convention. Use the named-arg form
+(<code>.Margin(horizontal: 16, vertical: 8)</code>) for layout-stable call sites.
+(spec 038 §3)</p>
+</li>
+<li>
+<p><strong><code>ScrollView()</code> factory now mounts the modern
+<code>Microsoft.UI.Xaml.Controls.ScrollView</code></strong> (anchor ratios,
+<code>ContentOrientation</code>, the <code>Scrolling*</code> enum surface). The legacy
+<code>Microsoft.UI.Xaml.Controls.ScrollViewer</code> mapping moved to a new
+<code>ScrollViewer()</code> factory. Element records follow the same rename.
+(Issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/348">#348</a>)</p>
+</li>
+<li>
+<p><strong><code>TextField(...)</code> removed.</strong> The deprecated forwarding alias was
+retired after the <code>TextFieldElement</code> → <code>TextBoxElement</code> rename. Use
+<code>TextBox(...)</code>.</p>
+</li>
+<li>
+<p><strong><code>MaskedTextFieldElement</code> renamed to <code>MaskedTextBoxElement</code>.</strong> The
+Reactor-original masked text input record was renamed to align with
+WinUI’s <code>TextBox</code> naming and Reactor’s <code>TextBox()</code> factory (follow-on
+to the <code>TextField</code> → <code>TextBox</code> rename). The fluent <code>.Changed(...)</code>
+modifier now extends <code>MaskedTextBoxElement</code>. (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/389">#389</a>)</p>
+</li>
+</ul>
+<h2 id="deprecated"><a class="blume-heading-anchor" href="#deprecated">Deprecated</a></h2>
+<ul>
+<li><strong><code>IDockBehavior</code> and <code>DockManager.Behavior</code></strong> (spec 045 Phase 1) marked
+<code>[Obsolete]</code> with migration pointers to the per-event Action props
+that landed in Phase 2 (<code>OnContentDocked</code> / <code>OnContentFloating</code> /
+<code>OnContentFloated</code>). Slated for removal one release after Phase 2 ships.
+(spec 045 §2.12)</li>
+</ul>
+<h2 id="removed"><a class="blume-heading-anchor" href="#removed">Removed</a></h2>
+<ul>
+<li>
+<p><strong>Obsolete APIs scheduled for removal have been removed (breaking, minor
+release).</strong> Each <code>[Obsolete]</code> member previously annotated “will be removed
+in the next minor release” is now gone; migrate to the replacement:</p>
+<ul>
+<li><code>Factories.Func(Func&lt;RenderContext, Element&gt;)</code> → <code>RenderEachTime(ctx =&gt; …)</code>
+(behavior-preserving), or <code>Memo(ctx =&gt; …)</code> where memoization is wanted.
+(spec 033 §4)</li>
+<li><code>Factories.Grid(string[], string[], …)</code> → the typed
+<code>Grid(GridSize[], GridSize[], …)</code> overload with
+<code>GridSize.Auto</code> / <code>GridSize.Star(weight)</code> / <code>GridSize.Px(pixels)</code>.
+(spec 033 §1)</li>
+<li><code>Controls.MaskedTextFieldDsl.MaskedTextField(...)</code> →
+<code>MaskedTextBoxDsl.MaskedTextBox(...)</code>. (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/389">#389</a>)</li>
+<li><code>Factories.RichText(string)</code> / <code>Factories.RichText(RichTextParagraph[])</code>
+→ <code>RichTextBlock(...)</code>. (spec 039 §1.3)</li>
+<li><code>Factories.ProgressBar(double)</code> → <code>Progress(double)</code>;
+<code>Factories.ProgressBar()</code> → <code>ProgressIndeterminate()</code>. (spec 039 §5)</li>
+</ul>
+<p>The dead <code>GridStringTrackCodeFix</code> code fix (which rewrote the string-track
+<code>Grid</code> overload to the typed form on <code>CS0618</code>) was removed alongside the
+overload.</p>
+</li>
+<li>
+<p><strong><code>ReactorHost.MainDispatcherQueue</code></strong> (internal static, first-host-wins
+capture). Cross-thread setState marshalling and AutoSuggest’s
+<code>RaiseStateChanged</code> now route through <code>ReactorApp.UIDispatcher</code>.
+(spec 036 §4.3)</p>
+</li>
+<li>
+<p><strong><code>Microsoft.UI.Reactor.Markdown.MarkdownHtml</code> and its nested <code>HtmlFlags</code>
+enum — removed from the shipped <code>Microsoft.UI.Reactor</code> assembly (issue
+<a href="https://github.com/microsoft/microsoft-ui-reactor/issues/433">#433</a>).</strong> This md4c-based Markdown→HTML string renderer existed only for
+CommonMark/spec/fuzz validation; it was never used by the native
+<code>Markdown()</code> element (which renders directly to a WinUI inline tree via
+<code>MarkdownBuilder</code> and is unaffected). It now lives in the test-support
+library <code>tests/Reactor.Markdown.TestRenderer/</code>, off the framework’s public
+surface. No replacement ships in the package — the renderer was incidental
+test/spec API, not a supported way to convert Markdown to HTML at runtime.</p>
+</li>
+</ul>
+<h2 id="fixed"><a class="blume-heading-anchor" href="#fixed">Fixed</a></h2>
+<ul>
+<li>
+<p><strong><code>DataGrid&lt;T&gt;</code> now reacts to <code>SelectionMode</code> prop changes after first mount
+(issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/872">#872</a>).</strong> The grid captured its selection mode once at construction, so a
+later <code>selectionMode:</code> change on the same instance was silently ignored (the
+factory keys the component only on type + source, so it did not remount either).
+It now reconciles the mode onto the live headless state each render — narrowing
+(<code>Multiple</code> → <code>Single</code>/<code>None</code>) trims the current selection — removing the need for
+a mode-dependent <code>.WithKey(...)</code> remount workaround.</p>
+</li>
+<li>
+<p><strong>RichTextBlock inline-UI scroll drift hardened with a prevention-at-source extent
+pin (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/717">#717</a>).</strong> The <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/487">#487</a> scroll-anchor (below) restores the offset reactively
+<em>after</em> the ancestor scroll host clamps it; this adds a complementary guard that aims
+to stop the clamp from happening in the first place. The underlying cause is that the
+live app applies the document mutation inside the reconcile and then returns to the
+dispatcher, letting the compositor commit a frame carrying WinUI’s transient
+collapsed extent (<code>RemoveEmbeddedElements</code> → <code>desiredSize=0</code>) <em>before</em> the inline UI
+re-attaches — the very frame the scroll host clamps against. The collapse is
+scheduled on a <em>separate</em> dispatcher callback (not a layout-dirty flag), so a
+synchronous <code>UpdateLayout</code> inside the reconcile measures the still-intact tree and
+cannot coalesce it. <code>UpdateRichTextBlocks</code> now, after mutating an inline-UI-bearing
+block, pins the block’s <code>MinHeight</code> to its full pre-collapse <code>ActualHeight</code> (raising
+the floor only, never lowering an author value) and releases the pin a couple of
+rendered frames later once the inline UI has re-attached. With the floor pinned the
+transient <code>desiredSize=0</code> cannot shrink the block’s measured height, so
+<code>ScrollableHeight</code> never drops, the scroll host never clamps, and there is no lost
+offset to restore. This lands as <strong>defense-in-depth behind the <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/487">#487</a>/#649 anchor</strong>:
+in the current build WinUI coalesces the transient collapse so the live drift is not
+reproducible, but the failure mode is real if it ever commits (e.g. different
+hardware/content or a future WinUI change), so the pin guards it at the source. No new
+API surface; the pin only engages for blocks that actually host inline UI and actually
+mutated.</p>
+</li>
+<li>
+<p><strong>RichTextBlock inline-UI mutations no longer scroll the ancestor scroll host to
+the top (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/487">#487</a>).</strong> Mutating any <code>Run.Text</code> inside a paragraph that hosts an
+<code>InlineUIContainer</code> (charts/sliders/buttons embedded via <code>InlineUI(...)</code>) made the
+enclosing <code>ScrollViewer</code>/<code>ScrollView</code> silently scroll up by the combined height of
+the embedded inline elements. WinUI’s text engine re-measures the whole paragraph
+from scratch (<code>ParagraphNode::Measure</code> → <code>RemoveEmbeddedElements()</code> + <code>desiredSize=0</code>
+for one layout pass), so the block transiently shrinks, the scroll host clamps
+<code>VerticalOffset</code> down to the smaller <code>ScrollableHeight</code>, and never restores it once
+the inline UI re-attaches. The fix is invisible to authors — <code>ScrollViewer(RichTextBlock(...))</code>
+“Just Works”: <code>UpdateRichTextBlocks</code> now arms a scroll anchor on the nearest ancestor
+scroll host before mutating an inline-UI-bearing block and restores the user’s real
+offset once layout settles, while never fighting a genuine user scroll. No new API
+surface, no per-app boilerplate.</p>
+</li>
+<li>
+<p><strong>The accessibility scanner now sees a pie chart’s <code>.SetColors(...)</code> palette
+(issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/645">#645</a>, spec 026).</strong> <code>PieChartElement&lt;T&gt;.SetColors(...)</code> sets the colors a
+pie actually renders, but the scanner previously only saw the separate
+<code>.Palette(...)</code> palette — so a <code>.SetColors(&lt;low-contrast&gt;).ChartBackground(...)</code>
+pie looked contrast-checked yet A11Y_CHART_011 never ran on its rendered colors.
+The rendered <code>.SetColors</code> palette is now the single source of truth the scanner
+validates (<code>.Palette(...)</code> is consulted only as a fallback when <code>.SetColors</code> is
+unset), so A11Y_CHART_009/010/011 run on it exactly as they do for <code>.Palette(...)</code>.
+<strong>Behavior change:</strong> existing <code>.SetColors(...)</code> users with low-contrast or
+colorblind-unsafe palettes may now start seeing A11Y_CHART_009/010/011 findings
+they did not before. Pie palette-fix suggestions also now name <code>.SetColors(...)</code>
+(the modifier a pie exposes) instead of <code>.SeriesColors(...)</code>.</p>
+</li>
+<li>
+<p><strong>Multi-window teardown no longer faults with an <code>ACCESS_VIOLATION</code>
+(issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/647">#647</a>).</strong> Closing a docking tear-off floating preview window could
+terminate the process with <code>0xC0000005</code> deep in the WinUI backdrop interop —
+an unmanaged fault no <code>try</code>/<code>catch</code> can trap — corrupting the lifecycle of
+windows opened later in the same process. Root cause: a transient auxiliary
+window (e.g. a docking tear-off) could be elected the fallback <code>PrimaryWindow</code>,
+so closing it fired <code>ShutdownPolicy.OnPrimaryWindowClosed</code> →
+<code>Application.Exit()</code>, tearing down every still-open window mid-process; a
+surviving host then wrote <code>Window.SystemBackdrop</code> on one of those torn-down
+surfaces. Three reinforcing fixes (spec 036, spec 045): docking floating
+windows opt out of primary election via <code>ExcludeFromShutdownPolicy</code>, and the
+single election helper that runs on both initial registration and
+unregister re-election never promotes an excluded window — so an auxiliary
+window can neither become <em>nor remain</em> primary, and <code>PrimaryWindow</code> goes
+<code>null</code> rather than to an excluded window when no eligible window remains;
+<code>BackdropApplier</code> records torn-down surfaces in a process-wide closed-window
+registry and skips every <code>SystemBackdrop</code> write (both <code>Apply</code> and <code>Reset</code>) on
+them; and <code>ReactorWindow.Close()</code> is now idempotent — a redundant or
+owner-cascade close performs the native close exactly once instead of
+re-entering native teardown.</p>
+</li>
+<li>
+<p><strong>The full self-test suite no longer faults with an <code>ACCESS_VIOLATION</code> at
+final process exit (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/680">#680</a>; test infrastructure only).</strong> Distinct from
+the mid-run multi-window fault fixed in <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/647">#647</a>/#673, the <em>entire</em> self-test
+suite (~600 fixtures in one process) crashed with <code>0xC0000005</code> during final
+process teardown — green TAP output, then a non-zero process exit. It
+reproduced only for the whole suite, never for any subset. Root cause is a
+<strong>Microsoft.UI.Xaml / Microsoft.UI.Windowing framework use-after-free</strong> walked
+over state the harness deliberately accumulates and never disposes: one shared
+<code>Window</code> carrying hundreds of <code>Closed</code> handlers (one per never-disposed
+<code>ReactorHost</code>) plus the windowing fixtures’ real <code>ReactorWindow</code>s with custom
+title bars. Every orderly process-exit path trips it — <code>Environment.Exit</code>
+runs the loader’s TLS destructors into the XAML core’s already-freed tear-off
+map (<code>TearoffMemoryInfoPrivate::Discard</code> → <code>0xC0000005</code>), and
+<code>Application.Exit</code> double-releases the caption-buttons UI Automation provider
+inside <code>CTitleBar::Uninitialize</code> (<code>0xC0000005</code> → fast-fail <code>0xC0000409</code>). Both
+faults live <em>inside</em> framework teardown, so the issue’s suspected
+fix — making Reactor’s own <code>SetTitleBar</code>/<code>WindowMessageMonitor</code>/backdrop
+unregister idempotent — cannot stop them. Because no real Reactor app
+accumulates this state (apps dispose hosts and exit via the orderly
+<code>ReactorApp.SafeExit</code> / <code>Application.Exit</code> path, already hardened by <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/647">#647</a>), the
+fix is scoped to the harness: after flushing the TAP stream, the self-test
+runner ends via <code>TerminateProcess(GetCurrentProcess(), exitCode)</code>, an
+immediate teardown-free kill that runs neither the loader’s TLS destructors nor
+WinUI’s window-close cascade, preserving the exact <code>0</code>/<code>1</code> exit code. A new CI
+regression guard (<code>SelfTestBatch.HostProcessExitsCleanly_NoTeardownCrash</code>)
+fails if the Host ever again exits with anything other than <code>0</code> or <code>1</code>. <strong>No
+product code changed.</strong></p>
+</li>
+<li>
+<p><strong>TitleBar in a non-content-extended window no longer corrupts the heap on
+close (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/537">#537</a>).</strong> A window whose <code>WindowSpec</code> set
+<code>ExtendsContentIntoTitleBar = false</code> while its content still rendered a
+<code>TitleBar(...)</code> element could terminate the process with
+<code>STATUS_HEAP_CORRUPTION</code> when the window closed: the WinUI
+<code>Microsoft.UI.Xaml.Controls.TitleBar</code> control only releases its caption-button
+/ AppWindow interop cleanly in content-extended mode, but Reactor allows that
+combination (skipping <code>SetTitleBar</code>). Reactor now flips the window back into
+content-extended mode just before the native close, while the AppWindow is
+still alive, so the control tears down via its safe path. The flip is
+idempotent and runs on every teardown path — <code>Close()</code>, the owner-close
+cascade (including nested owned descendants), the chrome/Alt+F4 close, a direct
+<code>Dispose()</code>, and <code>ReactorApp.Exit()</code> / shutdown-policy exit — so still-open
+windows are covered no matter how the process winds down. The
+<code>ExtendsContentIntoTitleBar</code> value observed while the window is alive is
+unchanged; the flip happens only at close.</p>
+</li>
+<li>
+<p><strong>Virtualized rows now reset per-item component state on recycle when keyed
+(issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/326">#326</a>).</strong> <code>LazyVStack</code> / <code>LazyHStack</code> / <code>ItemsRepeater&lt;T&gt;</code> / <code>ItemsView&lt;T&gt;</code>
+now propagate the <code>keySelector</code> projection onto each realized row’s top-level
+<code>Element.Key</code>. Post-<a href="https://github.com/microsoft/microsoft-ui-reactor/issues/324">#324</a> the ItemsRepeater recycle path reuses a realized
+inner <code>Component&lt;T&gt;</code> across logical items as you scroll, which carried that
+component’s <code>UseState</code> / <code>UseEffect</code> state from one item to another (e.g. an
+editor row left “dirty” for item 5 stayed dirty when its container was reused
+for item 12). With the per-item key in place, reusing a container for a
+<em>different</em> logical item fails <code>CanUpdate</code> and the row remounts with fresh
+hook cells; same-item re-renders keep the key and diff in place, preserving
+state. An explicit <code>.WithKey(...)</code> in the row builder still wins. This is a
+user-visible behavior change for code that (intentionally or not) relied on
+cross-item state carry-over — use a stable constant key, or hoist the state
+above the row, to opt back into durable carry-over. The shared
+<code>RefreshRealizedItems</code> refresh path now also handles a same-slot key change
+(the documented <code>.WithKey($"{id}:{rev}")</code> revision-bump pattern) by adopting
+the freshly-mounted subtree into the still-parented row wrapper, so the old
+control is no longer orphaned and the per-control tracking stays consistent.
+<code>ListView&lt;T&gt;</code> / <code>GridView&lt;T&gt;</code> already remount per realize and are unaffected.</p>
+</li>
+<li>
+<p><strong>ItemsView multi-select checkmark no longer flickers during window resize
+(issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/383">#383</a>).</strong> In a <code>SelectionMode=Multiple</code> <code>ItemsView&lt;T&gt;</code>, the per-item
+selection checkmark visibly faded out/in on every realized row while the
+window was drag-resized. WinUI’s <code>ItemsView</code> flips each realized
+<code>ItemContainer</code>’s internal multi-select mode on every clear/prepare recycle
+round-trip, re-running the <code>MultiSelectStates.Multiple</code> opacity storyboard with
+<code>useTransitions: true</code>; and because the inner <code>ItemsRepeater</code> recycles its
+realized set on every ancestor arrange pass during a resize, the storyboard
+re-fired dozens of times per gesture. The recycle is intrinsic WinUI
+viewport-manager behavior (not eliminable without regressing ItemsView sizing
+— see the issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/383">#383</a> investigation), so Reactor now collapses each realized
+container’s <code>Multiple</code>-state opacity storyboard keyframes to zero duration: the
+animated <code>GoToState</code> still runs but snaps the checkmark to full opacity in the
+same UI tick instead of fading it. Selection behavior, the recycle, and the
+final checkmark visibility are unchanged — only the spurious fade is gone.</p>
+</li>
+<li>
+<p><strong><code>UseAnnounce().Announce(...)</code> now marshals to the UI thread automatically.</strong>
+Previously, calling <code>Announce</code> off the UI thread (e.g. from a <code>Task.Run</code>
+continuation) threw <code>RPC_E_WRONG_THREAD</code> (0x8001010E) — the underlying WinUI
+XAML calls (<code>FrameworkElementAutomationPeer.FromElement</code>,
+<code>RaiseNotificationEvent</code>, <code>TextBlock.Text</code>) are UI-thread affine — so the
+announcement silently failed. The handle now captures its <code>DispatcherQueue</code>
+when the live-region <code>TextBlock</code> is wired and re-marshals off-thread calls via
+<code>TryEnqueue</code>; the UI-thread fast path stays a single <code>HasThreadAccess</code> check.
+(issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/130">#130</a>)</p>
+</li>
+<li>
+<p><strong><code>UseNavigation</code> mutators are now thread-safe by default (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/234">#234</a>).</strong>
+<code>NavigationHandle&lt;TRoute&gt;</code>’s <code>Navigate</code>, <code>GoBack</code>, <code>GoForward</code>, <code>Replace</code>,
+<code>Reset</code>, <code>PopTo</code>, and <code>SetState</code> previously mutated the back/forward stacks
+with no thread guard, so calling them off the UI thread (from a <code>Task.Run</code>,
+a timer, or after <code>await … ConfigureAwait(false)</code>) could corrupt the stacks
+or silently drop the navigation. Each mutator now auto-marshals the whole
+operation onto the handle’s captured UI dispatcher — completing the
+thread-safety-by-default story that <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/212">#212</a> started for <code>UseState</code> / <code>UseReducer</code>
+— via the shared <code>UIThreadMarshal</code> gate. The UI-thread fast path stays a
+single thread-id compare with zero allocation. When no dispatcher is available
+(headless / unit-test contexts) or it has shut down, the off-thread call throws
+a loud <code>InvalidOperationException</code> instead of corrupting state. On the UI thread
+behavior is unchanged. The <code>RenderContext</code> setter marshal and the navigation
+gate now share one <code>UIThreadMarshal.EnqueueOrThrow</code> implementation.</p>
+</li>
+<li>
+<p><strong><code>Popup</code> now matches the WinUI light-dismiss default (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/873">#873</a>).</strong>
+<code>PopupElement.IsLightDismissEnabled</code> defaulted to <code>true</code>, inverting WinUI’s
+<code>false</code> default — a plain <code>Popup(child, isOpen)</code> dismissed on an outside click
+unless the author passed <code>.IsLightDismissEnabled(false)</code>. The record default now
+matches WinUI; opt in explicitly with <code>.IsLightDismissEnabled(true)</code>.</p>
+</li>
+<li>
+<p><strong>DataGrid keeps the inline editor open when Tab moves to the next cell
+(<a href="https://github.com/microsoft/microsoft-ui-reactor/issues/851">#851</a>).</strong> Tabbing while editing committed the current cell and advanced, but the
+reopened editor was immediately torn down by the grid’s deferred <code>LostFocus</code>
+commit, so the grid appeared to drop out of edit mode. Editing-Tab now commits
+and reopens the editor on the next cell (Excel-like).</p>
+</li>
+<li>
+<p><strong><code>ListView</code> / <code>GridView</code> updates can clear <code>Header</code> or <code>ItemContainerStyle</code>
+back to <code>null</code> (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/845">#845</a>).</strong> Both handlers gated the assignment on the new
+value being non-null, so a present→null transition left the stale header/style
+in place. The update now applies the <code>null</code>.</p>
+</li>
+<li>
+<p><strong><code>ListView</code> / <code>GridView</code> <code>OnItemClick</code> no longer double-subscribes (issue
+<a href="https://github.com/microsoft/microsoft-ui-reactor/issues/779">#779</a>).</strong> The native <code>ItemClick</code> event was wired on both mount and update but
+never unsubscribed, so toggling <code>OnItemClick</code> present→null→present fired the
+handler twice per click. It is now wired exactly once.</p>
+</li>
+<li>
+<p><strong><code>FontIconSource</code> no longer crashes on an unset font size (issue <a href="https://github.com/microsoft/microsoft-ui-reactor/issues/854">#854</a>).</strong>
+Icon-source resolution faulted on a <code>NaN</code> size; it is now coerced safely. The
+bug surfaced while adding a title-bar app-mark icon to the <code>dotnet new reactorapp</code> template, which the template now ships.</p>
+</li>
+</ul>
+</article><div data-blume-page-end><section aria-label="Was this page helpful?" class="mx-auto mt-12 max-w-content border-border border-t pt-6" data-blume-page-feedback><div class="flex items-center justify-between gap-4"><p class="text-muted-foreground text-sm">Was this page helpful?</p><div class="flex items-center gap-2" data-feedback-actions><button class="inline-flex items-center gap-2 rounded-blume border border-border px-4 py-2 text-foreground text-sm transition-colors hover:border-foreground" data-feedback-value="yes" type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-thumbs-up"></use></svg>Yes</button><button class="inline-flex items-center gap-2 rounded-blume border border-border px-4 py-2 text-foreground text-sm transition-colors hover:border-foreground" data-feedback-value="no" type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-thumbs-down"></use></svg>No</button></div><p class="hidden text-muted-foreground text-sm focus:outline-none" data-feedback-thanks role="status" tabindex="-1">Thanks for your feedback!</p></div></section><script type="module" src="/microsoft-ui-reactor/main/_astro/PageFeedback.astro_astro_type_script_index_0_lang.Ct6xENdt.js"></script><nav aria-label="Pagination" class="mx-auto mt-12 flex max-w-content justify-between gap-4 border-border border-t pt-6"><a class="flex max-w-[48%] flex-1 items-center gap-2 rounded-blume border border-border px-4 py-3 text-foreground transition-colors hover:border-foreground" href="/microsoft-ui-reactor/main/changelog/v0-1-0-preview-13"><svg aria-hidden="true" class="rtl:-scale-x-100" height="16" width="16"><use href="#blume-i-arrow-left"></use></svg><span class="min-w-0"><span class="block text-muted-foreground text-xs">Previous</span><span class="block font-medium max-md:line-clamp-2 max-md:wrap-break-word md:truncate">0.1.0-preview.13</span></span></a></nav></div></main><aside aria-label="On this page" class="sticky top-16 hidden h-[calc(100dvh-4rem)] scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overflow-y-auto [--blume-rail-inset:1rem] px-(--blume-rail-inset) pt-6 pb-10 text-sm xl:block" data-blume-toc><p class="mb-3 font-semibold text-foreground text-sm">On this page</p><blume-toc class="block"><ul class="m-0 list-none p-0"><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#added">Added</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#changed-breaking">Changed (breaking)</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#deprecated">Deprecated</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#removed">Removed</a></li><li data-depth="2" style="padding-inline-start:0rem"><a class="block py-1.5 text-muted-foreground transition-colors hover:text-foreground aria-[current=location]:font-medium aria-[current=location]:text-foreground" href="#fixed">Fixed</a></li></ul></blume-toc><div class="space-y-0.5 mt-8 border-border border-t pt-4" data-blume-page-actions data-i18n-chat-prompt="Read {url} so I can ask you questions about this page." data-i18n-copied="Copied!" data-i18n-copy-failed="Copy failed" data-i18n-generating="Generating…" data-md="/changelog/v0-1-0-preview-12.md"><button class="flex w-full items-center gap-2.5 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:text-foreground" data-blume-scroll-top type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-arrow-up"></use></svg>Scroll to top</button><button class="flex w-full items-center gap-2.5 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:text-foreground" data-blume-copy-page type="button"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-copy"></use></svg><span data-blume-copy-label>Copy as Markdown</span></button><details class="relative" data-blume-dropdown><summary class="flex w-full items-center gap-2.5 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:text-foreground cursor-pointer list-none [&amp;::-webkit-details-marker]:hidden"><svg aria-hidden="true" height="16" width="16"><use href="#blume-i-external-link"></use></svg>Open in chat<svg aria-hidden="true" class="ms-auto transition-transform [details[open]>summary_&amp;]:rotate-180" height="14" width="14"><use href="#blume-i-chevron-down"></use></svg></summary><div class="absolute top-full end-0 z-50 mt-1 w-max [--blume-menu-room:calc(100%+var(--blume-rail-inset,1rem)-2px)] min-w-[min(14rem,var(--blume-menu-room))] max-w-(--blume-menu-room) wrap-anywhere rounded-blume border border-border bg-background p-1 shadow-xl" data-blume-menu><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="v0" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 147 70" xmlns="http://www.w3.org/2000/svg"><path d="M56 50.2031V14H70V60.1562C70 65.5928 65.5928 70 60.1562 70C57.5605 70 54.9982 68.9992 53.1562 67.1573L0 14H19.7969L56 50.2031Z"/><path d="M147 56H133V23.9531L100.953 56H133V70H96.6875C85.8144 70 77 61.1856 77 50.3125V14H91V46.1562L123.156 14H91V0H127.312C138.186 0 147 8.81439 147 19.6875V56Z"/></svg></span><span class="flex-1">Open in v0</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><hr class="my-1 border-border border-t"><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="chatgpt" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg></span><span class="flex-1">Open in ChatGPT</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="claude" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" fill-rule="evenodd" d="M2.3545 7.9775L4.7145 6.654L4.7545 6.539L4.7145 6.475H4.6L4.205 6.451L2.856 6.4145L1.6865 6.366L0.5535 6.305L0.268 6.2445L0 5.892L0.0275 5.716L0.2675 5.5555L0.6105 5.5855L1.3705 5.637L2.5095 5.716L3.3355 5.7645L4.56 5.892H4.7545L4.782 5.8135L4.715 5.7645L4.6635 5.716L3.4845 4.918L2.2085 4.074L1.5405 3.588L1.1785 3.3425L0.9965 3.1115L0.9175 2.6075L1.2455 2.2465L1.686 2.2765L1.7985 2.307L2.245 2.65L3.199 3.388L4.4445 4.3045L4.627 4.4565L4.6995 4.405L4.709 4.3685L4.627 4.2315L3.9495 3.0085L3.2265 1.7635L2.9045 1.2475L2.8195 0.938C2.78711 0.819128 2.76965 0.696687 2.7675 0.5735L3.1415 0.067L3.348 0L3.846 0.067L4.056 0.249L4.366 0.956L4.867 2.0705L5.6445 3.5855L5.8725 4.0345L5.994 4.4505L6.0395 4.578H6.1185V4.505L6.1825 3.652L6.301 2.6045L6.416 1.257L6.456 0.877L6.644 0.422L7.0175 0.176L7.3095 0.316L7.5495 0.6585L7.516 0.8805L7.373 1.806L7.0935 3.2575L6.9115 4.2285H7.0175L7.139 4.1075L7.6315 3.4545L8.4575 2.4225L8.8225 2.0125L9.2475 1.5605L9.521 1.345H10.0375L10.4175 1.9095L10.2475 2.4925L9.7155 3.166L9.275 3.737L8.643 4.587L8.248 5.267L8.2845 5.322L8.3785 5.312L9.8065 5.009L10.578 4.869L11.4985 4.7115L11.915 4.9055L11.9605 5.103L11.7965 5.5065L10.812 5.7495L9.6575 5.9805L7.938 6.387L7.917 6.402L7.9415 6.4325L8.716 6.5055L9.047 6.5235H9.858L11.368 6.636L11.763 6.897L12 7.216L11.9605 7.4585L11.353 7.7685L10.533 7.574L8.6185 7.119L7.9625 6.9545H7.8715V7.0095L8.418 7.5435L9.421 8.4485L10.6755 9.6135L10.739 9.9025L10.578 10.13L10.408 10.1055L9.3055 9.277L8.88 8.9035L7.917 8.0935H7.853V8.1785L8.075 8.503L9.2475 10.2635L9.3085 10.8035L9.2235 10.98L8.9195 11.0865L8.5855 11.0255L7.8985 10.063L7.191 8.9795L6.6195 8.008L6.5495 8.048L6.2125 11.675L6.0545 11.86L5.69 12L5.3865 11.7695L5.2255 11.396L5.3865 10.658L5.581 9.696L5.7385 8.931L5.8815 7.981L5.9665 7.665L5.9605 7.644L5.8905 7.653L5.1735 8.6365L4.0835 10.109L3.2205 11.0315L3.0135 11.1135L2.655 10.9285L2.6885 10.5975L2.889 10.303L4.083 8.785L4.803 7.844L5.268 7.301L5.265 7.222H5.2375L2.066 9.28L1.501 9.353L1.2575 9.125L1.288 8.752L1.4035 8.6305L2.3575 7.9745L2.3545 7.9775Z"/></svg></span><span class="flex-1">Open in Claude</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="t3" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><span class="flex-1">Open in T3 Chat</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="scira" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" fill="none" viewBox="0 0 910 934" xmlns="http://www.w3.org/2000/svg"><path d="M647.664 197.775C569.13 189.049 525.5 145.419 516.774 66.8849C508.048 145.419 464.418 189.049 385.884 197.775C464.418 206.501 508.048 250.131 516.774 328.665C525.5 250.131 569.13 206.501 647.664 197.775Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="8"/><path d="M857.5 508.116C763.259 497.644 710.903 445.288 700.432 351.047C689.961 445.288 637.605 497.644 543.364 508.116C637.605 518.587 689.961 570.943 700.432 665.184C710.903 570.943 763.259 518.587 857.5 508.116Z" stroke="currentColor" stroke-linejoin="round" stroke-width="20"/><path d="M889.949 121.237C831.049 114.692 798.326 81.9698 791.782 23.0692C785.237 81.9698 752.515 114.692 693.614 121.237C752.515 127.781 785.237 160.504 791.782 219.404C798.326 160.504 831.049 127.781 889.949 121.237Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="8"/><path d="M760.632 764.337C720.719 814.616 669.835 855.1 611.872 882.692C553.91 910.285 490.404 924.255 426.213 923.533C362.022 922.812 298.846 907.419 241.518 878.531C184.19 849.643 134.228 808.026 95.4548 756.863C56.6815 705.7 30.1238 646.346 17.8129 583.343C5.50207 520.339 7.76433 455.354 24.4266 393.359C41.089 331.364 71.7099 274.001 113.947 225.658C156.184 177.315 208.919 139.273 268.117 114.442" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="30"/></svg></span><span class="flex-1">Open in Scira</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a><a class="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground" data-open-in="cursor" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><span class="flex h-lh shrink-0 items-center"><svg class="size-4 shrink-0" viewBox="0 0 466.73 532.09" xmlns="http://www.w3.org/2000/svg"><path d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z" fill="currentColor"/></svg></span><span class="flex-1">Open in Cursor</span><span class="flex h-lh shrink-0 items-center"><svg aria-hidden="true" height="13" width="13"><use href="#blume-i-external-link"></use></svg></span></a></div></details></div><script type="module" src="/microsoft-ui-reactor/main/_astro/PageActions.astro_astro_type_script_index_0_lang.CVcd-PcZ.js"></script></aside></div><footer class="border-border border-t px-4 md:px-6" data-blume-footer><div class="flex min-h-16 flex-wrap items-center gap-x-6 gap-y-3 py-3 md:grid md:grid-cols-[1fr_auto_1fr]"><ul class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm"><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="/microsoft-ui-reactor/main/showcase">Showcase</a></li><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank">Blog</a></li><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank">Samples</a></li><li><a class="text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground" href="/microsoft-ui-reactor/main/changelog">Changelog</a></li></ul><p class="text-muted-foreground text-sm md:col-start-2">© Microsoft Corporation. Released under the MIT License.</p><ul class="-me-[9px] -my-[9px] ms-auto flex flex-wrap items-center gap-1 md:col-start-3"><li><a aria-label="GitHub repository" class="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:text-foreground" href="https://github.com/microsoft/microsoft-ui-reactor" title="GitHub repository" aria-describedby="blume-new-tab-hint" rel="noreferrer" target="_blank"><svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path></svg></a></li></ul></div></footer><button aria-label="Close navigation" class="fixed inset-0 z-[30] hidden cursor-pointer border-0 bg-black/40 [:where([data-blume-nav-open])_&amp;]:block lg:hidden" data-blume-nav-toggle type="button"></button><script type="module" src="/microsoft-ui-reactor/main/_astro/RootLayout.astro_astro_type_script_index_0_lang.KSQNchi6.js"></script><blume-webmcp data-llms="true" data-search="true" data-skills="true" hidden="true"></blume-webmcp><script type="module" src="/microsoft-ui-reactor/main/_astro/WebMcp.astro_astro_type_script_index_0_lang.FRCBO4-1.js"></script><svg aria-hidden="true" hidden xmlns="http://www.w3.org/2000/svg"><symbol id="blume-i-arrow-right" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7l7 7l-7 7"/></symbol><symbol id="blume-i-menu" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5h16M4 12h16M4 19h16"/></symbol><symbol id="blume-i-chevron-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9l6 6l6-6"/></symbol><symbol id="blume-i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 6L9 17l-5-5"/></symbol><symbol id="blume-i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g></symbol><symbol id="blume-i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol><symbol id="blume-i-thumbs-up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88M7 10v12"/></symbol><symbol id="blume-i-thumbs-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 18.12L10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88M17 14V2"/></symbol><symbol id="blume-i-arrow-left" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 19l-7-7l7-7m7 7H5"/></symbol><symbol id="blume-i-arrow-up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 12l7-7l7 7m-7 7V5"/></symbol><symbol id="blume-i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></g></symbol><symbol id="blume-i-external-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6m-11 5L21 3m-3 10v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol><symbol id="blume-i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m21 21l-4.34-4.34"/><circle cx="11" cy="11" r="8"/></g></symbol></svg></body></html>

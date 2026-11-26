@@ -19,4 +19,4 @@ public static bool UseDevtools(this RenderContext ctx)
 
 An extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseDevtoolsExtensions`.
 
-**Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks)
+**Learn more:** [Devtools](/microsoft-ui-reactor/main/tools/devtools), [Hooks](/microsoft-ui-reactor/main/guides/hooks)

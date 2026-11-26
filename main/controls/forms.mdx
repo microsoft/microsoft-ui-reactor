@@ -51,7 +51,7 @@ class ControlledInputDemo : Component
 
 ![Controlled input](/microsoft-ui-reactor/main/images/forms/controlled-input.png)
 
-This is the same [`UseState`](/microsoft-ui-reactor/main/guides/hooks) pattern from [Getting Started](/microsoft-ui-reactor/main/get-started/quickstart),
+This is the same [`UseState`](/microsoft-ui-reactor/main/guides/hooks) pattern from [Getting Started](/microsoft-ui-reactor/main/get-started/first-app),
 applied to form inputs. The control never holds its own state — your component
 is the single source of truth.
 
@@ -598,7 +598,7 @@ class AutoSuggestDemo : Component
 The snippet above renders an inline suggestion list as a custom
 presentation — more layout freedom than the built-in dropdown, at the
 cost of writing the visual surface yourself. For the canonical
-search-results recipe see [recipes/search-with-suggestions](/microsoft-ui-reactor/main/recipes/search-with-suggestions).
+search-results recipe see [recipes/search-with-suggestions](/microsoft-ui-reactor/main/guides/recipes/search-with-suggestions).
 
 WinUI design page: [Auto-suggest box](https://learn.microsoft.com/en-us/windows/apps/design/controls/auto-suggest-box).
 
@@ -771,7 +771,7 @@ one place. Hoist `UseValidationContext()` to the wizard component and
 pass it down via [context](/microsoft-ui-reactor/main/guides/context) — every step's
 `.Validate(...)` writes to the same store, and the final Submit checks
 `ctx.IsValid()` across all steps. The
-[`recipes/multi-step-form`](/microsoft-ui-reactor/main/recipes/multi-step-form) recipe walks
+[`recipes/multi-step-form`](/microsoft-ui-reactor/main/guides/recipes/multi-step-form) recipe walks
 the full pattern; the key shape is one context per **form**, not one
 per page.
 

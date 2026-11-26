@@ -12,7 +12,10 @@
     "aiCatalog": "https://microsoft.github.io/microsoft-ui-reactor/main/.well-known/ai-catalog.json",
     "apiCatalog": "https://microsoft.github.io/microsoft-ui-reactor/main/.well-known/api-catalog",
     "agentSkills": "https://microsoft.github.io/microsoft-ui-reactor/main/.well-known/agent-skills/index.json",
-    "sitemap": "https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml"
+    "sitemap": "https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml",
+    "feeds": [
+      "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/rss.xml"
+    ]
   },
   "description": "Declarative UI framework for native Windows desktop apps in pure C#.",
   "generator": "blume@2.2.7",

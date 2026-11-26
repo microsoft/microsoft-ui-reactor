@@ -328,7 +328,7 @@ Use focus trapping for any overlay that should prevent interaction with
 background content: modal dialogs, confirmation sheets, and dropdown menus.
 For a complete dialog pattern that combines `UseFocusTrap` with
 [`ContentDialog`](/microsoft-ui-reactor/main/controls/dialogs-and-flyouts), see the
-[modal-dialog recipe](/microsoft-ui-reactor/main/recipes/modal-dialog).
+[modal-dialog recipe](/microsoft-ui-reactor/main/guides/recipes/modal-dialog).
 
 > **Caveat:** `UseFocusTrap` guards its `LosingFocus` handler against three "no
 > sensible container" states — `IsLoaded == false`, `Visibility !=
@@ -507,7 +507,7 @@ The standard accessible modal combines three primitives: a controlled
 across the open/closed transition (use `.IsVisible(open)` not
 `When(open, ...)`) so focus is released cleanly when `isActive`
 flips false — see the caveat above. The
-[modal-dialog recipe](/microsoft-ui-reactor/main/recipes/modal-dialog) wires all three end
+[modal-dialog recipe](/microsoft-ui-reactor/main/guides/recipes/modal-dialog) wires all three end
 to end against [`ContentDialog`](/microsoft-ui-reactor/main/controls/dialogs-and-flyouts).
 
 ### Toast / status updates [#toast-status-updates]

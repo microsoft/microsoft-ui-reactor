@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 290" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 13px; font-weight: 600; }
+    .sub { font-size: 11px; fill: #57606a; }
+    .edge-label { font-size: 11px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-loop { stroke: #0969da; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    .marker-loop { fill: #0969da; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .edge { stroke: #8b949e; }
+      .edge-loop { stroke: #58a6ff; }
+      .marker-fill { fill: #8b949e; }
+      .marker-loop { fill: #58a6ff; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+    <marker id="arr-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-loop" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Component -->
+  <rect class="box-accent" x="20" y="50" width="200" height="84" rx="6"/>
+  <text class="label" x="120" y="78" text-anchor="middle">Your component</text>
+  <text class="sub" x="120" y="98" text-anchor="middle">Render() describes the UI</text>
+  <text class="sub" x="120" y="114" text-anchor="middle">UseState holds its state</text>
+
+  <!-- Element tree -->
+  <rect class="box" x="270" y="50" width="200" height="84" rx="6"/>
+  <text class="label" x="370" y="78" text-anchor="middle">Element tree</text>
+  <text class="sub" x="370" y="98" text-anchor="middle">immutable C# records</text>
+  <text class="sub" x="370" y="114" text-anchor="middle">VStack, TextBlock, Button</text>
+
+  <!-- Reconciler -->
+  <rect class="box" x="520" y="50" width="200" height="84" rx="6"/>
+  <text class="label" x="620" y="78" text-anchor="middle">Reconciler</text>
+  <text class="sub" x="620" y="98" text-anchor="middle">diffs the old and new trees</text>
+  <text class="sub" x="620" y="114" text-anchor="middle">patches only what changed</text>
+
+  <!-- WinUI controls -->
+  <rect class="box-out" x="770" y="50" width="210" height="84" rx="6"/>
+  <text class="label" x="875" y="78" text-anchor="middle">Real WinUI controls</text>
+  <text class="sub" x="875" y="98" text-anchor="middle">StackPanel, TextBlock, Button</text>
+  <text class="sub" x="875" y="114" text-anchor="middle">native, on screen</text>
+
+  <!-- Forward edges -->
+  <path class="edge" d="M220 92 L270 92" marker-end="url(#arr)"/>
+  <text class="edge-label" x="245" y="40" text-anchor="middle">returns</text>
+  <path class="edge" d="M470 92 L520 92" marker-end="url(#arr)"/>
+  <text class="edge-label" x="495" y="40" text-anchor="middle">compares</text>
+  <path class="edge" d="M720 92 L770 92" marker-end="url(#arr)"/>
+  <text class="edge-label" x="745" y="40" text-anchor="middle">mounts / updates</text>
+
+  <!-- Loop back: user event -> state setter -> re-render -->
+  <path class="edge-loop" d="M875 134 L875 210 Q875 225 860 225 L135 225 Q120 225 120 210 L120 134" marker-end="url(#arr-loop)"/>
+  <text class="label" x="500" y="250" text-anchor="middle">The loop</text>
+  <text class="sub" x="500" y="270" text-anchor="middle">a user event calls a state setter, such as setCount(count + 1), and Render() runs again</text>
+</svg>

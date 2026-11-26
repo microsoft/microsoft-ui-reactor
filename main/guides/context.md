@@ -368,7 +368,7 @@ is the same shape as React's
 > between updates, or (2) move the construction outside `Render()` so
 > it's a singleton. The performance overlay
 > makes this visible — look for high "context-driven re-render" counts
-> in the [devtools](/microsoft-ui-reactor/main/guides/dev-tooling) view.
+> in the [devtools](/microsoft-ui-reactor/main/tools) view.
 
 ## Patterns [#patterns]
 
@@ -491,7 +491,7 @@ When no ancestor has called `.Provide`, `UseContext` silently returns
 runs against the default, which is rarely what the developer expected.
 Either pick a non-null default that's safe to render against, or treat
 the default as an "uninitialized" sentinel and branch explicitly (as above).
-The [init pattern](/microsoft-ui-reactor/main/recipes/login) uses the latter — anonymous user is
+The [init pattern](/microsoft-ui-reactor/main/guides/recipes/login) uses the latter — anonymous user is
 the sentinel, the authentication flow swaps it out at the provider.
 
 ### Using context for state that should be props [#using-context-for-state-that-should-be-props]

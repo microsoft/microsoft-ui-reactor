@@ -721,7 +721,7 @@ class LongFormProseDemo : Component
 }
 ```
 
-This is the same shape as the [`recipes/master-detail`](/microsoft-ui-reactor/main/recipes/master-detail)
+This is the same shape as the [`recipes/master-detail`](/microsoft-ui-reactor/main/guides/recipes/master-detail)
 content pane and the [chat sample](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/chat)
 message bubble.
 

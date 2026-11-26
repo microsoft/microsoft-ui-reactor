@@ -3,6 +3,8 @@ title: "File pickers"
 description: "Options for the open file, save file and folder pickers."
 ---
 
+**Learn more:** [Desktop integration](/microsoft-ui-reactor/main/guides/desktop-integration)
+
 ## `FilePickerOptions` [#filepickeroptions]
 
 Options for [`RenderContext.PickFileAsync`](/microsoft-ui-reactor/main/reference/components/RenderContext#pickfileasync) and [`RenderContext.PickMultipleFilesAsync`](/microsoft-ui-reactor/main/reference/components/RenderContext#pickmultiplefilesasync).

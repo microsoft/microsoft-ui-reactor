@@ -3,7 +3,7 @@ title: "Launch and activation"
 description: "How the app was started, and requests to embed it."
 ---
 
-**Learn more:** [Advanced Windowing](/microsoft-ui-reactor/main/guides/windowing-advanced)
+**Learn more:** [Advanced Windowing](/microsoft-ui-reactor/main/guides/windowing-advanced), [Desktop integration](/microsoft-ui-reactor/main/guides/desktop-integration)
 
 ## `EmbedRequest` [#embedrequest]
 

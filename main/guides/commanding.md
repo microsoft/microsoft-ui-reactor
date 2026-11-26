@@ -605,7 +605,7 @@ class AcceleratorScopeExample : Component
 ```
 
 For a command palette-style global shortcut catalog, see
-[recipes/command-palette](/microsoft-ui-reactor/main/recipes/command-palette).
+[recipes/command-palette](/microsoft-ui-reactor/main/guides/recipes/command-palette).
 
 ## Patterns [#patterns]
 
@@ -855,5 +855,5 @@ belongs at the parent component or in a `UseMemo` so identity is stable.
 - **[Dialogs and Flyouts](/microsoft-ui-reactor/main/controls/dialogs-and-flyouts)** — Wire dialog primaries and right-click menus to commands
 - **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — `UseCommand` and the rest of the hook surface
 - **[Navigation](/microsoft-ui-reactor/main/guides/navigation)** — Scope commands to a page vs. a window
-- **[Recipes: Command palette](/microsoft-ui-reactor/main/recipes/command-palette)** — End-to-end recipe for a Ctrl+K palette
+- **[Recipes: Command palette](/microsoft-ui-reactor/main/guides/recipes/command-palette)** — End-to-end recipe for a Ctrl+K palette
 - **[Localization](/microsoft-ui-reactor/main/guides/localization)** — Localize command labels and accelerator text

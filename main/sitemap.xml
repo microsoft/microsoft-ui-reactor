@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-13</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-14</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-15</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-16</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-17</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-18</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/changelog</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/controls/charting</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/controls/collections</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/controls/data-system</loc></url>
@@ -10,9 +18,10 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/controls/win2d-canvas</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/controls</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/cheat-sheet</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/quickstart</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/reactor-vs-xaml</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/first-app</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/install</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/rules-of-reactor</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/samples</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/thinking-in-reactor</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started/xaml-developers</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/get-started</loc></url>
@@ -23,8 +32,7 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/commanding</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/components</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/context</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/dev-tooling</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/diagnostics</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/desktop-integration</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/docking</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/effects</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/flex-layout</loc></url>
@@ -32,15 +40,26 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/input-and-gestures</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/layout</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/localization</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/native-aot</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/navigation</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/optional-t</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/packaging</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/performance</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/persistence</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/command-palette</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/drag-reorder</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/login</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/master-detail</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/modal-dialog</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/multi-step-form</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/paginated-list</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/search-with-suggestions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/settings-page</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/services</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/styling</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/testing</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/theming-tokens</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/vs-extension</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/windowing-advanced</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/windowing-evolution</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/guides/windows</loc></url>
@@ -62,16 +81,6 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/reconciliation</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/source-mapping</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/command-palette</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/drag-reorder</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/login</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/master-detail</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/modal-dialog</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/multi-step-form</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/paginated-list</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/search-with-suggestions</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/settings-page</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yContext</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yDiagnostic</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yFixSuggestion</loc></url>
@@ -359,5 +368,13 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/showcase</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools/analyzers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools/build-with-ai</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools/devtools</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools/diagnostics</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools/hot-reload</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools/mur-cli</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools/vs-extension</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/tools</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main</loc></url>
 </urlset>

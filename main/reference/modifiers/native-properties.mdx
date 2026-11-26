@@ -7,7 +7,7 @@ sidebar:
 
 Modifiers are extension methods that return a changed copy of the element, so you can chain them.
 
-**Learn more:** [Modifier System](/microsoft-ui-reactor/main/how-it-works/modifier-system), [Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)
+**Learn more:** [Modifier System](/microsoft-ui-reactor/main/how-it-works/modifier-system), [Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)
 
 ## `Set` [#set]
 

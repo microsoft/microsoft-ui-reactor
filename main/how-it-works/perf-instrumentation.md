@@ -327,9 +327,9 @@ in the band's event payload.
 
 ## Next Steps [#next-steps]
 
-- **[Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics)** — How to capture, filter, and read the error / HR / subsystem events Reactor emits in Release builds, plus `ReactorTrace.Subscribe` and `reactor.logs source=event`.
+- **[Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics)** — How to capture, filter, and read the error / HR / subsystem events Reactor emits in Release builds, plus `ReactorTrace.Subscribe` and `reactor.logs source=event`.
 - **[DevTools Internals](/microsoft-ui-reactor/main/how-it-works/devtools-internals)** — Where the overlays consume these events.
 - **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — What the reconcile-stop counters describe.
 - **[Hooks Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Why `StateChange` fires from inside the slot table.
 - **[Animation Pipeline](/microsoft-ui-reactor/main/how-it-works/animation-pipeline)** — Companion under-the-hood page on animation.
-- **[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling)** — User-facing surface for the perf tooling.
+- **[Dev Tooling](/microsoft-ui-reactor/main/tools)** — User-facing surface for the perf tooling.

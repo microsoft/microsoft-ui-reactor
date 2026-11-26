@@ -5,7 +5,7 @@ sidebar:
   label: "Overview"
 ---
 
-**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics)
+**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics), [Devtools](/microsoft-ui-reactor/main/tools/devtools)
 
 ## Types [#types]
 

@@ -664,7 +664,7 @@ class DialogAsyncCommandDemo : Component
 }
 ```
 
-This mirrors the [`recipes/modal-dialog`](/microsoft-ui-reactor/main/recipes/modal-dialog)
+This mirrors the [`recipes/modal-dialog`](/microsoft-ui-reactor/main/guides/recipes/modal-dialog)
 recipe, which builds the same shape out of an inline modal instead of
 the WinUI control.
 
@@ -781,4 +781,4 @@ the primary label for a spinner, then close on completion.
 - **[Data System](/microsoft-ui-reactor/main/controls/data-system)** — Next: DataGrid and the data-source pipeline.
 - **[Commanding](/microsoft-ui-reactor/main/guides/commanding)** — The Command record that drives buttons, menu items, dialogs, and shortcuts.
 - **[Accessibility](/microsoft-ui-reactor/main/guides/accessibility)** — Focus traps, ARIA roles, and dialog landmark behavior.
-- **[Recipes: Modal dialog](/microsoft-ui-reactor/main/recipes/modal-dialog)** — End-to-end recipe building a confirmation modal.
+- **[Recipes: Modal dialog](/microsoft-ui-reactor/main/guides/recipes/modal-dialog)** — End-to-end recipe building a confirmation modal.

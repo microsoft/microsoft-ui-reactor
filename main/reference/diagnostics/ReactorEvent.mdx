@@ -16,7 +16,7 @@ public readonly record struct ReactorEvent(int EventId, string EventName, EventL
 
 Namespace: `Microsoft.UI.Reactor.Diagnostics`.
 
-**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics)
+**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics)
 
 ## Constructors [#constructors]
 

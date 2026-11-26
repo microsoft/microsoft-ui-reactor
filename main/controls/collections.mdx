@@ -769,7 +769,7 @@ class DragReorderDemo : Component
 free-form drag-and-drop between two lists (move item from A to B),
 subscribe to `DragItemsStarting` on the source and `Drop` on the
 destination, then update both states. The
-[`recipes/drag-reorder`](/microsoft-ui-reactor/main/recipes/drag-reorder) recipe walks the
+[`recipes/drag-reorder`](/microsoft-ui-reactor/main/guides/recipes/drag-reorder) recipe walks the
 single-list case end-to-end.
 
 ## Lazy loading [#lazy-loading]
@@ -828,7 +828,7 @@ class LazyLoadingDemo : Component
 Pair this with [`UseResource`](/microsoft-ui-reactor/main/guides/async-resources) to manage the
 async fetch state — `Pending` becomes the skeleton row, `Loaded`
 becomes the populated row, `Error` becomes a retry inline. The full
-shape lives in the [`recipes/paginated-list`](/microsoft-ui-reactor/main/recipes/paginated-list)
+shape lives in the [`recipes/paginated-list`](/microsoft-ui-reactor/main/guides/recipes/paginated-list)
 recipe.
 
 > **Caveat:** `itemHeight` vs. `estimatedItemHeight` is the single most expensive

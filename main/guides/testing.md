@@ -349,7 +349,7 @@ routing.
   including the flush ordering tested above.
 - **[Accessibility](/microsoft-ui-reactor/main/guides/accessibility)** — The scanner's rules and how
   to extend it with project-specific checks.
-- **[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling)** — `mur` CLI, preview mode, and the
+- **[Dev Tooling](/microsoft-ui-reactor/main/tools)** — `mur` CLI, preview mode, and the
   doc-pipeline harness that powers the screenshots on this page.
 - **[Components](/microsoft-ui-reactor/main/guides/components)** — Render purity rules that make the
   unit layer worth the investment.

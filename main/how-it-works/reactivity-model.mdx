@@ -142,7 +142,7 @@ A few details matter for understanding the model:
 
 XAML reactivity hangs off `INotifyPropertyChanged`. A view model
 implements `INotifyPropertyChanged`, properties raise `PropertyChanged`
-on assignment, [`BindingExpression`](/microsoft-ui-reactor/main/get-started/reactor-vs-xaml) instances
+on assignment, [`BindingExpression`](/microsoft-ui-reactor/main/get-started/xaml-developers#bindings-become-state) instances
 listen and pull the new value. The model is "the property is the
 signal" — every property declared on a VM is a potential reactive
 edge, with a runtime cost (the event), an ergonomic cost (you write
@@ -441,6 +441,6 @@ in `UseState` / `UseReducer` so the slot table tracks it.
 
 - **[Architecture Overview](/microsoft-ui-reactor/main/how-it-works/architecture-overview)** — Previous: the full render loop.
 - **[Hooks Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Next: how the slot table is laid out.
-- **[Reactor vs XAML](/microsoft-ui-reactor/main/get-started/reactor-vs-xaml)** — Same model contrasted with XAML's binding / INPC.
+- **[Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)** — Same model contrasted with XAML's binding / INPC.
 - **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — What the diff phase does once `Render()` returns.
 - **[Effects Scheduling](/microsoft-ui-reactor/main/how-it-works/effects-scheduling)** — When effects fire relative to the setter / render cycle.

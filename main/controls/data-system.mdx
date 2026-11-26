@@ -484,7 +484,7 @@ class MasterDetailDemo : Component
 ```
 
 The full pattern with sub-grids, optimistic updates, and async detail
-load lives in the [`recipes/master-detail`](/microsoft-ui-reactor/main/recipes/master-detail)
+load lives in the [`recipes/master-detail`](/microsoft-ui-reactor/main/guides/recipes/master-detail)
 recipe. The key structural point: selection state outlives the grid.
 
 ### Live data via ObservableListDataSource [#live-data-via-observablelistdatasource]
@@ -547,7 +547,7 @@ against your source — same column code, same selection callback. Set
 `Capabilities = ServerSort | ServerFilter | ServerCount` to opt out of
 the client-side fallback path (`DataSourceCapabilities` also carries
 `ServerSearch`, `ServerSelect`, `Mutate`, and `Refresh`). The
-[`recipes/paginated-list`](/microsoft-ui-reactor/main/recipes/paginated-list) recipe walks the
+[`recipes/paginated-list`](/microsoft-ui-reactor/main/guides/recipes/paginated-list) recipe walks the
 shape end-to-end for a list; the grid wires up identically.
 
 ## Common Mistakes [#common-mistakes]

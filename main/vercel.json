@@ -46,6 +46,21 @@
       "statusCode": 301
     },
     {
+      "destination": "/microsoft-ui-reactor/main/tools/analyzers",
+      "source": "/microsoft-ui-reactor/main/analyzers",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/analyzers.md",
+      "source": "/microsoft-ui-reactor/main/analyzers.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/analyzers.mdx",
+      "source": "/microsoft-ui-reactor/main/analyzers.mdx",
+      "statusCode": 301
+    },
+    {
       "destination": "/microsoft-ui-reactor/main/guides/animation",
       "source": "/microsoft-ui-reactor/main/animation",
       "statusCode": 301
@@ -103,6 +118,21 @@
     {
       "destination": "/microsoft-ui-reactor/main/guides/async-resources.mdx",
       "source": "/microsoft-ui-reactor/main/async-resources.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/build-with-ai",
+      "source": "/microsoft-ui-reactor/main/build-with-ai",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/build-with-ai.md",
+      "source": "/microsoft-ui-reactor/main/build-with-ai.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/build-with-ai.mdx",
+      "source": "/microsoft-ui-reactor/main/build-with-ai.mdx",
       "statusCode": 301
     },
     {
@@ -226,18 +256,48 @@
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/dev-tooling",
+      "destination": "/microsoft-ui-reactor/main/guides/desktop-integration",
+      "source": "/microsoft-ui-reactor/main/desktop-integration",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/desktop-integration.md",
+      "source": "/microsoft-ui-reactor/main/desktop-integration.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/desktop-integration.mdx",
+      "source": "/microsoft-ui-reactor/main/desktop-integration.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools",
       "source": "/microsoft-ui-reactor/main/dev-tooling",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/dev-tooling.md",
+      "destination": "/microsoft-ui-reactor/main/tools.md",
       "source": "/microsoft-ui-reactor/main/dev-tooling.md",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/dev-tooling.mdx",
+      "destination": "/microsoft-ui-reactor/main/tools.mdx",
       "source": "/microsoft-ui-reactor/main/dev-tooling.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/devtools",
+      "source": "/microsoft-ui-reactor/main/devtools",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/devtools.md",
+      "source": "/microsoft-ui-reactor/main/devtools.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/devtools.mdx",
+      "source": "/microsoft-ui-reactor/main/devtools.mdx",
       "statusCode": 301
     },
     {
@@ -256,17 +316,17 @@
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/diagnostics",
+      "destination": "/microsoft-ui-reactor/main/tools/diagnostics",
       "source": "/microsoft-ui-reactor/main/diagnostics",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/diagnostics.md",
+      "destination": "/microsoft-ui-reactor/main/tools/diagnostics.md",
       "source": "/microsoft-ui-reactor/main/diagnostics.md",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/diagnostics.mdx",
+      "destination": "/microsoft-ui-reactor/main/tools/diagnostics.mdx",
       "source": "/microsoft-ui-reactor/main/diagnostics.mdx",
       "statusCode": 301
     },
@@ -406,17 +466,17 @@
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/get-started/quickstart",
+      "destination": "/microsoft-ui-reactor/main/get-started/first-app",
       "source": "/microsoft-ui-reactor/main/getting-started",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/get-started/quickstart.md",
+      "destination": "/microsoft-ui-reactor/main/get-started/first-app.md",
       "source": "/microsoft-ui-reactor/main/getting-started.md",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/get-started/quickstart.mdx",
+      "destination": "/microsoft-ui-reactor/main/get-started/first-app.mdx",
       "source": "/microsoft-ui-reactor/main/getting-started.mdx",
       "statusCode": 301
     },
@@ -451,6 +511,21 @@
       "statusCode": 301
     },
     {
+      "destination": "/microsoft-ui-reactor/main/tools/hot-reload",
+      "source": "/microsoft-ui-reactor/main/hot-reload",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/hot-reload.md",
+      "source": "/microsoft-ui-reactor/main/hot-reload.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/hot-reload.mdx",
+      "source": "/microsoft-ui-reactor/main/hot-reload.mdx",
+      "statusCode": 301
+    },
+    {
       "destination": "/microsoft-ui-reactor/main/guides/input-and-gestures",
       "source": "/microsoft-ui-reactor/main/input-and-gestures",
       "statusCode": 301
@@ -463,6 +538,21 @@
     {
       "destination": "/microsoft-ui-reactor/main/guides/input-and-gestures.mdx",
       "source": "/microsoft-ui-reactor/main/input-and-gestures.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/get-started/install",
+      "source": "/microsoft-ui-reactor/main/install",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/get-started/install.md",
+      "source": "/microsoft-ui-reactor/main/install.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/get-started/install.mdx",
+      "source": "/microsoft-ui-reactor/main/install.mdx",
       "statusCode": 301
     },
     {
@@ -538,6 +628,36 @@
     {
       "destination": "/microsoft-ui-reactor/main/how-it-works/modifier-system.mdx",
       "source": "/microsoft-ui-reactor/main/modifier-system.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/mur-cli",
+      "source": "/microsoft-ui-reactor/main/mur-cli",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/mur-cli.md",
+      "source": "/microsoft-ui-reactor/main/mur-cli.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/tools/mur-cli.mdx",
+      "source": "/microsoft-ui-reactor/main/mur-cli.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/native-aot",
+      "source": "/microsoft-ui-reactor/main/native-aot",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/native-aot.md",
+      "source": "/microsoft-ui-reactor/main/native-aot.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/native-aot.mdx",
+      "source": "/microsoft-ui-reactor/main/native-aot.mdx",
       "statusCode": 301
     },
     {
@@ -631,18 +751,168 @@
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/get-started/reactor-vs-xaml",
+      "destination": "/microsoft-ui-reactor/main/get-started/xaml-developers",
       "source": "/microsoft-ui-reactor/main/reactor-vs-xaml",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/get-started/reactor-vs-xaml.md",
+      "destination": "/microsoft-ui-reactor/main/get-started/xaml-developers.md",
       "source": "/microsoft-ui-reactor/main/reactor-vs-xaml.md",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/get-started/reactor-vs-xaml.mdx",
+      "destination": "/microsoft-ui-reactor/main/get-started/xaml-developers.mdx",
       "source": "/microsoft-ui-reactor/main/reactor-vs-xaml.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes",
+      "source": "/microsoft-ui-reactor/main/recipes",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes.md",
+      "source": "/microsoft-ui-reactor/main/recipes.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/command-palette",
+      "source": "/microsoft-ui-reactor/main/recipes/command-palette",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/command-palette.md",
+      "source": "/microsoft-ui-reactor/main/recipes/command-palette.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/command-palette.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/command-palette.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/drag-reorder",
+      "source": "/microsoft-ui-reactor/main/recipes/drag-reorder",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/drag-reorder.md",
+      "source": "/microsoft-ui-reactor/main/recipes/drag-reorder.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/drag-reorder.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/drag-reorder.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/login",
+      "source": "/microsoft-ui-reactor/main/recipes/login",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/login.md",
+      "source": "/microsoft-ui-reactor/main/recipes/login.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/login.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/login.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/master-detail",
+      "source": "/microsoft-ui-reactor/main/recipes/master-detail",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/master-detail.md",
+      "source": "/microsoft-ui-reactor/main/recipes/master-detail.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/master-detail.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/master-detail.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/modal-dialog",
+      "source": "/microsoft-ui-reactor/main/recipes/modal-dialog",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/modal-dialog.md",
+      "source": "/microsoft-ui-reactor/main/recipes/modal-dialog.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/modal-dialog.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/modal-dialog.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/multi-step-form",
+      "source": "/microsoft-ui-reactor/main/recipes/multi-step-form",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/multi-step-form.md",
+      "source": "/microsoft-ui-reactor/main/recipes/multi-step-form.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/multi-step-form.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/multi-step-form.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/paginated-list",
+      "source": "/microsoft-ui-reactor/main/recipes/paginated-list",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/paginated-list.md",
+      "source": "/microsoft-ui-reactor/main/recipes/paginated-list.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/paginated-list.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/paginated-list.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/search-with-suggestions",
+      "source": "/microsoft-ui-reactor/main/recipes/search-with-suggestions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/search-with-suggestions.md",
+      "source": "/microsoft-ui-reactor/main/recipes/search-with-suggestions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/search-with-suggestions.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/search-with-suggestions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/settings-page",
+      "source": "/microsoft-ui-reactor/main/recipes/settings-page",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/settings-page.md",
+      "source": "/microsoft-ui-reactor/main/recipes/settings-page.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/recipes/settings-page.mdx",
+      "source": "/microsoft-ui-reactor/main/recipes/settings-page.mdx",
       "statusCode": 301
     },
     {
@@ -661,6 +931,546 @@
       "statusCode": 301
     },
     {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#announcehandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Announce",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#announcehandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#announcehandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/AnnounceRegionElement",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingscope",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/AnyLoading",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#resourceoptions",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/CacheKey",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#resourceoptions",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/CacheTime",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingscope",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Changed",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Clear",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCells",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/ComponentUseMemoCellsExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCells.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/ComponentUseMemoCellsExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCells.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/ComponentUseMemoCellsExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingscope",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Count",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/CursorFromPageIndex",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/CursorFromPageIndex.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/CursorFromPageIndex.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#announcehandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Customize",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#announcehandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Descriptor",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Error",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Fields",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/input#focus",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Focus",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusattached",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusAttached",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusField",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusFirst",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusManager",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard#focusmeta",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusMeta",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusNext",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusPrevious",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard#focustrap",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusTrap",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusTrapElementExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusTrapElementExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusTrapElementExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#focustraphandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/FocusTrapHandle",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#getfocus",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/GetFocus",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#ihookdispatcher",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/IHookDispatcher",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/InfiniteHookState",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/InfiniteHookState.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/InfiniteHookState.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#focustraphandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/IsActive",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/IsFirstField",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/IsLastField",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/IsPending",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/LastResult",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Mutation",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMutation",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/MutationHookState",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMutation.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/MutationHookState.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMutation.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/MutationHookState.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationoptionstinput-tresult",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/MutationOptions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/NotifyPending",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/NotifyPending.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/NotifyPending.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingcomponent",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/PendingComponent",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingfactory",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/PendingFactory",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingprops",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/PendingProps",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingscope",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/PendingScope",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#ihookdispatcher",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Post",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#resourceoptions",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/RefetchOnMount",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#resourceoptions",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/RefetchOnWindowFocus",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#announcehandle",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Region",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Register",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Reset",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseResource",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/ResourceHookState",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseResource.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/ResourceHookState.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseResource.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/ResourceHookState.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#resourceoptions",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/ResourceOptions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#resourceoptions",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/RetryCount",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/RunAsync",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/SetControl",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingscope",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/SetLoading",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/focus-helpers#focusmanager",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/SetSubmitHandler",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#resourceoptions",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/StaleTime",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/pending#pendingscope",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/Unregister",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseAnnounce",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseAnnounceExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseAnnounce.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseAnnounceExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseAnnounce.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseAnnounceExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/components/RenderContext",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseCommandState",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/components/RenderContext.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseCommandState.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/components/RenderContext.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseCommandState.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseElementFocus",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseElementFocusExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseElementFocus.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseElementFocusExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseElementFocus.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseElementFocusExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseElementRef",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseElementRefExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseElementRef.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseElementRefExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseElementRef.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseElementRefExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseFocus",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseFocusExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseFocus.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseFocusExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseFocus.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseFocusExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseFocusTrapExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseFocusTrapExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseFocusTrapExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResourceExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResourceExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResourceExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCells",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCells.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCells.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMutation",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseMutationExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMutation.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseMutationExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseMutation.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseMutationExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseResource",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseResourceExtensions",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseResource.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseResourceExtensions.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/UseResource.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseResourceExtensions.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/components/RenderContext",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseStateSetterByIndex",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/components/RenderContext.md",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseStateSetterByIndex.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/components/RenderContext.mdx",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/UseStateSetterByIndex.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/reference/hooks/hook-types#ihookdispatcher",
+      "source": "/microsoft-ui-reactor/main/reference/hooks/WindowsDispatcherHookDispatcher",
+      "statusCode": 301
+    },
+    {
       "destination": "/microsoft-ui-reactor/main/get-started/rules-of-reactor",
       "source": "/microsoft-ui-reactor/main/rules-of-reactor",
       "statusCode": 301
@@ -673,6 +1483,36 @@
     {
       "destination": "/microsoft-ui-reactor/main/get-started/rules-of-reactor.mdx",
       "source": "/microsoft-ui-reactor/main/rules-of-reactor.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/get-started/samples",
+      "source": "/microsoft-ui-reactor/main/samples",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/get-started/samples.md",
+      "source": "/microsoft-ui-reactor/main/samples.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/get-started/samples.mdx",
+      "source": "/microsoft-ui-reactor/main/samples.mdx",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/services",
+      "source": "/microsoft-ui-reactor/main/services",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/services.md",
+      "source": "/microsoft-ui-reactor/main/services.md",
+      "statusCode": 301
+    },
+    {
+      "destination": "/microsoft-ui-reactor/main/guides/services.mdx",
+      "source": "/microsoft-ui-reactor/main/services.mdx",
       "statusCode": 301
     },
     {
@@ -796,17 +1636,17 @@
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/vs-extension",
+      "destination": "/microsoft-ui-reactor/main/tools/vs-extension",
       "source": "/microsoft-ui-reactor/main/vs-extension",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/vs-extension.md",
+      "destination": "/microsoft-ui-reactor/main/tools/vs-extension.md",
       "source": "/microsoft-ui-reactor/main/vs-extension.md",
       "statusCode": 301
     },
     {
-      "destination": "/microsoft-ui-reactor/main/guides/vs-extension.mdx",
+      "destination": "/microsoft-ui-reactor/main/tools/vs-extension.mdx",
       "source": "/microsoft-ui-reactor/main/vs-extension.mdx",
       "statusCode": 301
     },

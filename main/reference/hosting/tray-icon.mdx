@@ -3,7 +3,7 @@ title: "Tray icon"
 description: "Types for an icon in the notification area."
 ---
 
-**Learn more:** [Windows](/microsoft-ui-reactor/main/guides/windows)
+**Learn more:** [Windows](/microsoft-ui-reactor/main/guides/windows), [Desktop integration](/microsoft-ui-reactor/main/guides/desktop-integration)
 
 ## `ReactorTrayIcon` [#reactortrayicon]
 

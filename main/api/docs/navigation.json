@@ -1,5 +1,10 @@
 {
-  "actions": [],
+  "actions": [
+    {
+      "href": "/changelog",
+      "label": "Changelog"
+    }
+  ],
   "cta": null,
   "featured": [],
   "root": "/",
@@ -7,16 +12,14 @@
     {
       "items": [
         {
-          "label": "Latest release",
-          "path": "https://microsoft.github.io/microsoft-ui-reactor/latest/"
-        },
-        {
-          "label": "Development (main)",
-          "path": "/"
+          "label": "main",
+          "path": "/",
+          "tag": "unreleased"
         },
         {
           "label": "0.1.0-preview.18",
-          "path": "https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/"
+          "path": "https://microsoft.github.io/microsoft-ui-reactor/latest/",
+          "tag": "latest"
         },
         {
           "label": "0.1.0-preview.17",
@@ -2288,6 +2291,63 @@
     {
       "children": [
         {
+          "description": "7 added, 9 changed and 15 fixed.",
+          "kind": "page",
+          "label": "0.1.0-preview.18",
+          "pageId": "filesystem:changelog/v0-1-0-preview-18.md",
+          "route": "/changelog/v0-1-0-preview-18"
+        },
+        {
+          "description": "21 added, 9 changed, 2 deprecated, 2 removed and 54 fixed.",
+          "kind": "page",
+          "label": "0.1.0-preview.17",
+          "pageId": "filesystem:changelog/v0-1-0-preview-17.md",
+          "route": "/changelog/v0-1-0-preview-17"
+        },
+        {
+          "description": "2 added, 49 changed, 1 removed and 7 fixed.",
+          "kind": "page",
+          "label": "0.1.0-preview.16",
+          "pageId": "filesystem:changelog/v0-1-0-preview-16.md",
+          "route": "/changelog/v0-1-0-preview-16"
+        },
+        {
+          "description": "3 added, 3 changed and 4 fixed.",
+          "kind": "page",
+          "label": "0.1.0-preview.15",
+          "pageId": "filesystem:changelog/v0-1-0-preview-15.md",
+          "route": "/changelog/v0-1-0-preview-15"
+        },
+        {
+          "description": "9 added, 13 changed and 11 fixed.",
+          "kind": "page",
+          "label": "0.1.0-preview.14",
+          "pageId": "filesystem:changelog/v0-1-0-preview-14.md",
+          "route": "/changelog/v0-1-0-preview-14"
+        },
+        {
+          "description": "10 added, 4 changed and 25 fixed.",
+          "kind": "page",
+          "label": "0.1.0-preview.13",
+          "pageId": "filesystem:changelog/v0-1-0-preview-13.md",
+          "route": "/changelog/v0-1-0-preview-13"
+        },
+        {
+          "description": "25 added, 6 changed, 1 deprecated, 3 removed and 16 fixed.",
+          "kind": "page",
+          "label": "0.1.0-preview.12",
+          "pageId": "filesystem:changelog/v0-1-0-preview-12.md",
+          "route": "/changelog/v0-1-0-preview-12"
+        }
+      ],
+      "display": "flat",
+      "kind": "group",
+      "label": "Changelog",
+      "path": "/changelog"
+    },
+    {
+      "children": [
+        {
           "description": "Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the return value of a factory like TextBlock(...) or Button(...) — a plain element you compose, chain modifiers onto, and return from Render().",
           "kind": "page",
           "label": "Controls catalog",
@@ -2360,39 +2420,46 @@
     {
       "children": [
         {
-          "description": "Microsoft.UI.Reactor (Reactor) is a declarative UI framework for building native Windows desktop apps in pure C#. No XAML. No data binding. No view models. You describe your UI as a function of state, and Reactor keeps the screen in sync.",
+          "description": "Build native Windows apps with WinUI, in plain C#.",
           "kind": "page",
           "label": "Overview",
           "pageId": "filesystem:get-started/index.md",
           "route": "/get-started"
         },
         {
-          "description": "Install Reactor, scaffold a project, and grow it from hello world to a todo list and a calculator.",
+          "description": "Set up your machine, create a Reactor project, and run it.",
           "kind": "page",
-          "label": "Quickstart",
-          "pageId": "filesystem:get-started/quickstart.md",
-          "route": "/get-started/quickstart"
+          "label": "Installation",
+          "pageId": "filesystem:get-started/install.mdx",
+          "route": "/get-started/install"
         },
         {
-          "description": "Coming soon — this page is the mental-model essay that frames Microsoft.UI.Reactor (Reactor) for new readers: UI as a function of state, why there is no XAML, when to reach for hooks, and how components compose.",
+          "description": "Build a Reactor app step by step, from a single line of text to a working todo list.",
+          "kind": "page",
+          "label": "Your first app",
+          "pageId": "filesystem:get-started/first-app.md",
+          "route": "/get-started/first-app"
+        },
+        {
+          "description": "Reactor asks you to think about UI in a new way. You don't create controls and then change them one property at a time. Instead, you write a function that describes what the screen should look like for the current state. When the state changes, Microsoft.UI.Reactor (Reactor) runs that function again and updates the real WinUI controls for you.",
           "kind": "page",
           "label": "Thinking in Reactor",
           "pageId": "filesystem:get-started/thinking-in-reactor.md",
           "route": "/get-started/thinking-in-reactor"
         },
         {
-          "description": "If you already know XAML, Reactor is not a different Windows UI stack. It still renders real WinUI controls. The shift is in how you describe the UI: instead of splitting a page across XAML, bindings, converters, and code-behind, you return the UI directly from C# and let Reactor keep the native control tree in sync.",
+          "description": "If you know XAML, you already know most of Reactor. Reactor renders the same WinUI controls, with the same layout panels, theme resources and input events. What changes is how you describe them.",
           "kind": "page",
           "label": "Coming from XAML",
           "pageId": "filesystem:get-started/xaml-developers.md",
           "route": "/get-started/xaml-developers"
         },
         {
-          "description": "This page is for the XAML developer who wants the why behind Reactor's design.",
+          "description": "The repository has more than 30 sample apps in its samples/ folder. Some are small and show one feature. Others are full apps with many components, real data and saved settings. Every sample is a normal .NET project that you start with dotnet run.",
           "kind": "page",
-          "label": "Reactor vs XAML",
-          "pageId": "filesystem:get-started/reactor-vs-xaml.md",
-          "route": "/get-started/reactor-vs-xaml"
+          "label": "Samples",
+          "pageId": "filesystem:get-started/samples.md",
+          "route": "/get-started/samples"
         },
         {
           "description": "Microsoft.UI.Reactor (Reactor) at a glance. Every row links to the page that covers it in depth.",
@@ -2548,6 +2615,13 @@
               "route": "/guides/docking"
             },
             {
+              "description": "A desktop app does more than draw inside its windows. It can put an icon in the notification area, show progress on its taskbar button, offer shortcuts in a jump list, and start when the user opens a file or a link. It also shows the standard file dialogs and moves data through the clipboard and drag and drop.",
+              "kind": "page",
+              "label": "Desktop integration",
+              "pageId": "filesystem:guides/03-(building-apps)/desktop-integration.md",
+              "route": "/guides/desktop-integration"
+            },
+            {
               "description": "Microsoft.UI.Reactor (Reactor)'s async hooks — UseResource, UseInfiniteResource, and UseMutation — replace the \"one UseState for data, one for loading, one for error, one UseEffect to tie them together\" pattern. They own the fetch lifecycle: cancellation on deps-change, drop late results after unmount, shared caching across siblings, and stale-while-revalidate by default.",
               "kind": "page",
               "label": "Async resources",
@@ -2560,6 +2634,13 @@
               "label": "Persistence",
               "pageId": "filesystem:guides/03-(building-apps)/persistence.md",
               "route": "/guides/persistence"
+            },
+            {
+              "description": "Most apps have code that is not UI: a data store, a settings file, an HTTP client, a clock, a logger. Components need to reach that code, and tests need to replace it with fakes.",
+              "kind": "page",
+              "label": "Services and DI",
+              "pageId": "filesystem:guides/03-(building-apps)/services.md",
+              "route": "/guides/services"
             }
           ],
           "display": "flat",
@@ -2598,11 +2679,18 @@
               "route": "/guides/performance"
             },
             {
-              "description": "A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable — dotnet publish produces the deployable artifact and the framework itself adds nothing exotic to the project file.",
+              "description": "A Microsoft.UI.Reactor (Reactor) app is a normal WinUI / Windows App SDK executable — dotnet publish produces the deployable artifact and the framework itself adds nothing exotic to the project file.",
               "kind": "page",
               "label": "Packaging",
               "pageId": "filesystem:guides/04-(ship-your-app)/packaging.md",
               "route": "/guides/packaging"
+            },
+            {
+              "description": "Native AOT compiles your app to native machine code when you publish it. The published app does not use a JIT compiler and does not load the .NET runtime host. Your code, Reactor and the .NET libraries you use become one native .exe.",
+              "kind": "page",
+              "label": "Native AOT",
+              "pageId": "filesystem:guides/04-(ship-your-app)/native-aot.md",
+              "route": "/guides/native-aot"
             }
           ],
           "display": "flat",
@@ -2613,31 +2701,81 @@
         {
           "children": [
             {
-              "description": "Reactor's inner loop centers on dotnet watch and preview mode: you edit code, save, and see changes in a running window — no manual restart, no state-resetting class reload most of the time.",
+              "description": "A recipe is a small composition of Microsoft.UI.Reactor (Reactor) primitives that solves a real UI problem — login, master-detail, settings, paginated list, modal confirmation, multi-step form, search-with-suggestions, command palette, drag-to-reorder. The recipes here are not exhaustive apps; each is a single screen showing the pattern, and each ships a tiny doc app you can clone and adapt.",
               "kind": "page",
-              "label": "Dev tooling",
-              "pageId": "filesystem:guides/05-(developer-tools)/dev-tooling.md",
-              "route": "/guides/dev-tooling"
+              "label": "All recipes",
+              "pageId": "filesystem:guides/05-recipes/index.md",
+              "route": "/guides/recipes"
             },
             {
-              "description": "The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2026 (18.x), with the Visual Studio extension development workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.",
+              "description": "A command palette is a filter-as-you-type list with a keyboard accelerator to open and Enter to execute. In Microsoft.UI.Reactor (Reactor) it's three UseState hooks, a static catalog of Command records, and an OnPreviewKeyDown handler — no menubar, no modal manager, no view model.",
               "kind": "page",
-              "label": "VS extension",
-              "pageId": "filesystem:guides/05-(developer-tools)/vs-extension.md",
-              "route": "/guides/vs-extension"
+              "label": "Command palette",
+              "pageId": "filesystem:guides/05-recipes/command-palette.md",
+              "route": "/guides/recipes/command-palette"
             },
             {
-              "description": "This page is about reading Reactor's diagnostics from a real app — not about adding new events.",
+              "description": "Drag-reorder is a UseState<List<T>> plus a function that splices one item from one index to another. Microsoft.UI.Reactor (Reactor)'s keyed reconciler does the rest — moves preserve identity, so the same row element keeps its focus, its hover state, and its place in the visual tree. Pointer drag is one entry point; an Alt+Up / Alt+Down keyboard shortcut is the second, and it carries the accessibility story.",
               "kind": "page",
-              "label": "Diagnostics",
-              "pageId": "filesystem:guides/05-(developer-tools)/diagnostics.md",
-              "route": "/guides/diagnostics"
+              "label": "Drag reorder",
+              "pageId": "filesystem:guides/05-recipes/drag-reorder.md",
+              "route": "/guides/recipes/drag-reorder"
+            },
+            {
+              "description": "A Microsoft.UI.Reactor (Reactor) login form is four pieces working together: validated input, submit-gated state, an async call, and an error-display surface. The recipe below wires them with two UseState hooks and one UseMutation — no view model, no event handler classes, and no hand-rolled submitting / error flags.",
+              "kind": "page",
+              "label": "Login",
+              "pageId": "filesystem:guides/05-recipes/login.md",
+              "route": "/guides/recipes/login"
+            },
+            {
+              "description": "Master-detail in Microsoft.UI.Reactor (Reactor) is the canonical multi-pane shape: a list of records on one side, the selected record's details on the other. The whole thing is one UseState for the selected id and two slots in an HStack.",
+              "kind": "page",
+              "label": "Master detail",
+              "pageId": "filesystem:guides/05-recipes/master-detail.md",
+              "route": "/guides/recipes/master-detail"
+            },
+            {
+              "description": "The modal is an element you return conditionally. There is no special \"open dialog\" API — when open is true the tree includes the modal panel layered over the page; when it's false the modal element is absent and the page renders alone.",
+              "kind": "page",
+              "label": "Modal dialog",
+              "pageId": "filesystem:guides/05-recipes/modal-dialog.md",
+              "route": "/guides/recipes/modal-dialog"
+            },
+            {
+              "description": "A wizard form is a step-index UseState plus a switch on which step renders. The field state lives in the same component as the step index, so moving forward and back never loses what the user typed — Microsoft.UI.Reactor (Reactor) doesn't unmount the surrounding component when the visible slot changes.",
+              "kind": "page",
+              "label": "Multi-step form",
+              "pageId": "filesystem:guides/05-recipes/multi-step-form.md",
+              "route": "/guides/recipes/multi-step-form"
+            },
+            {
+              "description": "A paginated list is four states sharing one source of truth: an initial load, a populated list, a \"load the next page\" affordance, and a terminal \"no more results.\" UseInfiniteResource owns all four in Microsoft.UI.Reactor (Reactor) — the component below pattern-matches on LoadState and reads Items directly; there is no local UseState for loading or errors.",
+              "kind": "page",
+              "label": "Paginated list",
+              "pageId": "filesystem:guides/05-recipes/paginated-list.md",
+              "route": "/guides/recipes/paginated-list"
+            },
+            {
+              "description": "The pattern is two slots: an input that owns the query string, and a dropdown that shows zero or more suggestions filtered against a catalog. UseMemo keys the filter on the query, so a re-render that didn't touch the query is free — important for the keyboard-up- arrow-down-arrow loop where the suggestion index changes but the query doesn't.",
+              "kind": "page",
+              "label": "Search with suggestions",
+              "pageId": "filesystem:guides/05-recipes/search-with-suggestions.md",
+              "route": "/guides/recipes/search-with-suggestions"
+            },
+            {
+              "description": "A settings page is many small persisted prefs side-by-side. Each preference is its own UsePersisted call with its own key — there's no central settings object that needs migration when one preference moves. The row layout is a single helper.",
+              "kind": "page",
+              "label": "Settings page",
+              "pageId": "filesystem:guides/05-recipes/settings-page.md",
+              "route": "/guides/recipes/settings-page"
             }
           ],
           "display": "flat",
           "kind": "group",
-          "label": "Developer tools",
-          "path": "/guides"
+          "label": "Recipes",
+          "path": "/guides/recipes",
+          "route": "/guides/recipes"
         },
         {
           "children": [
@@ -2836,81 +2974,91 @@
     {
       "children": [
         {
-          "description": "A recipe is a small composition of Microsoft.UI.Reactor (Reactor) primitives that solves a real UI problem — login, master-detail, settings, paginated list, modal confirmation, multi-step form, search-with-suggestions, command palette, drag-to-reorder. The recipes here are not exhaustive apps; each is a single screen showing the pattern, and each ships a tiny doc app you can clone and adapt.",
+          "description": "Reactor comes with tools for the inner dev loop: the short cycle where you change code, see the result, and fix what is wrong. This page walks that loop one stage at a time. Each stage links to a page with the full details.",
           "kind": "page",
-          "label": "Recipes",
-          "pageId": "filesystem:recipes/index.md",
-          "route": "/recipes"
+          "label": "Overview",
+          "pageId": "filesystem:tools/index.md",
+          "route": "/tools"
         },
         {
-          "description": "A command palette is a filter-as-you-type list with a keyboard accelerator to open and Enter to execute. In Microsoft.UI.Reactor (Reactor) it's three UseState hooks, a static catalog of Command records, and an OnPreviewKeyDown handler — no menubar, no modal manager, no view model.",
-          "kind": "page",
-          "label": "Command palette",
-          "pageId": "filesystem:recipes/command-palette.md",
-          "route": "/recipes/command-palette"
+          "children": [
+            {
+              "description": "Hot reload applies your code edits to a running app. You save a file, and the window updates in place. You keep the same process, the same window, and in most cases the same state. Reactor builds on .NET hot reload: dotnet watch sends the edit to the process, and Reactor re-renders every component against its existing hook state.",
+              "kind": "page",
+              "label": "Hot reload and live preview",
+              "pageId": "filesystem:tools/01-(inner-loop)/hot-reload.mdx",
+              "route": "/tools/hot-reload"
+            },
+            {
+              "description": "Devtools let you look inside a running Reactor app and control it. They come in the Microsoft.UI.Reactor.Devtools NuGet package, and they only work in a build where you turn them on.",
+              "kind": "page",
+              "label": "Devtools",
+              "pageId": "filesystem:tools/01-(inner-loop)/devtools.md",
+              "route": "/tools/devtools"
+            },
+            {
+              "description": "Reactor has two editor extensions. Both are named Reactor Preview, and both show your running app next to the code.",
+              "kind": "page",
+              "label": "Editor extensions",
+              "pageId": "filesystem:tools/01-(inner-loop)/vs-extension.mdx",
+              "route": "/tools/vs-extension"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Inner loop",
+          "path": "/tools"
         },
         {
-          "description": "Drag-reorder is a UseState<List<T>> plus a function that splices one item from one index to another. Microsoft.UI.Reactor (Reactor)'s keyed reconciler does the rest — moves preserve identity, so the same row element keeps its focus, its hover state, and its place in the visual tree. Pointer drag is one entry point; an Alt+Up / Alt+Down keyboard shortcut is the second, and it carries the accessibility story.",
-          "kind": "page",
-          "label": "Drag reorder",
-          "pageId": "filesystem:recipes/drag-reorder.md",
-          "route": "/recipes/drag-reorder"
+          "children": [
+            {
+              "description": "Reactor is a new framework, so AI models know little about it. Without help, an agent tends to invent API names or fall back to XAML, data binding, and view models. Reactor gives agents four kinds of help:",
+              "kind": "page",
+              "label": "Build with AI",
+              "pageId": "filesystem:tools/02-(ai)/build-with-ai.mdx",
+              "route": "/tools/build-with-ai"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "AI",
+          "path": "/tools"
         },
         {
-          "description": "A Microsoft.UI.Reactor (Reactor) login form is four pieces working together: validated input, submit-gated state, an async call, and an error-display surface. The recipe below wires them with two UseState hooks and one UseMutation — no view model, no event handler classes, and no hand-rolled submitting / error flags.",
-          "kind": "page",
-          "label": "Login",
-          "pageId": "filesystem:recipes/login.md",
-          "route": "/recipes/login"
-        },
-        {
-          "description": "Master-detail in Microsoft.UI.Reactor (Reactor) is the canonical multi-pane shape: a list of records on one side, the selected record's details on the other. The whole thing is one UseState for the selected id and two slots in an HStack.",
-          "kind": "page",
-          "label": "Master detail",
-          "pageId": "filesystem:recipes/master-detail.md",
-          "route": "/recipes/master-detail"
-        },
-        {
-          "description": "The modal is an element you return conditionally. There is no special \"open dialog\" API — when open is true the tree includes the modal panel layered over the page; when it's false the modal element is absent and the page renders alone.",
-          "kind": "page",
-          "label": "Modal dialog",
-          "pageId": "filesystem:recipes/modal-dialog.md",
-          "route": "/recipes/modal-dialog"
-        },
-        {
-          "description": "A wizard form is a step-index UseState plus a switch on which step renders. The field state lives in the same component as the step index, so moving forward and back never loses what the user typed — Microsoft.UI.Reactor (Reactor) doesn't unmount the surrounding component when the visible slot changes.",
-          "kind": "page",
-          "label": "Multi-step form",
-          "pageId": "filesystem:recipes/multi-step-form.md",
-          "route": "/recipes/multi-step-form"
-        },
-        {
-          "description": "A paginated list is four states sharing one source of truth: an initial load, a populated list, a \"load the next page\" affordance, and a terminal \"no more results.\" UseInfiniteResource owns all four in Microsoft.UI.Reactor (Reactor) — the component below pattern-matches on LoadState and reads Items directly; there is no local UseState for loading or errors.",
-          "kind": "page",
-          "label": "Paginated list",
-          "pageId": "filesystem:recipes/paginated-list.md",
-          "route": "/recipes/paginated-list"
-        },
-        {
-          "description": "The pattern is two slots: an input that owns the query string, and a dropdown that shows zero or more suggestions filtered against a catalog. UseMemo keys the filter on the query, so a re-render that didn't touch the query is free — important for the keyboard-up- arrow-down-arrow loop where the suggestion index changes but the query doesn't.",
-          "kind": "page",
-          "label": "Search with suggestions",
-          "pageId": "filesystem:recipes/search-with-suggestions.md",
-          "route": "/recipes/search-with-suggestions"
-        },
-        {
-          "description": "A settings page is many small persisted prefs side-by-side. Each preference is its own UsePersisted call with its own key — there's no central settings object that needs migration when one preference moves. The row layout is a single helper.",
-          "kind": "page",
-          "label": "Settings page",
-          "pageId": "filesystem:recipes/settings-page.md",
-          "route": "/recipes/settings-page"
+          "children": [
+            {
+              "description": "Reactor ships a set of Roslyn analyzers that catch common mistakes while you write code: a hook inside an if, a list item with no key, a hard-coded color, an icon button with no name for screen readers. Each rule has an ID that starts with REACTOR. Many rules also have a code fix that rewrites the code for you.",
+              "kind": "page",
+              "label": "Analyzers",
+              "pageId": "filesystem:tools/03-(code-quality)/analyzers.md",
+              "route": "/tools/analyzers"
+            },
+            {
+              "description": "mur is the Reactor command-line tool. It checks your code with fix hints, starts and drives devtools sessions, manages localization files, prints the API index for AI agents, and keeps a source checkout of Reactor up to date. Run mur --help to see the list of commands, and mur --version to see which version you have.",
+              "kind": "page",
+              "label": "mur CLI",
+              "pageId": "filesystem:tools/03-(code-quality)/mur-cli.md",
+              "route": "/tools/mur-cli"
+            },
+            {
+              "description": "This page shows how to read Reactor's diagnostics from a running app, including a Release build.",
+              "kind": "page",
+              "label": "Diagnostics",
+              "pageId": "filesystem:tools/03-(code-quality)/diagnostics.md",
+              "route": "/tools/diagnostics"
+            }
+          ],
+          "display": "flat",
+          "kind": "group",
+          "label": "Code quality",
+          "path": "/tools"
         }
       ],
       "display": "flat",
       "kind": "group",
-      "label": "Recipes",
-      "path": "/recipes",
-      "route": "/recipes"
+      "label": "Tools",
+      "path": "/tools",
+      "route": "/tools"
     }
   ],
   "tabs": [
@@ -2932,8 +3080,8 @@
       "path": "/controls"
     },
     {
-      "label": "Recipes",
-      "path": "/recipes"
+      "label": "Tools",
+      "path": "/tools"
     },
     {
       "label": "API reference",

@@ -42,7 +42,7 @@ Doc apps inherit `Reactor.DevtoolsSupport=true` from `docs/_pipeline/apps/Direct
 | `UseFocusTrap(isActive)` | `FocusTrapHandle` | Trap Tab inside a sub-tree. |
 | `UseAnnounce()` | `AnnounceHandle` | Push a screen-reader announcement (via `.Announce(string)` method). |
 | `UseElementRef<T>()` | `ElementRef<T>` | Reference a realized element for focus, `TeachingTip.Target`, UIA relationships, or XYFocus. |
-| `UseDevtools()` | `bool` | [Dev-tooling](/microsoft-ui-reactor/main/guides/dev-tooling) gate — true when devtools are enabled. |
+| `UseDevtools()` | `bool` | [Dev-tooling](/microsoft-ui-reactor/main/tools) gate — true when devtools are enabled. |
 
 ```csharp
 class StateVignette : Component
@@ -166,7 +166,7 @@ Reactor calls it before the next run (when deps change) and on unmount.
 out of the tree when `cond` is false; in a container with no keyed
 children it still holds its slot, so the siblings after it keep their
 state — see the
-[modal-dialog recipe](/microsoft-ui-reactor/main/recipes/modal-dialog).
+[modal-dialog recipe](/microsoft-ui-reactor/main/guides/recipes/modal-dialog).
 
 **List with stable keys.** `ForEach(items, x => Card(x).WithKey(x.Id))`
 so the reconciler can move rows rather than rebuild them.
@@ -200,7 +200,7 @@ Five rules cover most analyzer findings (full list on
 
 **Skim the cheat sheet, then jump.** Each row is a one-liner; the
 deep-dive page is one click away. Don't try to learn Reactor from
-this page — learn it from [getting-started](/microsoft-ui-reactor/main/get-started/quickstart) and
+this page — learn it from [getting-started](/microsoft-ui-reactor/main/get-started/first-app) and
 [components](/microsoft-ui-reactor/main/guides/components), and use this card as the recall surface.
 
 **Bookmark the modifier table.** Modifier chains are the easiest thing
@@ -212,7 +212,7 @@ recipes are the working compositions; the cheat sheet is the catalog.
 
 ## Next Steps [#next-steps]
 
-- **[Getting Started](/microsoft-ui-reactor/main/get-started/quickstart)** — Hello world walkthrough.
+- **[Getting Started](/microsoft-ui-reactor/main/get-started/first-app)** — Hello world walkthrough.
 - **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — Hook-by-hook deep dive.
 - **[Controls](/microsoft-ui-reactor/main/controls)** — Full control catalog.
 - **[Styling](/microsoft-ui-reactor/main/guides/styling)** — Modifiers in detail.

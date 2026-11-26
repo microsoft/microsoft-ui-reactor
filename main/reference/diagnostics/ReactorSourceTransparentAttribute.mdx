@@ -17,7 +17,7 @@ public sealed class ReactorSourceTransparentAttribute : Attribute
 
 Namespace: `Microsoft.UI.Reactor.Diagnostics`. Inherits from [`Attribute`](https://learn.microsoft.com/dotnet/api/system.attribute).
 
-**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics)
+**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics)
 
 ## Remarks [#remarks]
 

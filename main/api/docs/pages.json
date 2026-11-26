@@ -1,7 +1,84 @@
 {
-  "count": 358,
+  "count": 374,
   "generator": "blume@2.2.7",
   "pages": [
+    {
+      "contentType": "changelog",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/changelog/v0-1-0-preview-12.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12.md",
+      "route": "/changelog/v0-1-0-preview-12",
+      "title": "0.1.0-preview.12",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-12",
+      "description": "25 added, 6 changed, 1 deprecated, 3 removed and 16 fixed."
+    },
+    {
+      "contentType": "changelog",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/changelog/v0-1-0-preview-13.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-13.md",
+      "route": "/changelog/v0-1-0-preview-13",
+      "title": "0.1.0-preview.13",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-13",
+      "description": "10 added, 4 changed and 25 fixed."
+    },
+    {
+      "contentType": "changelog",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/changelog/v0-1-0-preview-14.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-14.md",
+      "route": "/changelog/v0-1-0-preview-14",
+      "title": "0.1.0-preview.14",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-14",
+      "description": "9 added, 13 changed and 11 fixed."
+    },
+    {
+      "contentType": "changelog",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/changelog/v0-1-0-preview-15.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-15.md",
+      "route": "/changelog/v0-1-0-preview-15",
+      "title": "0.1.0-preview.15",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-15",
+      "description": "3 added, 3 changed and 4 fixed."
+    },
+    {
+      "contentType": "changelog",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/changelog/v0-1-0-preview-16.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-16.md",
+      "route": "/changelog/v0-1-0-preview-16",
+      "title": "0.1.0-preview.16",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-16",
+      "description": "2 added, 49 changed, 1 removed and 7 fixed."
+    },
+    {
+      "contentType": "changelog",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/changelog/v0-1-0-preview-17.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-17.md",
+      "route": "/changelog/v0-1-0-preview-17",
+      "title": "0.1.0-preview.17",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-17",
+      "description": "21 added, 9 changed, 2 deprecated, 2 removed and 54 fixed."
+    },
+    {
+      "contentType": "changelog",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/changelog/v0-1-0-preview-18.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-18.md",
+      "route": "/changelog/v0-1-0-preview-18",
+      "title": "0.1.0-preview.18",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/changelog/v0-1-0-preview-18",
+      "description": "7 added, 9 changed and 15 fixed."
+    },
     {
       "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/controls.json",
@@ -108,9 +185,9 @@
       "locale": "",
       "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started.md",
       "route": "/get-started",
-      "title": "Reactor",
+      "title": "Overview",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started",
-      "description": "Microsoft.UI.Reactor (Reactor) is a declarative UI framework for building native Windows desktop apps in pure C#. No XAML. No data binding. No view models. You describe your UI as a function of state, and Reactor keeps the screen in sync."
+      "description": "Build native Windows apps with WinUI, in plain C#."
     },
     {
       "contentType": "doc",
@@ -125,25 +202,25 @@
     },
     {
       "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/get-started/quickstart.json",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/get-started/first-app.json",
       "lastModified": null,
       "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/quickstart.md",
-      "route": "/get-started/quickstart",
-      "title": "Getting Started with Reactor",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/quickstart",
-      "description": "Install Reactor, scaffold a project, and grow it from hello world to a todo list and a calculator."
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/first-app.md",
+      "route": "/get-started/first-app",
+      "title": "Your first app",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/first-app",
+      "description": "Build a Reactor app step by step, from a single line of text to a working todo list."
     },
     {
       "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/get-started/reactor-vs-xaml.json",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/get-started/install.json",
       "lastModified": null,
       "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/reactor-vs-xaml.md",
-      "route": "/get-started/reactor-vs-xaml",
-      "title": "Reactor vs XAML",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/reactor-vs-xaml",
-      "description": "This page is for the XAML developer who wants the why behind Reactor's design."
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/install.md",
+      "route": "/get-started/install",
+      "title": "Installation",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/install",
+      "description": "Set up your machine, create a Reactor project, and run it."
     },
     {
       "contentType": "doc",
@@ -158,6 +235,17 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/get-started/samples.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/samples.md",
+      "route": "/get-started/samples",
+      "title": "Samples",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/samples",
+      "description": "The repository has more than 30 sample apps in its samples/ folder. Some are small and show one feature. Others are full apps with many components, real data and saved settings. Every sample is a normal .NET project that you start with dotnet run."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/get-started/thinking-in-reactor.json",
       "lastModified": null,
       "locale": "",
@@ -165,7 +253,7 @@
       "route": "/get-started/thinking-in-reactor",
       "title": "Thinking in Reactor",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/thinking-in-reactor",
-      "description": "Coming soon — this page is the mental-model essay that frames Microsoft.UI.Reactor (Reactor) for new readers: UI as a function of state, why there is no XAML, when to reach for hooks, and how components compose."
+      "description": "Reactor asks you to think about UI in a new way. You don't create controls and then change them one property at a time. Instead, you write a function that describes what the screen should look like for the current state. When the state changes, Microsoft.UI.Reactor (Reactor) runs that function again and updates the real WinUI controls for you."
     },
     {
       "contentType": "doc",
@@ -174,9 +262,9 @@
       "locale": "",
       "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/xaml-developers.md",
       "route": "/get-started/xaml-developers",
-      "title": "Reactor for XAML Developers",
+      "title": "Coming from XAML",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/get-started/xaml-developers",
-      "description": "If you already know XAML, Reactor is not a different Windows UI stack. It still renders real WinUI controls. The shift is in how you describe the UI: instead of splitting a page across XAML, bindings, converters, and code-behind, you return the UI directly from C# and let Reactor keep the native control tree in sync."
+      "description": "If you know XAML, you already know most of Reactor. Reactor renders the same WinUI controls, with the same layout panels, theme resources and input events. What changes is how you describe them."
     },
     {
       "contentType": "doc",
@@ -257,25 +345,14 @@
     },
     {
       "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/dev-tooling.json",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/desktop-integration.json",
       "lastModified": null,
       "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/dev-tooling.md",
-      "route": "/guides/dev-tooling",
-      "title": "Dev Tooling",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/dev-tooling",
-      "description": "Reactor's inner loop centers on dotnet watch and preview mode: you edit code, save, and see changes in a running window — no manual restart, no state-resetting class reload most of the time."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/diagnostics.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/diagnostics.md",
-      "route": "/guides/diagnostics",
-      "title": "Diagnostics",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/diagnostics",
-      "description": "This page is about reading Reactor's diagnostics from a real app — not about adding new events."
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/desktop-integration.md",
+      "route": "/guides/desktop-integration",
+      "title": "Desktop integration",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/desktop-integration",
+      "description": "A desktop app does more than draw inside its windows. It can put an icon in the notification area, show progress on its taskbar button, offer shortcuts in a jump list, and start when the user opens a file or a link. It also shows the standard file dialogs and moves data through the clipboard and drag and drop."
     },
     {
       "contentType": "doc",
@@ -356,6 +433,17 @@
     },
     {
       "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/native-aot.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/native-aot.md",
+      "route": "/guides/native-aot",
+      "title": "Native AOT",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/native-aot",
+      "description": "Native AOT compiles your app to native machine code when you publish it. The published app does not use a JIT compiler and does not load the .NET runtime host. Your code, Reactor and the .NET libraries you use become one native .exe."
+    },
+    {
+      "contentType": "doc",
       "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/navigation.json",
       "lastModified": null,
       "locale": "",
@@ -385,7 +473,7 @@
       "route": "/guides/packaging",
       "title": "Packaging",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/packaging",
-      "description": "A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable — dotnet publish produces the deployable artifact and the framework itself adds nothing exotic to the project file."
+      "description": "A Microsoft.UI.Reactor (Reactor) app is a normal WinUI / Windows App SDK executable — dotnet publish produces the deployable artifact and the framework itself adds nothing exotic to the project file."
     },
     {
       "contentType": "doc",
@@ -408,6 +496,127 @@
       "title": "Persistence",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/persistence",
       "description": "UsePersisted holds a value past a component re-mount — the user navigates away, the component unmounts, the user navigates back, and the captured state is still there."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes.md",
+      "route": "/guides/recipes",
+      "title": "Recipes",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes",
+      "description": "A recipe is a small composition of Microsoft.UI.Reactor (Reactor) primitives that solves a real UI problem — login, master-detail, settings, paginated list, modal confirmation, multi-step form, search-with-suggestions, command palette, drag-to-reorder. The recipes here are not exhaustive apps; each is a single screen showing the pattern, and each ships a tiny doc app you can clone and adapt."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/command-palette.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/command-palette.md",
+      "route": "/guides/recipes/command-palette",
+      "title": "Recipe: Command Palette",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/command-palette",
+      "description": "A command palette is a filter-as-you-type list with a keyboard accelerator to open and Enter to execute. In Microsoft.UI.Reactor (Reactor) it's three UseState hooks, a static catalog of Command records, and an OnPreviewKeyDown handler — no menubar, no modal manager, no view model."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/drag-reorder.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/drag-reorder.md",
+      "route": "/guides/recipes/drag-reorder",
+      "title": "Recipe: Drag to Reorder",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/drag-reorder",
+      "description": "Drag-reorder is a UseState<List<T>> plus a function that splices one item from one index to another. Microsoft.UI.Reactor (Reactor)'s keyed reconciler does the rest — moves preserve identity, so the same row element keeps its focus, its hover state, and its place in the visual tree. Pointer drag is one entry point; an Alt+Up / Alt+Down keyboard shortcut is the second, and it carries the accessibility story."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/login.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/login.md",
+      "route": "/guides/recipes/login",
+      "title": "Recipe: Login",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/login",
+      "description": "A Microsoft.UI.Reactor (Reactor) login form is four pieces working together: validated input, submit-gated state, an async call, and an error-display surface. The recipe below wires them with two UseState hooks and one UseMutation — no view model, no event handler classes, and no hand-rolled submitting / error flags."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/master-detail.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/master-detail.md",
+      "route": "/guides/recipes/master-detail",
+      "title": "Recipe: Master-detail",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/master-detail",
+      "description": "Master-detail in Microsoft.UI.Reactor (Reactor) is the canonical multi-pane shape: a list of records on one side, the selected record's details on the other. The whole thing is one UseState for the selected id and two slots in an HStack."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/modal-dialog.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/modal-dialog.md",
+      "route": "/guides/recipes/modal-dialog",
+      "title": "Recipe: Modal dialog",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/modal-dialog",
+      "description": "The modal is an element you return conditionally. There is no special \"open dialog\" API — when open is true the tree includes the modal panel layered over the page; when it's false the modal element is absent and the page renders alone."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/multi-step-form.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/multi-step-form.md",
+      "route": "/guides/recipes/multi-step-form",
+      "title": "Recipe: Multi-Step Form",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/multi-step-form",
+      "description": "A wizard form is a step-index UseState plus a switch on which step renders. The field state lives in the same component as the step index, so moving forward and back never loses what the user typed — Microsoft.UI.Reactor (Reactor) doesn't unmount the surrounding component when the visible slot changes."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/paginated-list.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/paginated-list.md",
+      "route": "/guides/recipes/paginated-list",
+      "title": "Recipe: Paginated List",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/paginated-list",
+      "description": "A paginated list is four states sharing one source of truth: an initial load, a populated list, a \"load the next page\" affordance, and a terminal \"no more results.\" UseInfiniteResource owns all four in Microsoft.UI.Reactor (Reactor) — the component below pattern-matches on LoadState and reads Items directly; there is no local UseState for loading or errors."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/search-with-suggestions.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/search-with-suggestions.md",
+      "route": "/guides/recipes/search-with-suggestions",
+      "title": "Recipe: Search with suggestions",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/search-with-suggestions",
+      "description": "The pattern is two slots: an input that owns the query string, and a dropdown that shows zero or more suggestions filtered against a catalog. UseMemo keys the filter on the query, so a re-render that didn't touch the query is free — important for the keyboard-up- arrow-down-arrow loop where the suggestion index changes but the query doesn't."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/recipes/settings-page.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/settings-page.md",
+      "route": "/guides/recipes/settings-page",
+      "title": "Recipe: Settings page",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/recipes/settings-page",
+      "description": "A settings page is many small persisted prefs side-by-side. Each preference is its own UsePersisted call with its own key — there's no central settings object that needs migration when one preference moves. The row layout is a single helper."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/services.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/services.md",
+      "route": "/guides/services",
+      "title": "Services and dependency injection",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/services",
+      "description": "Most apps have code that is not UI: a data store, a settings file, an HTTP client, a clock, a logger. Components need to reach that code, and tests need to replace it with fakes."
     },
     {
       "contentType": "doc",
@@ -441,17 +650,6 @@
       "title": "Theming Tokens",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/theming-tokens",
       "description": "Reactor exposes 36 named theme tokens on the static Theme class plus a Theme.Ref(string) escape hatch for any XAML resource key."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/guides/vs-extension.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/vs-extension.md",
-      "route": "/guides/vs-extension",
-      "title": "Visual Studio Embedded Preview",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/guides/vs-extension",
-      "description": "The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2026 (18.x), with the Visual Studio extension development workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app."
     },
     {
       "contentType": "doc",
@@ -683,116 +881,6 @@
       "title": "Threading and Dispatch",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch",
       "description": "Microsoft.UI.Reactor (Reactor) has one UI thread invariant: the reconciler, every hook setter, and every WinUI property write must happen on the thread that captured the dispatcher at app bootstrap."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes.md",
-      "route": "/recipes",
-      "title": "Recipes",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes",
-      "description": "A recipe is a small composition of Microsoft.UI.Reactor (Reactor) primitives that solves a real UI problem — login, master-detail, settings, paginated list, modal confirmation, multi-step form, search-with-suggestions, command palette, drag-to-reorder. The recipes here are not exhaustive apps; each is a single screen showing the pattern, and each ships a tiny doc app you can clone and adapt."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/command-palette.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/command-palette.md",
-      "route": "/recipes/command-palette",
-      "title": "Recipe: Command Palette",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/command-palette",
-      "description": "A command palette is a filter-as-you-type list with a keyboard accelerator to open and Enter to execute. In Microsoft.UI.Reactor (Reactor) it's three UseState hooks, a static catalog of Command records, and an OnPreviewKeyDown handler — no menubar, no modal manager, no view model."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/drag-reorder.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/drag-reorder.md",
-      "route": "/recipes/drag-reorder",
-      "title": "Recipe: Drag to Reorder",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/drag-reorder",
-      "description": "Drag-reorder is a UseState<List<T>> plus a function that splices one item from one index to another. Microsoft.UI.Reactor (Reactor)'s keyed reconciler does the rest — moves preserve identity, so the same row element keeps its focus, its hover state, and its place in the visual tree. Pointer drag is one entry point; an Alt+Up / Alt+Down keyboard shortcut is the second, and it carries the accessibility story."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/login.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/login.md",
-      "route": "/recipes/login",
-      "title": "Recipe: Login",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/login",
-      "description": "A Microsoft.UI.Reactor (Reactor) login form is four pieces working together: validated input, submit-gated state, an async call, and an error-display surface. The recipe below wires them with two UseState hooks and one UseMutation — no view model, no event handler classes, and no hand-rolled submitting / error flags."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/master-detail.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/master-detail.md",
-      "route": "/recipes/master-detail",
-      "title": "Recipe: Master-detail",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/master-detail",
-      "description": "Master-detail in Microsoft.UI.Reactor (Reactor) is the canonical multi-pane shape: a list of records on one side, the selected record's details on the other. The whole thing is one UseState for the selected id and two slots in an HStack."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/modal-dialog.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/modal-dialog.md",
-      "route": "/recipes/modal-dialog",
-      "title": "Recipe: Modal dialog",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/modal-dialog",
-      "description": "The modal is an element you return conditionally. There is no special \"open dialog\" API — when open is true the tree includes the modal panel layered over the page; when it's false the modal element is absent and the page renders alone."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/multi-step-form.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/multi-step-form.md",
-      "route": "/recipes/multi-step-form",
-      "title": "Recipe: Multi-Step Form",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/multi-step-form",
-      "description": "A wizard form is a step-index UseState plus a switch on which step renders. The field state lives in the same component as the step index, so moving forward and back never loses what the user typed — Microsoft.UI.Reactor (Reactor) doesn't unmount the surrounding component when the visible slot changes."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/paginated-list.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/paginated-list.md",
-      "route": "/recipes/paginated-list",
-      "title": "Recipe: Paginated List",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/paginated-list",
-      "description": "A paginated list is four states sharing one source of truth: an initial load, a populated list, a \"load the next page\" affordance, and a terminal \"no more results.\" UseInfiniteResource owns all four in Microsoft.UI.Reactor (Reactor) — the component below pattern-matches on LoadState and reads Items directly; there is no local UseState for loading or errors."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/search-with-suggestions.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/search-with-suggestions.md",
-      "route": "/recipes/search-with-suggestions",
-      "title": "Recipe: Search with suggestions",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/search-with-suggestions",
-      "description": "The pattern is two slots: an input that owns the query string, and a dropdown that shows zero or more suggestions filtered against a catalog. UseMemo keys the filter on the query, so a re-render that didn't touch the query is free — important for the keyboard-up- arrow-down-arrow loop where the suggestion index changes but the query doesn't."
-    },
-    {
-      "contentType": "doc",
-      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/recipes/settings-page.json",
-      "lastModified": null,
-      "locale": "",
-      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/settings-page.md",
-      "route": "/recipes/settings-page",
-      "title": "Recipe: Settings page",
-      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/recipes/settings-page",
-      "description": "A settings page is many small persisted prefs side-by-side. Each preference is its own UsePersisted call with its own key — there's no central settings object that needs migration when one preference moves. The row layout is a single helper."
     },
     {
       "contentType": "doc",
@@ -3883,6 +3971,94 @@
       "title": "ValidationRuleDsl",
       "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationRuleDsl",
       "description": "DSL factory methods for ValidationRule elements."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools.md",
+      "route": "/tools",
+      "title": "Developer tools",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools",
+      "description": "Reactor comes with tools for the inner dev loop: the short cycle where you change code, see the result, and fix what is wrong. This page walks that loop one stage at a time. Each stage links to a page with the full details."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools/analyzers.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/analyzers.md",
+      "route": "/tools/analyzers",
+      "title": "Analyzers",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/analyzers",
+      "description": "Reactor ships a set of Roslyn analyzers that catch common mistakes while you write code: a hook inside an if, a list item with no key, a hard-coded color, an icon button with no name for screen readers. Each rule has an ID that starts with REACTOR. Many rules also have a code fix that rewrites the code for you."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools/build-with-ai.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/build-with-ai.md",
+      "route": "/tools/build-with-ai",
+      "title": "Build with AI",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/build-with-ai",
+      "description": "Reactor is a new framework, so AI models know little about it. Without help, an agent tends to invent API names or fall back to XAML, data binding, and view models. Reactor gives agents four kinds of help:"
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools/devtools.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/devtools.md",
+      "route": "/tools/devtools",
+      "title": "Devtools",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/devtools",
+      "description": "Devtools let you look inside a running Reactor app and control it. They come in the Microsoft.UI.Reactor.Devtools NuGet package, and they only work in a build where you turn them on."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools/diagnostics.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/diagnostics.md",
+      "route": "/tools/diagnostics",
+      "title": "Diagnostics",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/diagnostics",
+      "description": "This page shows how to read Reactor's diagnostics from a running app, including a Release build."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools/hot-reload.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/hot-reload.md",
+      "route": "/tools/hot-reload",
+      "title": "Hot reload and live preview",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/hot-reload",
+      "description": "Hot reload applies your code edits to a running app. You save a file, and the window updates in place. You keep the same process, the same window, and in most cases the same state. Reactor builds on .NET hot reload: dotnet watch sends the edit to the process, and Reactor re-renders every component against its existing hook state."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools/mur-cli.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/mur-cli.md",
+      "route": "/tools/mur-cli",
+      "title": "mur CLI",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/mur-cli",
+      "description": "mur is the Reactor command-line tool. It checks your code with fix hints, starts and drives devtools sessions, manages localization files, prints the API index for AI agents, and keeps a source checkout of Reactor up to date. Run mur --help to see the list of commands, and mur --version to see which version you have."
+    },
+    {
+      "contentType": "doc",
+      "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/tools/vs-extension.json",
+      "lastModified": null,
+      "locale": "",
+      "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/vs-extension.md",
+      "route": "/tools/vs-extension",
+      "title": "Visual Studio and VS Code extensions",
+      "url": "https://microsoft.github.io/microsoft-ui-reactor/main/tools/vs-extension",
+      "description": "Reactor has two editor extensions. Both are named Reactor Preview, and both show your running app next to the code."
     }
   ],
   "site": "https://microsoft.github.io"

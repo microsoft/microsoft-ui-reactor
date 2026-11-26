@@ -20,7 +20,7 @@ public static class ReactorTrace
 
 Namespace: `Microsoft.UI.Reactor.Diagnostics`.
 
-**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics)
+**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics)
 
 ## Methods [#methods]
 

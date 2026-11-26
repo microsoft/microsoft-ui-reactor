@@ -952,7 +952,7 @@ and reject the navigation when the user tries to leave with pending
 edits. Prompt the user with a [`ContentDialog`](/microsoft-ui-reactor/main/controls/dialogs-and-flyouts);
 if they choose Discard, set `dirty = false` and call `nav.GoBack()`
 again — the second call sees a clean form and succeeds. The recipe at
-[`recipes/multi-step-form`](/microsoft-ui-reactor/main/recipes/multi-step-form) wires the same
+[`recipes/multi-step-form`](/microsoft-ui-reactor/main/guides/recipes/multi-step-form) wires the same
 shape across a wizard.
 
 ### Restoring scroll position per route [#restoring-scroll-position-per-route]

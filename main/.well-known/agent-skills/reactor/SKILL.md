@@ -15,6 +15,7 @@ This skill points you at the Reactor docs, at https://microsoft.github.io/micros
 - [llms.txt](https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt): every page with a one-line summary.
 - [llms-full.txt](https://microsoft.github.io/microsoft-ui-reactor/main/llms-full.txt): every page in one file, for when you need all of it.
 - [JSON API](https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages.json): the page index, with each page as JSON and Markdown.
+- [Changelog](https://microsoft.github.io/microsoft-ui-reactor/main/changelog.md): release notes, newest first.
 
 ## Pages
 
@@ -299,4 +300,4 @@ This skill points you at the Reactor docs, at https://microsoft.github.io/micros
 - [NavigateOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigateOptions.md): Options for a single navigation action.
 - [NavigationEventArgs<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationEventArgs.md): Event args fired after a successful navigation.
 
-…and 158 more. [llms.txt](https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt) lists every page.
+…and 167 more. [llms.txt](https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt) lists every page.

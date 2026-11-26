@@ -1,0 +1,473 @@
+---
+title: "Installation"
+description: "Set up your machine, create a Reactor project, and run it."
+---
+
+This page takes you from a clean Windows machine to a running
+Microsoft.UI.Reactor (Reactor) app in about five minutes. You need the .NET
+SDK and, for packaged apps, Developer Mode. You do not need to clone the
+Reactor repository: the package is on NuGet.org, and the project templates
+ship in the Windows App SDK template pack.
+
+> **Public preview.** `Microsoft.UI.Reactor` 0.1.0-preview.18 is on
+> NuGet.org. The project templates ship in the official Windows App SDK
+> `dotnet new` pack (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`).
+> Broader signed distribution is tracked in
+> [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md).
+
+## Requirements [#requirements]
+
+| Requirement | Why you need it | How to check |
+|---|---|---|
+| Windows 10 version 1809 (build 17763) or later, or Windows 11 | The oldest Windows version Reactor supports. | Run `winver`. |
+| .NET 10 SDK or later | Reactor targets `net10.0-windows10.0.22621.0`. Single-file apps (`dotnet run app.cs`) are also a .NET 10 feature. | Run `dotnet --list-sdks` and look for a line that starts with `10.` or higher. |
+| Windows App Runtime 2.x | Apps are framework-dependent by default, so they load the runtime that is installed on the machine. | Run `winget list --id Microsoft.WindowsAppRuntime.2`. |
+| Developer Mode | Needed to run **packaged** apps with `dotnet run`. Unpackaged apps do not need it. | Settings → System → For developers. |
+| An editor (optional) | The `dotnet` CLI is enough to build and run an app. | See [Choose an editor](#choose-an-editor). |
+
+If the Windows App Runtime is missing, install it with
+`winget install Microsoft.WindowsAppRuntime.2`. This one winget package
+covers every 2.x release, so if an older 2.x runtime is installed, update it
+with `winget upgrade Microsoft.WindowsAppRuntime.2`.
+
+You do not need Visual Studio workloads or a separate Windows App SDK
+install. NuGet restore brings in the Windows App SDK packages and build tools.
+
+## Create a project [#create-a-project]
+
+Use the `winapp` CLI, plain `dotnet new`, or a coding agent. Each way gives you
+the same project.
+
+<Tabs>
+
+<Tab title={"winapp"} id={"winapp"}>
+
+The fastest way is the WinApp CLI, `winapp`.
+
+<Steps>
+
+<Step title={"Install winapp"}>
+
+```powershell
+winget install Microsoft.WinAppCli
+```
+
+</Step>
+
+<Step title={"Create the project"}>
+
+```powershell
+winapp new -t reactor -n MyApp
+```
+
+`winapp new` installs the template pack the first time you use it, and
+offers to update a stale one. There is no separate install step and no
+version to pin. `winapp new --list` prints all templates. If you leave out
+`-t`, it asks you to pick one.
+
+</Step>
+
+<Step title={"Run it"}>
+
+```powershell
+cd MyApp
+dotnet run
+```
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title={"dotnet new"} id={"dotnet-new"}>
+
+If you prefer plain .NET tooling, install the template pack yourself.
+
+<Steps>
+
+<Step title={"Install the template pack"}>
+
+```powershell
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
+```
+
+The pack is prerelease-only today. `dotnet new install` picks only stable
+versions unless you pin one, so the `::<version>` part is required. This is
+the step that `winapp new` does for you.
+
+</Step>
+
+<Step title={"Create the project"}>
+
+```powershell
+dotnet new reactor -n MyApp
+```
+
+</Step>
+
+<Step title={"Run it"}>
+
+```powershell
+cd MyApp
+dotnet run
+```
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title={"With an agent"} id={"with-an-agent"}>
+
+Give this prompt to GitHub Copilot, Claude Code, or another coding agent. It
+points the agent at these docs first, so it uses the real API. To give the
+agent the Reactor skills too, see [Build with AI](/microsoft-ui-reactor/main/tools/build-with-ai).
+
+<Prompt description={"Read https://microsoft.github.io/microsoft-ui-reactor/latest/llms.txt first. Then create a Reactor app named MyApp: install the winapp CLI with `winget install Microsoft.WinAppCli` if it is missing, run `winapp new -t reactor -n MyApp`, and start the app with `dotnet run` from the MyApp folder. Fix any build errors before you stop."}>
+
+Read https://microsoft.github.io/microsoft-ui-reactor/latest/llms.txt first.
+Then create a Reactor app named MyApp: install the winapp CLI with
+`winget install Microsoft.WinAppCli` if it is missing, run
+`winapp new -t reactor -n MyApp`, and start the app with `dotnet run` from the
+MyApp folder. Fix any build errors before you stop.
+
+</Prompt>
+
+</Tab>
+
+</Tabs>
+
+### Templates [#templates]
+
+| Template | What you get |
+|---|---|
+| `reactor` | A blank app with one component. |
+| `reactor-mvu` | A Model-View-Update app built on `UseReducer`. |
+| `reactor-navview` | An app shell with a `NavigationView`. |
+| `reactor-tabview` | An app shell with a `TabView`. |
+| `reactor-singlefile` | One `.cs` file and no project. See [One file, no project](#one-file-no-project). |
+
+The project templates set up the `Microsoft.UI.Reactor` package reference, the
+WinUI target framework, MSIX packaging, and an `App.cs` that mounts one
+component. There is no `App.xaml` and no `MainWindow.xaml.cs`.
+
+> **Why a custom template?** `dotnet new console` does not produce a WinUI
+> app. It builds a console target with no UI thread, no `OutputType=WinExe`,
+> no Windows App SDK reference and no `[STAThread]` entry point. The
+> `reactor` template sets all of these, plus the Reactor package reference,
+> MSIX packaging and a backdrop-aware root component. So the first
+> `dotnet run` opens a window, not a console.
+
+### Packaged or unpackaged [#packaged-or-unpackaged]
+
+Apps created from a project template are **packaged** (single-project MSIX) by
+default. `dotnet run` registers a loose-layout package and launches the app
+with full package identity, the same as F5 in Visual Studio. This needs
+**Developer Mode**.
+
+For a plain unpackaged `.exe`, add `--packaging Unpackaged` to any of the four
+project templates:
+
+```powershell
+dotnet new reactor -n MyApp --packaging Unpackaged
+```
+
+`winapp new` has no matching switch, so use `dotnet new` for this. An
+unpackaged app has no package identity, so `Package.Current` and `ms-appx:`
+URIs are not available. [Packaging](/microsoft-ui-reactor/main/guides/packaging) explains how the two shapes
+differ and how to publish each one.
+
+## Check that it works [#check-that-it-works]
+
+`dotnet run` builds the app and opens a window with the template's starter
+component. To check the whole loop, replace the contents of `App.cs` with this
+small app:
+
+```csharp
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI.Xaml;
+
+ReactorApp.Run<GettingStartedApp>("Getting Started");
+
+class GettingStartedApp : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("World");
+
+        return VStack(16,
+            TextBlock($"Hello, {name}!").FontSize(24).Bold(),
+            TextBox(name, setName, placeholderText: "Enter your name")
+                .AutomationName("Name")
+                .Width(250)
+        ).Padding(24);
+    }
+}
+```
+
+Run `dotnet run` again. You see a greeting and a text box. Type in the box,
+and the greeting changes as you type:
+
+![The hello world app: a "Hello, World!" heading above a text box that holds the name](/microsoft-ui-reactor/main/images/getting-started/hello-world.png)
+
+If you see this window, your setup is complete.
+[Your first app](/microsoft-ui-reactor/main/get-started/first-app) explains this code line by line.
+
+## One file, no project [#one-file-no-project]
+
+A Reactor app does not need a `.csproj`. .NET 10 runs a single `.cs` file
+directly, and `#:` directives at the top of the file give the settings that a
+project file would otherwise hold:
+
+```csharp
+#:package Microsoft.UI.Reactor@0.1.0-preview.18
+#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
+#:property OutputType=WinExe
+#:property TargetFramework=net10.0-windows10.0.22621.0
+#:property UseWinUI=true
+
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+
+ReactorApp.Run<MyApp>("Hello Reactor");
+
+class MyApp : Component
+{
+    public override Element Render()
+    {
+        var (count, setCount) = UseState(0);
+
+        return VStack(
+            Heading($"Count: {count}"),
+            HStack(8,
+                Button("-", () => setCount(count - 1)),
+                Button("+", () => setCount(count + 1))
+            )
+        );
+    }
+}
+```
+
+Save it as `counter.cs` and run it:
+
+```powershell
+dotnet run counter.cs
+```
+
+That is the whole app: one file, with no scaffolding and no build output to
+manage. It is the fastest way to try an idea, reproduce a bug, or paste a
+complete example into an issue.
+
+Like an app from a project template, it runs packaged.
+`Microsoft.Windows.SDK.BuildTools.WinApp` makes `dotnet run` create an app
+manifest from the `#:property` values, register the app, and launch it with
+package identity. This needs **Developer Mode**. If you have the
+[winapp CLI](https://github.com/microsoft/winappCli) 0.7.0 or later,
+`winapp run counter.cs` does the same.
+
+`Microsoft.UI.Reactor` brings in the Windows App SDK, just as in the
+[minimal `.csproj`](#minimal-project-setup). The other directives are all
+required:
+
+| Directive | Why it is required |
+|---|---|
+| `Microsoft.Windows.SDK.BuildTools.WinApp` | Lets `dotnet run` package the app. It carries its own copy of the winapp CLI, so you do not need to install that. Without it, `dotnet run` cannot package the app, and the app fails at startup with `COMException … REGDB_E_CLASSNOTREG`. That error does not mention the missing package. To avoid it without this package, run the app unpackaged (see below). |
+| `OutputType=WinExe` | Links the app for the Windows GUI subsystem. Without it the build still succeeds, but the `.exe` is a console program, so Windows opens a console window next to your UI for as long as the app runs. |
+| `TargetFramework=net10.0-windows10.0.22621.0` | Reactor ships for `net10.0-windows10.0.22621`. A lower Windows version compiles against nothing, and you get `CS0234: the namespace 'Reactor' does not exist`, as if the package were missing. |
+| `UseWinUI=true` | Brings in the WinUI build targets. |
+
+You do not have to type the header. `dotnet new reactor-singlefile -n Counter`
+creates `Counter/Counter.cs` with the same five directives and a starter
+component. Run `dotnet run Counter.cs` from that folder to launch it. The
+template's pins differ from the block above: it targets a newer Windows SDK
+(`windows10.0.26100.0`) and lets the `Microsoft.Windows.SDK.BuildTools.WinApp`
+version float (`@*`). Both headers work.
+
+### Running it unpackaged [#running-it-unpackaged]
+
+`WindowsPackageType` decides whether the app runs packaged. `dotnet run` and
+`winapp run` both follow it. To run the app as a plain `.exe`, declare it
+unpackaged:
+
+```csharp
+#:property WindowsPackageType=None
+```
+
+An unpackaged app has no package identity, so `Package.Current` and `ms-appx:`
+URIs are not available. It does not need Developer Mode.
+
+Packaged or not, the app is framework-dependent: it uses the Windows App
+Runtime that is installed on the machine. To ship the runtime with the app
+instead, add `#:property WindowsAppSDKSelfContained=true`. That mode also needs
+an architecture, given with `-r win-x64` or `-r win-arm64`, because the runtime
+it copies is native code built for each CPU.
+
+## Minimal Project Setup [#minimal-project-setup]
+
+The templates above create all of this for you. To set up a project by hand
+instead, create a console project and edit the `.csproj`:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- Windows App SDK needs a concrete architecture; without this an
+         unqualified `dotnet build` / `dotnet run` fails with
+         "WindowsAppSDKSelfContained requires a supported Windows architecture". -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.18" />
+  </ItemGroup>
+</Project>
+```
+
+One package reference is enough. `Microsoft.UI.Reactor` brings in the Windows
+App SDK, so add `Microsoft.WindowsAppSDK` yourself only to pin a specific WinUI
+patch or to bundle the runtime with `WindowsAppSDKSelfContained`. Pin WinUI
+through that full package. Do not reference `Microsoft.WindowsAppSDK.WinUI` on
+its own, because it fails the Windows App SDK's version check.
+[Packaging](/microsoft-ui-reactor/main/guides/packaging) covers the `<Platforms>`, ARM64 and self-contained
+shapes that the project template uses.
+
+Then replace `Program.cs` with an `App.cs` that holds a component and a
+`ReactorApp.Run<T>()` call:
+
+```csharp
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+
+ReactorApp.Run<MyApp>("My App");
+
+class MyApp : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            TextBlock("Hello, Reactor!").FontSize(24).Bold(),
+            TextBlock("Your setup works.")
+        ).Padding(24);
+    }
+}
+```
+
+Run it with `dotnet run`. A window opens with the two lines of text.
+
+## Choose an editor [#choose-an-editor]
+
+Any editor works, because the `dotnet` CLI builds and runs every Reactor app.
+These editors add more:
+
+- **Visual Studio 2026.** Open the project and press F5 to build and debug
+  it. The experimental [Visual Studio extension](/microsoft-ui-reactor/main/tools/vs-extension) adds an
+  embedded live preview of a component.
+- **VS Code.** The C# Dev Kit is all you need. The Reactor Preview extension
+  adds a live preview panel; see the [VS Code extension](/microsoft-ui-reactor/main/tools/vs-extension#vs-code-extension).
+- **Any editor and a terminal.** Run `dotnet watch` to apply code changes to
+  the running app without a restart. See [Hot reload](/microsoft-ui-reactor/main/tools/hot-reload).
+
+## Troubleshooting [#troubleshooting]
+
+### The app fails at startup with `REGDB_E_CLASSNOTREG` [#the-app-fails-at-startup-with-regdb_e_classnotreg]
+
+This happens with a single-file app that has no
+`#:package Microsoft.Windows.SDK.BuildTools.WinApp` line. Without that package,
+`dotnet run` cannot package the app. Add the package line, or run the app
+unpackaged with `#:property WindowsPackageType=None`. See
+[One file, no project](#one-file-no-project).
+
+### `dotnet run` cannot register or deploy a packaged app [#dotnet-run-cannot-register-or-deploy-a-packaged-app]
+
+Packaged apps need Developer Mode. Turn it on in Settings → System → For
+developers, then run `dotnet run` again. If you cannot turn it on, run the app
+unpackaged (see [Packaged or unpackaged](#packaged-or-unpackaged)).
+
+### `CS0234: the namespace 'Reactor' does not exist` [#cs0234-the-namespace-reactor-does-not-exist]
+
+The target framework names a Windows version that is too low. Use
+`net10.0-windows10.0.22621.0` or higher. This error looks like a missing
+package, but the package is there.
+
+### A console window opens next to the app [#a-console-window-opens-next-to-the-app]
+
+`OutputType` is `Exe`, not `WinExe`. Set `<OutputType>WinExe</OutputType>` in
+the `.csproj`, or `#:property OutputType=WinExe` in a single-file app.
+
+### `WindowsAppSDKSelfContained requires a supported Windows architecture` [#windowsappsdkselfcontained-requires-a-supported-windows-architecture]
+
+The build has no concrete architecture. The
+[minimal `.csproj`](#minimal-project-setup) sets `RuntimeIdentifier` to fix
+this. You can also pass the platform on the command line, for example
+`dotnet build -p:Platform=x64` (or `ARM64`).
+
+### `dotnet new` does not know `--packaging` or `reactor-singlefile` [#dotnet-new-does-not-know-packaging-or-reactor-singlefile]
+
+The installed template pack is older than these options. Update it with
+`winapp new --list --template-version latest`.
+
+### The app starts and then reports a missing Windows App Runtime [#the-app-starts-and-then-reports-a-missing-windows-app-runtime]
+
+The Windows App Runtime on the machine is missing or too old. Run
+`winget install Microsoft.WindowsAppRuntime.2`, or `winget upgrade` if an
+older 2.x runtime is installed. To avoid the machine-wide dependency, publish
+the app self-contained; see [Packaging](/microsoft-ui-reactor/main/guides/packaging).
+
+### The build fails with `MSB3073` or `PRI210` under a deep folder [#the-build-fails-with-msb3073-or-pri210-under-a-deep-folder]
+
+The Windows App SDK's XAML and resource compilers have no long-path support.
+A long project path can push `obj` and `bin` output past the 260-character
+`MAX_PATH` limit. Move the project to a short path such as `C:\src\MyApp`, and
+avoid OneDrive-synced folders. See
+[issue #678](https://github.com/microsoft/microsoft-ui-reactor/issues/678).
+
+> **Caveat:** The template pack is prerelease-only today. `winapp new -t reactor` installs
+> the newest pack and creates the project in one step. With plain `dotnet new`,
+> run `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>`
+> first: without the explicit version pin, `dotnet new install` does not find the
+> pack.
+
+## Tips [#tips]
+
+**Set the first window size.** `ReactorApp.Run<T>` takes an optional width
+and height in device-independent pixels. Leave them out to let Windows choose.
+
+```csharp
+ReactorApp.Run<MyApp>("My App", width: 800, height: 600);
+```
+
+**Try an idea without a class.** For a quick test, pass a render function
+instead of a component class. `ctx` gives you the same hooks a component has.
+
+```csharp
+ReactorApp.Run("Quick Test", ctx =>
+{
+    var (count, setCount) = ctx.UseState(0);
+    return Button($"Clicked {count} times", () => setCount(count + 1));
+});
+```
+
+**Keep a single-file app for bug reports.** A complete `.cs` file with the
+`#:` header is the easiest repro to share in an issue.
+
+## Next Steps [#next-steps]
+
+- **[Your first app](/microsoft-ui-reactor/main/get-started/first-app)**: build a counter, a list and a
+  todo app, one step at a time.
+- **[Thinking in Reactor](/microsoft-ui-reactor/main/get-started/thinking-in-reactor)**: the mental model behind
+  components, state and rendering.
+- **[Packaging](/microsoft-ui-reactor/main/guides/packaging)**: packaged and unpackaged apps, self-contained
+  builds, and publishing.
+- **[Developer tools](/microsoft-ui-reactor/main/tools)**: hot reload, Devtools, the `mur` CLI
+  and the editor extensions.
+
+Working on Reactor itself? The source checkout setup is in
+[CONTRIBUTING.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/CONTRIBUTING.md).

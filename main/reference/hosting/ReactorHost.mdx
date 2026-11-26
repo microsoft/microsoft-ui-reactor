@@ -9,7 +9,7 @@ public sealed class ReactorHost : IDisposable
 
 Namespace: `Microsoft.UI.Reactor.Hosting`.
 
-**Learn more:** [Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)
+**Learn more:** [Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)
 
 ## Constructors [#constructors]
 

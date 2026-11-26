@@ -162,7 +162,7 @@ state changed under structurally unchanged parents.
 The reconciler holds debug counters (`DebugElementsDiffed`,
 `DebugElementsSkipped`, `DebugUIElementsCreated`,
 `DebugUIElementsModified`) reset at depth 0 and reported at the end of
-the pass. The reconcile overlay in the [dev menu](/microsoft-ui-reactor/main/guides/dev-tooling)
+the pass. The reconcile overlay in the [dev menu](/microsoft-ui-reactor/main/tools)
 reads these.
 
 > **Caveat:** The reconciler returns the *new* `UIElement` because Update can
@@ -606,7 +606,7 @@ fresh-element-type bug; the symptom is "the handler sees stale state".
 
 **Reconciler overlays the truth.** When something rerenders that
 shouldn't, enable the reconcile-highlight overlay
-([dev-tooling](/microsoft-ui-reactor/main/guides/dev-tooling)) — it draws a border around every
+([dev-tooling](/microsoft-ui-reactor/main/tools)) — it draws a border around every
 control the reconciler touched on the last pass. If your "unchanged"
 component lights up, the element-record comparison is finding a
 difference somewhere; the overlay narrows the search to one row.

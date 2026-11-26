@@ -1,0 +1,196 @@
+---
+title: "Developer tools"
+description: "Reactor comes with tools for the inner dev loop: the short cycle where you change code, see the result, and fix what is wrong. This page walks that loop one stage at a time. Each stage links to a page with the full details."
+sidebar:
+  label: "Overview"
+---
+
+## The tools at a glance [#the-tools-at-a-glance]
+
+| Tool | What it does | Where you get it | Details |
+|---|---|---|---|
+| Project templates | Create a new Reactor app | Windows App SDK template pack, through `winapp new` or `dotnet new` | [Install Reactor](/microsoft-ui-reactor/main/get-started/install) |
+| `mur` CLI | Create, check, inspect, and localize from the terminal | .NET tool `Microsoft.UI.Reactor.Cli`, or the skill kit zip | [mur CLI](/microsoft-ui-reactor/main/tools/mur-cli) |
+| Hot reload | Apply code edits to a running app and keep its state | Built into `Microsoft.UI.Reactor`; run with `dotnet watch` | [Hot reload](/microsoft-ui-reactor/main/tools/hot-reload) |
+| Devtools | In-app dev menu, overlays, and a local MCP server | NuGet package `Microsoft.UI.Reactor.Devtools` | [Devtools](/microsoft-ui-reactor/main/tools/devtools) |
+| Visual Studio extension | Live preview inside Visual Studio 2026 | `Reactor.VsExtension.vsix` on the GitHub release | [Extensions](/microsoft-ui-reactor/main/tools/vs-extension) |
+| VS Code extension | Live preview panel in VS Code | Run from source in `src/vscode-reactor` | [Extensions](/microsoft-ui-reactor/main/tools/vs-extension) |
+| Analyzers | Report Reactor mistakes in the editor and the build, with code fixes | Inside the `Microsoft.UI.Reactor` package | [Analyzers](/microsoft-ui-reactor/main/tools/analyzers) |
+| `mur check` | Build the project and add a fix hint to each diagnostic | Part of the `mur` CLI | [mur check](/microsoft-ui-reactor/main/tools/analyzers#mur-check) |
+| Agent plugin and skill kit | Teach AI coding agents the Reactor DSL and tools | `plugins/reactor` in the repo, or the skill kit zip | [Build with AI](/microsoft-ui-reactor/main/tools/build-with-ai) |
+| Diagnostics | Release-safe events, traces, and logs | Built into `Microsoft.UI.Reactor` | [Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics) |
+
+![The Reactor inner dev loop. 1 Create, with project templates and mur --create. 2 Edit live, with dotnet watch, hot reload, and live preview. 3 Inspect, with devtools. 4 Catch mistakes early, with analyzers and mur check. 5 Debug and measure, with diagnostics. An arrow labeled next change goes back to Edit live. In the center, Work with AI agents has dashed arrows to each stage.](/microsoft-ui-reactor/main/images/dev-tooling/inner-loop.svg)
+
+## Create a project [#create-a-project]
+
+Start from a project template. `winapp new -t reactor -n MyApp` creates a
+packaged app with the `Microsoft.UI.Reactor` package already referenced.
+[Install Reactor](/microsoft-ui-reactor/main/get-started/install) lists every template and the `dotnet new`
+commands.
+
+If you work inside a clone of the Reactor repository, `mur --create MyApp`
+writes a minimal project (`Program.cs`, a `.csproj`, a `.sln`, and an app
+icon) that references the Reactor source instead of the package. See
+[mur CLI](/microsoft-ui-reactor/main/tools/mur-cli#create-a-project).
+
+To try an idea quickly, you do not need a component class. `ReactorApp.Run`
+also takes an inline function component:
+
+```csharp
+// Alternative: inline function component, no class needed
+// ReactorApp.Run("Quick Test", ctx =>
+// {
+//     var (n, setN) = ctx.UseState(0);
+//     return VStack(12,
+//         TextBlock($"Count: {n}").FontSize(20),
+//         Button("+1", () => setN(n + 1))
+//     ).Padding(24);
+// });
+```
+
+## Edit live [#edit-live]
+
+Run the app under `dotnet watch`. When you save a file, .NET hot reload
+applies the edit to the running process and Reactor re-renders every
+component. Hook state stays: a counter keeps its value while you change the
+layout around it. If an edit can't be applied in place, `dotnet watch`
+restarts the app.
+
+The Visual Studio extension and the VS Code extension run the same loop and
+show the live app next to your code.
+
+- [Hot reload and live preview](/microsoft-ui-reactor/main/tools/hot-reload): what survives a reload, rude
+  edits, and limits.
+- [Visual Studio and VS Code extensions](/microsoft-ui-reactor/main/tools/vs-extension): install and use the
+  live preview.
+
+## Inspect the running app [#inspect-the-running-app]
+
+Devtools let you look inside a running Debug build. Add the
+`Microsoft.UI.Reactor.Devtools` package, then launch the app with
+`--devtools app` for the in-app dev menu, or `--devtools run` to also start a
+local MCP server. With the MCP server running, `mur devtools` can take
+screenshots, read the visual tree and hook state, and click or type into the
+app from a terminal.
+
+Your own debug-only UI can check the same gate. `UseDevtools()` returns `true`
+only when devtools are on for this session:
+
+```csharp
+static class DevGate
+{
+    // UseDevtools() is a RenderContext extension, so it is reached from a
+    // function component's ctx (or any helper you hand the ctx to) — there is
+    // no Component-level forwarder. It returns true only when BOTH the
+    // Reactor.DevtoolsSupport build switch and `--devtools app` (or `run`) are set.
+    //
+    // UseDevtools() uses no hook slot, but it is still a Use* call:
+    // REACTOR_HOOKS_005 only permits Use* calls from Render() or a Use*-named
+    // method, so a helper called `Shell` here would warn.
+    public static Element UseShell(RenderContext ctx)
+    {
+        var dev = ctx.UseDevtools();
+
+        return VStack(8,
+            MainContent(),
+            dev ? DebugOverlay() : Empty()
+        );
+    }
+
+    private static Element MainContent() => TextBlock("App content");
+
+    // Only *constructed* when dev is true. In retail the ternary costs one
+    // bool read plus one branch — no element tree, no children reconciled.
+    private static Element DebugOverlay() =>
+        TextBlock("debug overlay").Opacity(0.6);
+}
+```
+
+Read [Devtools](/microsoft-ui-reactor/main/tools/devtools) for setup, the dev menu, overlays, the MCP
+server, and how devtools stay out of Release and AOT builds.
+
+## Catch mistakes early [#catch-mistakes-early]
+
+Reactor's Roslyn analyzers ship inside the `Microsoft.UI.Reactor` package.
+They report `REACTOR_*` diagnostics in the editor and in `dotnet build`, and
+many come with a code fix. For example, `REACTOR_HOOKS_001` flags a hook
+inside an `if`. The fix keeps the hook call unconditional and moves the
+condition into the output:
+
+```csharp
+class HookOrderGood : Component
+{
+    public bool ShouldCount;
+
+    public override Element Render()
+    {
+        // Hook always runs; the conditional moves into the render output.
+        var (count, _) = UseState(0);
+        return ShouldCount
+            ? TextBlock($"Count: {count}")
+            : TextBlock("No counter.");
+    }
+}
+```
+
+`mur check` runs the same build and adds a hint under each diagnostic.
+
+- [Analyzers](/microsoft-ui-reactor/main/tools/analyzers): every rule ID, its severity, and the code fixes.
+- [Rules of Reactor](/microsoft-ui-reactor/main/get-started/rules-of-reactor): the rules behind the most common
+  diagnostics.
+
+## Work with AI agents [#work-with-ai-agents]
+
+AI coding agents can do every stage of this loop. The Reactor agent plugin and
+the skill kit teach an agent the DSL, the hooks rules, and the tools on this
+page. `mur check` gives the agent build feedback with fix hints, and
+`mur devtools` lets it see and drive the running app. The docs site also
+publishes `llms.txt` and a Markdown copy of each page.
+
+Read [Build with AI](/microsoft-ui-reactor/main/tools/build-with-ai) for install steps for each agent.
+
+## Debug and measure [#debug-and-measure]
+
+In Release builds, Reactor reports swallowed exceptions and failed HRESULTs
+through the `Microsoft-UI-Reactor` EventSource. Capture them with environment
+variables, `dotnet-trace`, the Visual Studio profiler, or in process. During a
+devtools session, the `logs` tool returns the same events next to stdout and
+debug output.
+
+- [Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics): capture and read Reactor's events and traces.
+- [Performance](/microsoft-ui-reactor/main/guides/performance): find and fix slow renders.
+- [Testing](/microsoft-ui-reactor/main/guides/testing): unit tests and UI tests for components.
+
+## How it works [#how-it-works]
+
+These pages explain the machinery behind the tools. You do not need them to
+use the tools.
+
+- [Devtools internals](/microsoft-ui-reactor/main/how-it-works/devtools-internals): the MCP server, tree walker, and
+  selectors.
+- [Analyzer architecture](/microsoft-ui-reactor/main/how-it-works/analyzer-architecture): how the analyzers and
+  code fixes are built.
+- [Source mapping](/microsoft-ui-reactor/main/how-it-works/source-mapping): how a control maps back to the line of
+  code that created it.
+- [Perf instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation): the EventSource, keywords,
+  and counters.
+
+## Tips [#tips]
+
+- Keep `dotnet watch` running in its own terminal. Its output tells you when an
+  edit was applied and when the app restarted.
+- Build small components. A small `Render()` is quick to re-render and easy to
+  inspect.
+- Treat analyzer warnings as bugs. Most of them point at a real runtime
+  problem, such as lost state or a missed update.
+- On an ARM64 machine, pass the runtime explicitly if `dotnet run` picks the
+  wrong one: `dotnet run -r win-arm64`.
+
+## Next Steps [#next-steps]
+
+- **[Hot reload and live preview](/microsoft-ui-reactor/main/tools/hot-reload)**: edit a running app
+- **[Devtools](/microsoft-ui-reactor/main/tools/devtools)**: the dev menu, overlays, and MCP server
+- **[mur CLI](/microsoft-ui-reactor/main/tools/mur-cli)**: every command and its options
+- **[Analyzers](/microsoft-ui-reactor/main/tools/analyzers)**: every `REACTOR_*` rule
+- **[Build with AI](/microsoft-ui-reactor/main/tools/build-with-ai)**: use Reactor with AI coding agents

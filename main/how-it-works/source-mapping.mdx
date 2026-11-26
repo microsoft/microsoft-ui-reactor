@@ -206,7 +206,7 @@ already stores -> `Element.CallSite`. It returns `null` when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.
 
-A Native AOT app in diagnostics mode (`REACTOR_DIAGNOSTICS=1`) does not give an
+A [Native AOT](/microsoft-ui-reactor/main/guides/native-aot) app in diagnostics mode (`REACTOR_DIAGNOSTICS=1`) does not give an
 element a back-pointer just for its call site: no managed inspector can load into
 the process to read it, and it costs about 1 KB per control. `GetSource` then reads
 the location from the control's published `ReactorSource` value and returns the same

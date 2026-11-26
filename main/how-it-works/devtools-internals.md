@@ -21,7 +21,7 @@ factory and contributes nothing visual, but the code path still
 allocates whatever the surrounding component constructed to pass to
 it. Gate the construction, not just the rendering.
 
-[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling) is the user-facing companion; this is the
+[Dev Tooling](/microsoft-ui-reactor/main/tools) is the user-facing companion; this is the
 internals view.
 
 ## The MCP loop [#the-mcp-loop]
@@ -308,7 +308,7 @@ launch.
 **`Observable<bool>` is the dev-flag pattern.** Plain `static bool`
 fields don't notify, so toggling them from the dev menu doesn't
 re-render components that observe them. The
-[devtools-menu](/microsoft-ui-reactor/main/guides/dev-tooling) cookbook in `dev-tooling.md` uses
+[devtools-menu](/microsoft-ui-reactor/main/tools) cookbook in `dev-tooling.md` uses
 `static readonly Observable<bool>` fields exactly so the
 [`UseObservable`](/microsoft-ui-reactor/main/guides/hooks) hook can pick up changes.
 
@@ -320,7 +320,7 @@ code path belongs inside that wrapper.
 
 ## Next Steps [#next-steps]
 
-- **[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling)** — User-facing devtools API and the inner-loop story.
+- **[Dev Tooling](/microsoft-ui-reactor/main/tools)** — User-facing devtools API and the inner-loop story.
 - **[Perf Instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation)** — ETW provider the overlays consume.
 - **[Hooks Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Why `UseDevtools` doesn't consume a slot.
 - **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — How the reconcile-highlight overlay observes patches.

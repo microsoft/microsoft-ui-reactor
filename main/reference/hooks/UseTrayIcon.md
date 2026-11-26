@@ -12,7 +12,7 @@ public ReactorTrayIcon? UseTrayIcon(TrayIconSpec spec)
 
 Declared on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext).
 
-**Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks)
+**Learn more:** [Desktop integration](/microsoft-ui-reactor/main/guides/desktop-integration), [Hooks](/microsoft-ui-reactor/main/guides/hooks)
 
 ## Parameters [#parameters]
 

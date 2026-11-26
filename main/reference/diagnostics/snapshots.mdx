@@ -3,7 +3,7 @@ title: "Diagnostic snapshots"
 description: "Snapshots of the component tree that the diagnostics API returns."
 ---
 
-**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics)
+**Learn more:** [Diagnostics](/microsoft-ui-reactor/main/tools/diagnostics)
 
 ## `AppliedProperty` [#appliedproperty]
 

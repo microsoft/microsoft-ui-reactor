@@ -255,7 +255,7 @@ event that never fires, so callers guard with an equality check first.
 dropped without spending a token, because the engine cannot predict
 which DPs a user's `.Set(...)` will write. Both counters live on a
 `DependencyObject` attached property rather than
-a `ConditionalWeakTable` because [WinRT projection](/microsoft-ui-reactor/main/get-started/reactor-vs-xaml)
+a `ConditionalWeakTable` because the WinRT projection
 can hand the same native object back as different managed wrappers,
 and only the attached DP survives that round-trip.
 

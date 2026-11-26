@@ -432,7 +432,7 @@ field; the WinUI subscription is untouched.
 
 You don't opt in or configure this — every `.On*` modifier routes through the
 trampoline path automatically. Inspect the
-[devtools](/microsoft-ui-reactor/main/guides/dev-tooling) ETW `EventDispatch` keyword (`0x40`) to see exactly
+[devtools](/microsoft-ui-reactor/main/tools) ETW `EventDispatch` keyword (`0x40`) to see exactly
 when each trampoline attaches and dispatches.
 
 ## Migration from `.Set(...)` passthrough [#migration-from-set-passthrough]
@@ -667,7 +667,7 @@ Combine `.OnDragStart<TEl, T>` on each item with `.OnDrop<TEl, T>` on the
 list container. The kanban example above is the canonical shape — typed
 payload, GUID transfer registry, move-on-confirmation. For a
 recipe-style walkthrough with full state management and animation,
-see [recipes/drag-reorder](/microsoft-ui-reactor/main/recipes/drag-reorder).
+see [recipes/drag-reorder](/microsoft-ui-reactor/main/guides/recipes/drag-reorder).
 
 ### Pinch-to-zoom on an image [#pinch-to-zoom-on-an-image]
 
@@ -773,5 +773,5 @@ without `AutomationName` or a focus-visible affordance is a bug.
 - **[Accessibility](/microsoft-ui-reactor/main/guides/accessibility)** — `UseFocusTrap`, `UseAnnounce`, `AccessibilityScanner`, ARIA patterns
 - **[Commanding](/microsoft-ui-reactor/main/guides/commanding)** — app-wide accelerators, command bars, the `Command` and `Command<T>` types
 - **[Animation](/microsoft-ui-reactor/main/guides/animation)** — pairing gestures with `.InteractionStates()` for hover / press / focus visuals
-- **[recipes/drag-reorder](/microsoft-ui-reactor/main/recipes/drag-reorder)** — full drag-to-reorder list recipe
+- **[recipes/drag-reorder](/microsoft-ui-reactor/main/guides/recipes/drag-reorder)** — full drag-to-reorder list recipe
 - **[Components](/microsoft-ui-reactor/main/guides/components)** — previous topic: components, props, and composition

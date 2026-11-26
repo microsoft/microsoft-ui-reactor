@@ -1,38 +1,29 @@
 ---
-title: "Reactor"
-description: "Microsoft.UI.Reactor (Reactor) is a declarative UI framework for building native Windows desktop apps in pure C#. No XAML. No data binding. No view models. You describe your UI as a function of state, and Reactor keeps the screen in sync."
-sidebar:
-  label: "Overview"
+title: "Overview"
+description: "Build native Windows apps with WinUI, in plain C#."
 ---
 
-| If you want to... | Start here |
-|-------------------|------------|
-| Build your first Reactor app | [Getting Started](/microsoft-ui-reactor/main/get-started/quickstart) |
-| Understand the mental model | [Thinking in Reactor](/microsoft-ui-reactor/main/get-started/thinking-in-reactor) |
-| Port a XAML/WinUI/WPF app | [Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers) |
-| Look up a hook or modifier | [API Reference](/microsoft-ui-reactor/main/reference/hooks) |
-| Read how the runtime works | [Architecture Overview](/microsoft-ui-reactor/main/how-it-works/architecture-overview) |
+Microsoft.UI.Reactor (Reactor) is a declarative, component-based framework for
+building Windows desktop apps in C#. You write components. Each component has a
+`Render()` method that returns a description of the UI for the current state.
+When the state changes, Reactor updates the real WinUI controls on screen.
+There is no XAML, no data binding and no view model to write.
 
-## Why Reactor? [#why-reactor]
+## At a glance [#at-a-glance]
 
-**Pure C# from top to bottom.** Your entire app — layout, styling, state,
-logic — lives in `.cs` files. No markup languages, no code-behind split, no
-designer files.
+| Topic | What to know |
+|---|---|
+| **Language** | C# only. Layout, styling, state and logic all live in `.cs` files. |
+| **UI model** | Declarative. `Render()` returns a tree of immutable element records, and Reactor keeps the screen in sync with it. |
+| **State** | [Hooks](/microsoft-ui-reactor/main/guides/hooks) such as `UseState`, `UseReducer` and `UseEffect`, called inside `Render()`. |
+| **Output** | Real WinUI controls such as `Button`, `TextBox` and `NavigationView`. No web view and no custom renderer. |
+| **Interop** | Host Reactor content in a XAML app, or XAML controls in a Reactor app. They share one visual tree. |
+| **Runs on** | Windows 10 version 1809 or later, and Windows 11, with .NET 10. |
+| **Status** | Public preview. The `Microsoft.UI.Reactor` package is on NuGet.org. |
 
-**Declarative rendering.** You write a `Render()` method that returns your UI.
-When state changes, Reactor diffs the old and new element trees and patches only
-what changed in the native WinUI controls.
+## A first look [#a-first-look]
 
-**Hooks for state management.** `UseState`, `UseReducer`, `UseEffect`, and
-friends give you React-style state management without the JavaScript.
-
-**Native performance.** Reactor renders to real WinUI 3 controls. Your app is a
-standard Windows desktop app — no web views, no Electron, no interpretation
-layer.
-
-## Quick Look [#quick-look]
-
-A complete Reactor app in one file:
+This is a complete component. It shows two lines of text:
 
 ```csharp
 class HelloWorld : Component
@@ -47,9 +38,11 @@ class HelloWorld : Component
 }
 ```
 
-![Hello world component](/microsoft-ui-reactor/main/images/readme/hello-world.png)
+![A window with the bold heading "Hello from Reactor!" above the line "No XAML. No data binding. Just C#."](/microsoft-ui-reactor/main/images/readme/hello-world.png)
 
-State and interactivity in a few lines:
+Add state with one hook call. `UseState(0)` returns the current value and a
+setter. Each click calls the setter, and Reactor renders the component again
+with the new value:
 
 ```csharp
 class QuickCounter : Component
@@ -68,9 +61,9 @@ class QuickCounter : Component
 }
 ```
 
-![Counter demo](/microsoft-ui-reactor/main/images/readme/counter.png)
+![A counter: a "- 1" button, the number 0, and a "+ 1" button in one row](/microsoft-ui-reactor/main/images/readme/counter.png)
 
-Built-in text styling:
+Text styles and theme colors are built in:
 
 ```csharp
 class StyledText : Component
@@ -88,196 +81,87 @@ class StyledText : Component
 }
 ```
 
-![Styled text elements](/microsoft-ui-reactor/main/images/readme/styled-text.png)
+![Four lines of text in different styles: a heading, a subheading, accent-colored body text and a caption](/microsoft-ui-reactor/main/images/readme/styled-text.png)
 
-## How It Works [#how-it-works]
+## How it works [#how-it-works]
 
-1. You define [**components**](/microsoft-ui-reactor/main/guides/components) — classes with a `Render()` method that returns
-   an element tree.
-2. You manage state with [**hooks**](/microsoft-ui-reactor/main/guides/hooks) — `UseState`, `UseReducer`, `UseEffect`,
-   and more — called inside `Render()`.
-3. When state changes, Reactor calls `Render()` again, diffs the result, and
-   updates only the WinUI controls that changed.
+![The Reactor render loop. Your component's Render method returns an element tree of immutable C# records. The reconciler compares it with the previous tree and mounts or updates real WinUI controls, patching only what changed. A user event calls a state setter, and Render runs again.](/microsoft-ui-reactor/main/images/index/render-loop.svg)
 
-That's it. No event subscriptions to manage, no property-changed notifications
-to wire up, no dispatcher threading to worry about.
+1. You write [components](/microsoft-ui-reactor/main/guides/components). A component's `Render()` returns an
+   element tree, built from factory methods such as `VStack`, `TextBlock` and
+   `Button`.
+2. The reconciler compares the new tree with the previous one. It creates the
+   WinUI controls on the first render, and after that it changes only the
+   properties and children that differ.
+3. A user event, such as a click, calls a state setter from a
+   [hook](/microsoft-ui-reactor/main/guides/hooks). Reactor calls `Render()` again, and the loop repeats.
 
-## Documentation [#documentation]
+You do not subscribe to property-changed events or update controls by hand.
+[Architecture overview](/microsoft-ui-reactor/main/how-it-works/architecture-overview) explains each part of the
+runtime in detail.
 
-The docs follow the site's tabs, working from "first app on screen" to "how
-the runtime is built". XAML developers should start with Coming from XAML and
-Reactor vs XAML; everyone else can follow the order.
+## Who Reactor is for [#who-reactor-is-for]
 
-### Get started [#get-started]
+- **C# developers who want a Windows desktop UI without XAML.** You stay in
+  one language, with full IntelliSense, refactoring and compile-time checks.
+- **Developers who know React, SwiftUI or Jetpack Compose.** Components, hooks
+  and state that lives next to the render code work the way you expect.
+- **XAML, WinUI and WPF developers who want less boilerplate.** You keep the
+  same controls and runtime. See [Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers).
 
-- **[Quickstart](/microsoft-ui-reactor/main/get-started/quickstart)** — Create your first app, manage state, build a todo list
-- **[Thinking in Reactor](/microsoft-ui-reactor/main/get-started/thinking-in-reactor)** — Mental-model essay: UI as a function of state
-- **[Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)** — Migration cookbook: XAML, bindings, MVVM, navigation
-- **[Reactor vs XAML](/microsoft-ui-reactor/main/get-started/reactor-vs-xaml)** — Architectural essay: DependencyProperty → modifier, Binding → closure
-- **[Cheat Sheet](/microsoft-ui-reactor/main/get-started/cheat-sheet)** — Single-page reference card
-- **[Rules of Reactor](/microsoft-ui-reactor/main/get-started/rules-of-reactor)** — Hook rules, render purity, anti-patterns
+Reactor does not replace XAML and MVVM. If those work well for your app, keep
+using them. Reactor is another way to describe the same WinUI content.
 
-### Guides [#guides]
+## Why pick Reactor [#why-pick-reactor]
 
-**Core concepts**
-
-- **[Components](/microsoft-ui-reactor/main/guides/components)** — Component classes, props, function components, composition
-- **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — [UseState](/microsoft-ui-reactor/main/reference/hooks/UseState), [UseReducer](/microsoft-ui-reactor/main/reference/hooks/UseReducer), [UseEffect](/microsoft-ui-reactor/main/reference/hooks/UseEffect), [UseMemo](/microsoft-ui-reactor/main/reference/hooks/UseMemo), [UseRef](/microsoft-ui-reactor/main/reference/hooks/UseRef), [UseCallback](/microsoft-ui-reactor/main/reference/hooks/UseCallback)
-- **[Effects and Lifecycle](/microsoft-ui-reactor/main/guides/effects)** — UseEffect patterns, cleanup, async work, timers
-- **[Context](/microsoft-ui-reactor/main/guides/context)** — Share state across the component tree without prop drilling
-- **[Commanding](/microsoft-ui-reactor/main/guides/commanding)** — Commands, keyboard shortcuts, async actions
-- **[Advanced Patterns](/microsoft-ui-reactor/main/guides/advanced)** — ErrorBoundary, Memo, observable binding, performance tuning
-
-**Layout and styling**
-
-- **[Layout](/microsoft-ui-reactor/main/guides/layout)** — VStack, HStack, Grid, ScrollView, Border, responsive patterns
-- **[Flex Layout](/microsoft-ui-reactor/main/guides/flex-layout)** — Flexible box layout for adaptive UIs
-- **[Styling and Theming](/microsoft-ui-reactor/main/guides/styling)** — Colors, typography, dark/light themes, custom styles
-- **[Theming Tokens](/microsoft-ui-reactor/main/guides/theming-tokens)** — Full token catalog with swatches
-- **[Animation](/microsoft-ui-reactor/main/guides/animation)** — Transitions, keyframes, interaction states, choreography
-- **[Input and Gestures](/microsoft-ui-reactor/main/guides/input-and-gestures)** — Pointer events, taps, gestures, access keys
-
-**Building apps**
-
-- **[Navigation](/microsoft-ui-reactor/main/guides/navigation)** — NavigationView, TabView, multi-page apps, routing
-- **[Windows](/microsoft-ui-reactor/main/guides/windows)** — Top-level windows, tray icons, jump lists, `OpenWindow`, shutdown policy
-- **[Advanced Windowing](/microsoft-ui-reactor/main/guides/windowing-advanced)** — Layered overlays, window regions, and other interop-heavy recipes
-- **[Docking Windows](/microsoft-ui-reactor/main/guides/docking)** — Rearrangeable dock panes: splits, tabs, side pins, floating tear-outs, persistence
-- **[Async Resources](/microsoft-ui-reactor/main/guides/async-resources)** — `UseResource`, `UseInfiniteResource`, `UseMutation`, `Pending`
-- **[Persistence](/microsoft-ui-reactor/main/guides/persistence)** — [UsePersisted](/microsoft-ui-reactor/main/reference/hooks/UsePersisted), scopes, migration
-
-**Ship your app**
-
-- **[Accessibility](/microsoft-ui-reactor/main/guides/accessibility)** — Screen readers, keyboard navigation, focus trapping, runtime scanning
-- **[Localization](/microsoft-ui-reactor/main/guides/localization)** — Multi-language support, resource strings, RTL layouts
-- **[Testing](/microsoft-ui-reactor/main/guides/testing)** — Headless renderer, structural assertions, async test patterns
-- **[Performance](/microsoft-ui-reactor/main/guides/performance)** — ETW, EventDispatch, flame graphs
-- **[Packaging](/microsoft-ui-reactor/main/guides/packaging)** — MSIX, single-file, ARM64, AOT considerations
-
-**Developer tools**
-
-- **[Dev Tooling](/microsoft-ui-reactor/main/guides/dev-tooling)** — `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu
-- **[VS Extension](/microsoft-ui-reactor/main/guides/vs-extension)** — Rough experimental embedded preview for Visual Studio 2026 (18.x)
-- **[Diagnostics](/microsoft-ui-reactor/main/guides/diagnostics)** — Framework warnings, ETW events, and how to read them
-
-**Interop and migration**
-
-- **[WinForms Interop](/microsoft-ui-reactor/main/guides/winforms-interop)** — Host Reactor components inside WinForms apps via XAML Islands
-- **[WPF Interop](/microsoft-ui-reactor/main/guides/wpf-interop)** — Host Reactor components inside WPF apps
-- **[Optional&lt;T&gt; controlled props](/microsoft-ui-reactor/main/guides/optional-t)** — Migrating to `Optional<T>` controlled props
-- **[Windowing evolution](/microsoft-ui-reactor/main/guides/windowing-evolution)** — Migrating to the current windowing API
-
-### Controls [#controls]
-
-- **[Controls](/microsoft-ui-reactor/main/controls)** — Thumbnail-indexed catalog of every control
-- **[Forms and Input](/microsoft-ui-reactor/main/controls/forms)** — Text fields, checkboxes, sliders, validation, data entry
-- **[Collections](/microsoft-ui-reactor/main/controls/collections)** — ListView, LazyVStack, VirtualList for large datasets
-- **[Text and Media](/microsoft-ui-reactor/main/controls/text-and-media)** — TextBlock, MarkdownTextBlock, Image, MediaPlayerElement, WebView2, InkCanvas
-- **[Status and Info](/microsoft-ui-reactor/main/controls/status-and-info)** — InfoBar, InfoBadge, ProgressBar, TeachingTip, PipsPager
-- **[Dialogs and Flyouts](/microsoft-ui-reactor/main/controls/dialogs-and-flyouts)** — ContentDialog, MenuFlyout, CommandBarFlyout, Popup
-- **[Data System](/microsoft-ui-reactor/main/controls/data-system)** — DataGrid with sort, filter, search, inline editing
-- **[Charting](/microsoft-ui-reactor/main/controls/charting)** — Line, bar, area, pie charts with the ReactorCharting library
-- **[Win2D Canvas](/microsoft-ui-reactor/main/controls/win2d-canvas)** — Immediate-mode drawing surfaces from the optional `Microsoft.UI.Reactor.Advanced` package (manual, animated, virtual)
-
-### Recipes [#recipes]
-
-- **[Recipes](/microsoft-ui-reactor/main/recipes)** — Gallery of end-to-end patterns (login, master-detail, paginated list, command palette, …)
-
-### API reference [#api-reference]
-
-Auto-generated from XML doc comments in `src/Reactor*/`. Each member gets a
-uniform Summary / Parameters / Returns / Discussion / Examples / See Also page.
-
-- **[Hooks](/microsoft-ui-reactor/main/reference/hooks)** — every `Use*` hook
-- **Factories** — every element factory (coming soon)
-- **Modifiers** — every chainable modifier (coming soon)
-- **Elements** — every Element record type (coming soon)
-- **System** — App, Window, Navigation, Context, Command (coming soon)
-
-### How it works [#how-it-works_1]
-
-The runtime explained — for readers who want to know *why* it works the way it
-does, not just how to use it.
-
-- **[Architecture Overview](/microsoft-ui-reactor/main/how-it-works/architecture-overview)** — Declarative shell → element records → reconciler → WinUI tree
-- **[Reactivity Model](/microsoft-ui-reactor/main/how-it-works/reactivity-model)** — setState → re-render; why hooks not INotifyPropertyChanged
-- **[Hooks Internals](/microsoft-ui-reactor/main/how-it-works/hooks-internals)** — Hook slot table, dispatcher, closure capture
-- **[Reconciliation](/microsoft-ui-reactor/main/how-it-works/reconciliation)** — Element-record diff, identity, the three phases
-- **[Effects Scheduling](/microsoft-ui-reactor/main/how-it-works/effects-scheduling)** — When effects run; dep semantics; cleanup ordering
-- **[Threading and Dispatch](/microsoft-ui-reactor/main/how-it-works/threading-and-dispatch)** — UI-thread invariants, trampoline, batched renders
-- **[Element Pool](/microsoft-ui-reactor/main/how-it-works/element-pool)** — Allocation reduction under scroll-heavy lists
-- **[Control Reconciler Protocol](/microsoft-ui-reactor/main/how-it-works/control-reconciler-protocol)** — The per-control handler protocol: `IElementHandler`, descriptors, children strategies, pooling
-- **[Extending Reactor Controls](/microsoft-ui-reactor/main/how-it-works/extending-reactor-controls)** — Cookbook: add a native control end-to-end with a descriptor
-- **[Modifier System](/microsoft-ui-reactor/main/how-it-works/modifier-system)** — How `.FontSize(24).Bold()` actually works
-- **[Animation Pipeline](/microsoft-ui-reactor/main/how-it-works/animation-pipeline)** — Composition API end-to-end; 4 animation systems
-- **[Focus and Input Internals](/microsoft-ui-reactor/main/how-it-works/focus-and-input-internals)** — `UseFocus` dispatcher, `FocusTrap` container, pointer event flow
-- **[Source Mapping](/microsoft-ui-reactor/main/how-it-works/source-mapping)** — How stack traces and devtools attribute work back to user source
-- **[Analyzer Architecture](/microsoft-ui-reactor/main/how-it-works/analyzer-architecture)** — Roslyn analyzers shipped with Reactor; authoring your own
-- **[DevTools Internals](/microsoft-ui-reactor/main/how-it-works/devtools-internals)** — Dev menu, reconcile-highlight overlay, MCP protocol
-- **[Perf Instrumentation](/microsoft-ui-reactor/main/how-it-works/perf-instrumentation)** — ETW sources, frame-aligned sampling
-
-## Minimal Project Setup [#minimal-project-setup]
-
-The fastest path is [`dotnet new reactor`](/microsoft-ui-reactor/main/get-started/quickstart), which
-scaffolds all of this for you. To wire it up by hand instead, create a console
-project and edit the `.csproj`:
-
-<!-- ai:lock -->
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
-    <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
-    <!-- Windows App SDK needs a concrete architecture; without this an
-         unqualified `dotnet build` / `dotnet run` fails with
-         "WindowsAppSDKSelfContained requires a supported Windows architecture". -->
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.18" />
-  </ItemGroup>
-</Project>
-```
-<!-- /ai:lock -->
-
-One package reference is enough — `Microsoft.UI.Reactor` brings the Windows App
-SDK in transitively, so you only add `Microsoft.WindowsAppSDK` yourself when you
-want to pin a specific WinUI patch or bundle the runtime with
-`WindowsAppSDKSelfContained`. Pin WinUI through that full package, not
-`Microsoft.WindowsAppSDK.WinUI` on its own, which fails the Windows App SDK's
-version check. See [Packaging](/microsoft-ui-reactor/main/guides/packaging) for the
-`<Platforms>`, ARM64, and self-contained shapes the project template uses.
-
-Replace `App.cs` with a component and a `ReactorApp.Run<T>()` call, and run with
-`dotnet run`. That's your first Reactor app.
-
-## Tips [#tips]
-
-**Start with function components.** For quick experiments, use
-`ReactorApp.Run("Title", ctx => { ... })` — no class needed.
-
-**Read the [hooks page](/microsoft-ui-reactor/main/guides/hooks).** Hooks are the core of Reactor. Understanding `UseState`
-and `UseEffect` unlocks everything else.
-
-**Keep components small.** Extract pieces into their own components early.
-Composition is always easier to reason about than a single giant `Render()`.
+- **One language.** There is no markup file and no code-behind split. A
+  component is a plain C# class that you can test, refactor and search like
+  any other code.
+- **The UI follows the state.** You describe what the screen should show. You
+  do not write code that changes the screen step by step.
+- **Native controls.** Your app uses real WinUI controls, with Fluent
+  design, keyboard support and accessibility built in.
+- **A fast inner loop.** `dotnet watch` applies code changes to the running
+  app and keeps component state. Roslyn analyzers catch common mistakes as
+  you type. See [Dev tooling](/microsoft-ui-reactor/main/tools).
 
 ## Prefer Rust? [#prefer-rust]
 
-The idea isn't tied to C#. Over in [windows-rs](https://github.com/microsoft/windows-rs),
-the Rust for Windows project, the same experiment is running in Rust:
-[**windows-reactor**](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md)
-is a declarative WinUI library where components own their state, controls send
-typed messages back, and only the WinUI controls that changed get updated. It's a
+The same idea is also being explored in Rust.
+[windows-reactor](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md)
+is a declarative WinUI library in [windows-rs](https://github.com/microsoft/windows-rs),
+the Rust for Windows project. Components own their state, controls send typed
+messages back, and only the WinUI controls that changed are updated. It is a
 separate library with its own model, available on
-[crates.io](https://crates.io/crates/windows-reactor). Different language, same
-native controls underneath.
+[crates.io](https://crates.io/crates/windows-reactor). These docs cover
+Microsoft.UI.Reactor, the C# library.
+
+## Tips [#tips]
+
+**Try it in one file first.** A single `.cs` file with a few `#:` lines at the
+top is a complete Reactor app. See
+[One file, no project](/microsoft-ui-reactor/main/get-started/install#one-file-no-project).
+
+**Learn `UseState` first.** Most components need only `UseState` and plain
+C#. Read [Hooks](/microsoft-ui-reactor/main/guides/hooks) when you need effects, reducers or memoization.
+
+**Keep components small.** Move each part of the UI into its own component
+early. Small components are easier to read, test and reuse.
 
 ## Next Steps [#next-steps]
 
-- **[Getting Started](/microsoft-ui-reactor/main/get-started/quickstart)** — Build your first app, manage state, ship a todo list.
-- **[Hooks](/microsoft-ui-reactor/main/guides/hooks)** — `UseState`, `UseEffect`, `UseMemo`, and the rest of the core state primitives.
-- **[Components](/microsoft-ui-reactor/main/guides/components)** — Component classes, props, and function components in detail.
-- **[Reactor for XAML Developers](/microsoft-ui-reactor/main/get-started/xaml-developers)** — Migration cookbook for XAML, bindings, MVVM, and navigation.
+- **[Installation](/microsoft-ui-reactor/main/get-started/install)**: set up your machine, create a project and
+  run it.
+- **[Your first app](/microsoft-ui-reactor/main/get-started/first-app)**: build a counter, a list and a todo
+  app, one step at a time.
+- **[Thinking in Reactor](/microsoft-ui-reactor/main/get-started/thinking-in-reactor)**: the mental model behind
+  components, state and rendering.
+- **[Coming from XAML](/microsoft-ui-reactor/main/get-started/xaml-developers)**: map XAML, bindings and MVVM to
+  Reactor.
+- **[Guides](/microsoft-ui-reactor/main/guides/components)**: components, hooks, layout, styling, navigation
+  and more, starting with Components.
+- **[Controls catalog](/microsoft-ui-reactor/main/controls)**: every built-in control, with examples.
+- **[Tools](/microsoft-ui-reactor/main/tools)**: the `mur` CLI, hot reload, devtools and
+  analyzers.
+- **[API reference](/microsoft-ui-reactor/main/reference)**: every hook, component, factory and
+  modifier, generated from the source.
