@@ -1,0 +1,82 @@
+---
+// One app on the showcase: a screenshot floating on gradient cover art (or the
+// app's icon tile when there is no screenshot), its name, what kind of app it
+// is, one sentence about it, and a link to its source.
+import Icon from "blume/components/Icon.astro";
+import { withBase } from "blume/components/islands/base-path.ts";
+
+import Bloom from "./Bloom.astro";
+import { BLOOMS } from "./bloom-palettes";
+import { sourceUrl, type ShowcaseApp } from "./showcase-apps";
+
+interface Props {
+  app: ShowcaseApp;
+  /** The bigger layout used for the featured apps. */
+  large?: boolean;
+  /** Moves the light to the other side so neighbours with the same color differ. */
+  flip?: boolean;
+}
+
+const { app, large = false, flip = false } = Astro.props;
+const ink = BLOOMS[app.bloom].ink;
+const shot = app.screenshot;
+// Wide screenshots fill 88% of the card; squarer ones narrow so their height
+// matches, which keeps every card's crop line in the same place.
+const cardAspect = large ? 16 / 9 : 16 / 10;
+const shotWidth = shot ? Math.min(88, Math.round((100 * shot.width) / shot.height / cardAspect)) : 0;
+---
+
+<a
+  href={sourceUrl(app)}
+  class="group flex flex-col rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+>
+  <div
+    class:list={[
+      "relative isolate overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10",
+      large ? "aspect-[16/9]" : "aspect-[16/10]",
+    ]}
+  >
+    <Bloom variant={app.bloom} flipX={flip} class="transition-transform duration-700 ease-out motion-safe:group-hover:scale-[1.05]" />
+    {shot ? (
+      <div
+        class="absolute top-[13%] left-1/2 -translate-x-1/2 overflow-hidden rounded-t-[10px] bg-white shadow-[0_24px_60px_-20px_rgb(0_0_0/0.55)] ring-1 ring-black/10 transition-transform duration-500 ease-out motion-safe:group-hover:-translate-y-1"
+        style={`width: ${shotWidth}%`}
+      >
+        <img
+          src={withBase(shot.src)}
+          width={shot.width}
+          height={shot.height}
+          alt={`${app.name} screenshot`}
+          loading={large ? "eager" : "lazy"}
+          decoding="async"
+          class="block h-auto w-full"
+        />
+      </div>
+    ) : (
+      <div class="absolute inset-0 grid place-items-center">
+        <span
+          class:list={[
+            "grid place-items-center rounded-[24%] bg-white shadow-[0_18px_40px_-12px_rgb(0_0_0/0.6)] transition-transform duration-500 ease-out motion-safe:group-hover:-translate-y-1",
+            large ? "size-24 sm:size-28" : "size-16",
+          ]}
+          style={`color: ${ink}`}
+        >
+          <Icon name={app.icon} size={large ? 48 : 30} />
+        </span>
+      </div>
+    )}
+  </div>
+  <div class="mt-4 flex items-baseline justify-between gap-4">
+    <h3 class:list={["font-display font-semibold text-foreground", large ? "text-xl sm:text-2xl" : "text-base"]}>
+      {app.name}
+    </h3>
+    <span class="shrink-0 text-xs text-muted-foreground">{app.kind}</span>
+  </div>
+  <p class:list={["mt-1.5 text-muted-foreground", large ? "max-w-[52ch] text-base" : "text-sm leading-relaxed"]}>
+    {app.summary}
+  </p>
+  <span class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-foreground underline decoration-border underline-offset-4 group-hover:decoration-foreground">
+    View source
+    <Icon name="arrow-up-right" size={14} />
+  </span>
+</a>

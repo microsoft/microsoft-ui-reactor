@@ -76,7 +76,7 @@ core catalog, not the whole document.)
 
 Reactor renders the same WinUI controls a XAML page does, but relocates the
 source of truth from dependency-property bindings to hook state and a
-reconciler (see [Reactor vs XAML](../guide/reactor-vs-xaml.md)). Most XAML→Reactor
+reconciler (see [Coming from XAML](../guide/xaml-developers.md)). Most XAML→Reactor
 bugs are therefore *habit* bugs: the code compiles, looks right to a reviewer
 who knows WinUI, and fails silently at runtime because the mental model shifted.
 The shipping suite already covers the loudest of these (conditional hooks,
@@ -190,8 +190,8 @@ INPC, so the field is invisible to the render loop and updates do nothing.
 
 **FP risk.** Near zero (symbol-level, two-condition match).
 
-**Grounding.** [reactor-vs-xaml.md §Common Mistakes](../guide/reactor-vs-xaml.md)
-("Implementing INPC on local state out of habit"), §MVVM.
+**Grounding.** [xaml-developers.md §Common Mistakes](../guide/xaml-developers.md#common-mistakes)
+("Implementing INotifyPropertyChanged on a component"), §Keep your view models.
 
 #### `REACTOR_HOOKS_010` — Mutate-then-set reference state *(Reactor.Hooks · Warning · fix)*
 

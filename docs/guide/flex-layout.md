@@ -1,4 +1,11 @@
 
+# Flex Layout
+
+`FlexPanel` is a Yoga-backed CSS Flexbox implementation, exposed through the
+`FlexRow` and `FlexColumn` factories. Reach for it when the layout needs
+alignment control, wrapping, or proportional sizing that `VStack` and
+`HStack` cannot express.
+
 Microsoft.UI.Reactor (Reactor)'s flex layout reasons about two axes at once. The main axis distributes
 children across available space — that's where `JustifyContent`,
 `Flex(grow:)`, `Flex(shrink:)`, and `Flex(basis:)` apply. The cross
@@ -13,15 +20,10 @@ on a problem that's really "distribute these items along one axis with
 alignment on the other" — that's the FlexPanel shape, and the moment a
 grid feels overkill is the moment Flex is right.
 
-# Flex Layout
-
-Reactor's `FlexPanel` (exposed through the [`FlexRow`](#direction) and
-[`FlexColumn`](#direction) factories) is a Yoga-backed CSS Flexbox
-implementation. Reach for it when the layout needs alignment control,
-wrapping, or proportional sizing that [`VStack` and `HStack`](layout.md)
-cannot express. Add `using Microsoft.UI.Reactor.Layout;` (or import
-`FlexDirection`, `FlexJustify`, `FlexAlign`, `FlexWrap`) to access the
-enum types.
+Add `using Microsoft.UI.Reactor.Layout;` (or import `FlexDirection`,
+`FlexJustify`, `FlexAlign`, `FlexWrap`) to access the enum types.
+[Direction](#direction) covers `FlexRow` and `FlexColumn`; for simple
+stacks, [`VStack` and `HStack`](layout.md) are enough.
 
 ## At-a-glance reference
 

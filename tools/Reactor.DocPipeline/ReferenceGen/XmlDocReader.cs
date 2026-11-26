@@ -4,7 +4,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 
 /// <summary>
 /// One canonical member as extracted from an XML doc file. Spec 041 §7.1.2
-/// uses this shape to drive the <see cref="ReferenceWriter"/> templates.
+/// uses this shape to drive the reference pages.
 /// </summary>
 internal enum MemberKind
 {
@@ -42,26 +42,31 @@ internal sealed record MemberDoc(
     /// <c>T2</c>, … so overload headings stay readable either way.
     /// </summary>
     public IReadOnlyList<ParamDoc> TypeParams { get; init; } = Array.Empty<ParamDoc>();
+
+    /// <summary>
+    /// The original <c>&lt;member&gt;</c> element. <see cref="DocMarkdown"/> renders
+    /// from it so inline tags (lists, code, links) keep their structure.
+    /// </summary>
+    public XElement? Source { get; init; }
 }
 
 /// <summary>
 /// Parses <c>Microsoft.UI.Reactor.xml</c> documentation files using
-/// <see cref="System.Xml.Linq"/>. The reader is lossy on element ordering
-/// (only the documented section list above) but preserves inline XML
-/// inside summaries / remarks so <see cref="CrefResolver"/> can rewrite
-/// <c>&lt;see cref="..."/&gt;</c> at render time.
+/// <see cref="System.Xml.Linq"/>. The string sections keep inline XML
+/// (for example <c>&lt;see cref="..."/&gt;</c>) as raw markup; the reference
+/// pages render from <see cref="MemberDoc.Source"/> instead.
 /// </summary>
 internal static class XmlDocReader
 {
     public static List<MemberDoc> Read(string xmlPath)
     {
-        var doc = XDocument.Load(xmlPath);
+        var doc = XDocument.Load(xmlPath, LoadOptions.PreserveWhitespace);
         return Parse(doc);
     }
 
     public static List<MemberDoc> ReadString(string xml)
     {
-        var doc = XDocument.Parse(xml);
+        var doc = XDocument.Parse(xml, LoadOptions.PreserveWhitespace);
         return Parse(doc);
     }
 
@@ -103,6 +108,7 @@ internal static class XmlDocReader
                         (string?)p.Attribute("name") ?? string.Empty,
                         GetInnerText(p)))
                     .ToList(),
+                Source = m,
             });
         }
         return members;

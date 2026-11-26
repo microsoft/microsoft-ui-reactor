@@ -13,6 +13,11 @@ tier: comprehensive
 winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/motion/
 ---
 
+# Animation
+
+Reactor animations are declarative. You set the target value (opacity,
+scale, translation) and attach a transition modifier.
+
 Microsoft.UI.Reactor (Reactor) exposes four animation systems and one rule about which to pick.
 The rule first: the **compositor** can only animate five properties —
 Opacity, Offset (Translation), Scale, Rotation, and CenterPoint — and
@@ -32,28 +37,27 @@ properties none of the above can touch. Read [Compositor animation](#animate-mod
 first if you're picking between `.Animate()` and `.WithAnimation()`,
 or [Choreography](#choreography) if you're trying to sequence steps.
 
-# Animation
-
-Reactor animations are declarative. You set the target value (opacity, scale,
-translation) and attach a transition modifier. When the value changes on the
-next render — driven by [hooks](hooks.md) and state — WinUI animates from
-the old value to the new one automatically.
+When the value changes on the next render — driven by [hooks](hooks.md) and
+state — WinUI animates from the old value to the new one automatically.
 
 Animation and transition configuration changes are also checked on each render,
 even when the element's other properties stay the same. For example, changing
 only `.LayoutAnimation()`'s duration updates the layout animation on the next render.
 
-Value-equivalent plain-data configurations such as `.Animate()` and
-`.LayoutAnimation()` can still skip updates. Native objects and arrays use
-reference equality: rebuilding `.OpacityTransition()`, `.WithTransitions()`,
-`.Keyframes()`, or `.ScrollLinked()` with fresh objects or arrays prevents
-skipping, even when the settings match.
+Unchanged declarations still skip updates, even though each render rebuilds
+them. `.Keyframes()` and `.ScrollLinked()` compare their keyframes and
+expressions, implicit transitions such as `.OpacityTransition()` compare their
+duration (and axes, for scale and translation), `.WithTransitions()` compares
+each theme transition's settings, and `.InteractionStates()` compares solid
+brushes by color and opacity. Other brushes, a `.ScrollLinked()` driven by a
+different `ScrollViewer`, a continuum navigation transition, and a transition
+type Reactor doesn't know still count as a change.
 
 ## Reference
 
 | API | Animates | Trigger | Use when |
 |-----|----------|---------|----------|
-| `.OpacityTransition(duration?)` | Opacity | Implicit, on every change | Show/hide a single element. |
+| `.OpacityTransition(duration?)` | Opacity | Implicit on opacity writes | Show/hide a single element. |
 | `.ScaleTransition(transition?)` | Scale | Implicit, on every change | Element resize feedback. |
 | `.TranslationTransition(transition?)` | Translation (offset) | Implicit, on every change | Slide a single element. |
 | `.RotationTransition(duration?)` | Rotation | Implicit, on every change | Spin a single element. |
@@ -439,7 +443,7 @@ Built-in transitions:
 
 | Transition | Effect |
 |-----------|--------|
-| `Transition.Fade` | Fade in/out |
+| `Transition.Fade` | Fade in from 0 to the element's own opacity (`.Opacity()` or a style's), and out to 0 |
 | `Transition.Slide(edge)` | Slide from an edge (Left, Top, Right, Bottom) |
 | `Transition.Scale(from)` | Scale from `from` times the element's own `.Scale()` to its full size |
 | `a + b` | Run both in parallel |
@@ -478,6 +482,12 @@ The builder supports `.Duration(ms)`, `.Loop()` for infinite repeat, and
 `.At(progress, opacity?, scale?, translation?, rotation?, easing?)` for
 each keyframe, with `rotation` in degrees like `.Rotation()`. Keyframes run on the compositor — no managed-code
 involvement during playback.
+
+When the current keyframe entry animates opacity and its trigger stays the same,
+changing `.Opacity(value)` preserves playback progress. The latest declared value
+takes effect when the looping entry is removed or the one-shot finishes.
+If a new trigger replays the same name without an opacity track, subsequent
+`.Opacity(value)` updates can replace the previous opacity loop.
 
 ## Choreography
 

@@ -1,0 +1,10 @@
+node_modules/
+.blume/
+dist/
+.env.local
+
+# Written by scripts/sync.mjs from docs/guide. The home page is pages/index.astro.
+/docs/
+/public/images/
+/redirects.generated.json
+.blume-verify/

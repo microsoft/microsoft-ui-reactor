@@ -85,6 +85,23 @@ public class ElementModifiersCoverageTests
     }
 
     [Fact]
+    public void ModifiersEqual_DistinguishesXYFocusKeyboardNavigation()
+    {
+        // Regression (spec 067 §14): a change to XYFocusKeyboardNavigation alone must decline the
+        // shallow skip, or the control keeps the old mode. It is a visible property, so the
+        // perf provider's visible-only comparison must see it too.
+        var enabled = new ElementModifiers { XYFocusKeyboardNavigation = Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled };
+        var disabled = new ElementModifiers { XYFocusKeyboardNavigation = Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Disabled };
+        var unset = new ElementModifiers();
+
+        Assert.False(Element.ModifiersEqual(enabled, disabled));
+        Assert.False(Element.ModifiersEqual(unset, enabled));
+        Assert.False(Element.ModifiersVisiblyEqual(enabled, disabled));
+        Assert.True(Element.ModifiersEqual(
+            enabled, new ElementModifiers { XYFocusKeyboardNavigation = Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled }));
+    }
+
+    [Fact]
     public void ModifiersEqual_DistinguishesOnUpdateAction()
     {
         // Regression (#976): ModifiersEqual is the reconciler's skip gate, and ShallowEquals does

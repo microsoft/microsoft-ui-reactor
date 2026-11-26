@@ -47,8 +47,8 @@ internal static class OverlayLifecycle
     // by the placeholder, so entries die with it.
     //
     // A side table rather than a ReactorState slot, matching how every other
-    // rare, feature-local native association is stored (Reconciler._dndStates,
-    // Reconciler._gestureStates, Reconciler.s_inlineUiExtentPins): ReactorState
+    // rare, feature-local native association is stored (DragDropDispatch._dndStates,
+    // GestureDispatch._gestureStates, Reconciler.s_inlineUiExtentPins): ReactorState
     // is allocated for every native element in the tree, and its slots are all
     // Reactor abstractions rather than concrete WinUI control types. StackPanel
     // is poolable, so the placeholder can be recycled into an unrelated element

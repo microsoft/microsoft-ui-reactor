@@ -50,10 +50,15 @@ Conventions for contributors:
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
 
-- The Toolkit compatibility harness can capture and measure SettingsCard header
-  and description fit at an already-active OS text scale above 100%. Other
-  controls retain explicit unimplemented outcomes; no desktop settings are
-  changed, and runtime acceptance still requires an approved host (issue #1602).
+- The Toolkit compatibility harness can measure SettingsCard header/description
+  fit and explicit initial plain-text targets in eleven additional header, item
+  and panel controls at an already-active OS text scale above 100%. It checks
+  OS-profile stability and separates high-contrast capture completion from the
+  still-blocked actual-host appearance review. Unsupported shapes remain blocked;
+  no desktop settings are changed, and runtime acceptance still requires an
+  approved host. Panel fixture slots accommodate measured label sizes, and the
+  document theme check permits equal Light/Dark brushes under stable OS high
+  contrast without weakening text containment (issue #1602).
 
 - **`REACTOR_ANIM_004` catches facade transforms written through `.Set` on an element that uses
   the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
@@ -66,7 +71,45 @@ Conventions for contributors:
   ignored once translation is enabled on the visual (the build-time half of #1642). That arm has its
   own message and no fix.
 
+- **New and rewritten pages in the user guide.** Get started has a new Installation page, a
+  step-by-step "Your first app" tutorial (it replaces "Getting started"), and "Thinking in
+  Reactor". "Reactor vs. XAML" is merged into "Coming from XAML", and its old URL redirects.
+  Tools has new pages for hot reload and live preview, Devtools, the analyzers (one section
+  per `REACTOR_*` ID), the `mur` CLI, and building with AI agents. New guides cover Native
+  AOT, the sample apps, services and dependency injection, and desktop integration (tray
+  icons, the taskbar, launch activation, file pickers, the clipboard, and drag and drop)
+  (PR #1692).
+
+- **The API reference covers the whole public API.** It used to list only the hooks. The
+  generator now writes a page for every public hook, component, element, factory group,
+  modifier group and type, from the XML docs and the built `Microsoft.UI.Reactor.dll`.
+  Pages are grouped into 18 categories, such as Hosting and windows, Theming, Data,
+  Animation and Validation.
+  Each entry shows its signature, a parameter table with defaults, examples and links to the
+  matching guide. Links from the guides go to the right section of the right page. Run
+  `compile --reference-only` to regenerate only the reference, and add
+  `--reference-nav-out <path>` to also write its `nav.json` groups. The old per-hook pages
+  redirect to their new sections (PR #1691).
+
+- **The docs site has a Changelog page.** `/changelog` lists every release with its date,
+  and each release has its own page with the Added, Changed and Fixed notes from
+  `CHANGELOG.md`, plus an RSS feed at `/changelog/rss.xml`. The site build generates it, so
+  links to guide pages become site links and `#1234` references link to GitHub. The header
+  and the footer link to it (PR #1692).
+
+- **Guide pages can use tabs, steps and copyable prompts.** Templates mark them with
+  `<!-- tabs -->`, `<!-- steps -->` and `<!-- prompt -->` comments, so `docs/guide` still reads
+  as plain Markdown on GitHub, and the site turns them into Blume's Tabs, Steps and Prompt
+  components. Installation, Build with AI, the Visual Studio extension and Hot reload use them,
+  for example one tab each for `winapp`, `dotnet new` and a coding agent. The markers are
+  described in `docs/_pipeline/ai-author-skill.md` (PR #1692).
+
 ### Changed
+
+- ReactorGallery now looks closer to WinUI Gallery. Category labels are sentence case
+  ("Date & time"), every card has an image, the nav uses WinUI Gallery's category glyphs, and
+  page titles use the regular title weight. Category keys, deep-link slugs and the search index
+  are unchanged.
 
 - **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
   visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
@@ -185,6 +228,44 @@ Conventions for contributors:
   `Chart()` builder's line and area charts skip non-finite points, leaving a gap.
   Malformed `PathIcon(...)` markup still throws, as before (PR #1622).
 
+- **The documentation site is now built with Blume instead of MkDocs.** Material for MkDocs
+  is no longer developed, so the site at <https://microsoft.github.io/microsoft-ui-reactor/>
+  moves to [Blume](https://www.npmjs.com/package/blume), built from the new `docs/_website`
+  project. The pages are still generated from `docs/_pipeline/templates` into `docs/guide`.
+  Old page URLs redirect to their new location and every heading keeps its anchor, so
+  existing links keep working, including links to a section of a page that moved. Versions
+  published before the move stay MkDocs sites until they are backfilled with `Publish docs`;
+  a backfill rebuilds them with Blume, the new version menu and a banner that links to the latest release. `docs/_website/scripts/publish.mjs`
+  replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
+  the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
+
+- **Guide pages now open with their title and a one-sentence summary.** Each page in
+  `docs/guide` starts with its `#` title, then a short summary that the site shows under the
+  title, then the longer overview. Before, many pages put the overview above the title, and
+  16 pages opened with the WinUI reference note; that note now sits just before the first
+  section. Lint rule `TIER_008` now counts the overview between the title and the first `##`
+  heading. The site build also rewrites links whose text wraps onto a second line, and it
+  fails a page whose opening paragraph can't be shown as its summary (it has a link or runs
+  over 420 characters).
+
+- **The docs site has a new home page, a Showcase page and a clearer structure.** The home
+  page opens with a banner for the latest Reactor post on the Windows developer blog, links to
+  the new Showcase page, and explains that Reactor builds native WinUI apps in C# next to a
+  live counter example. It then leads into
+  Get started, the developer tools, Guides, Controls, Recipes, API reference and How it works.
+  Showcase lists the sample apps in the repo, each with a link to its source. The site tabs
+  are now Get started, Guides, Controls, Tools, API reference and How it works ("Internals" is
+  renamed). Get started also holds the cheat sheet and the rules of Reactor. Guides is grouped
+  into Core concepts, Layout and styling, Building apps, Ship your app, Recipes, and Interop
+  and migration. Tools collects hot reload, Devtools, the Visual Studio and VS Code
+  extensions, AI agent support, the analyzers, the `mur` CLI and diagnostics. Old page URLs
+  still redirect, and `nav.json` can now list extra redirects for pages that were merged or
+  renamed. The site now uses the Reactor icon.
+  The site header and social cards show the WinUI logo next to the Reactor name.
+  Each Showcase app has a screenshot, and a "Submit your app" link opens a new Showcase
+  issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
+  the app's own repository. The cards use soft color gradients drawn in CSS, so they need no image files.
+
 ### Deprecated
 
 ### Removed
@@ -207,12 +288,68 @@ Conventions for contributors:
 
 ### Fixed
 
+- `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
+  support common `.Foreground(brush)` modifiers and interaction-state foreground
+  overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and
+  `REACTOR_MOD_003` now accepts the supported `.Foreground(...)` calls (issue #1674).
+
+- Changing `.Opacity()` preserves playback progress when the current keyframe entry
+  animates opacity and its trigger stays the same. Removing the looping entry or
+  finishing a one-shot applies the latest declared opacity (#1651, #1660).
+
+- **Changing only `.XYFocusKeyboardNavigation(...)` now updates the control (spec 067 §14).** The
+  reconciler's skip check never compared this modifier, so an element whose only change was its
+  XY focus keyboard navigation mode skipped the update and kept the old mode.
+
+- **Elements using `.Keyframes()`, `.ScrollLinked()`, an implicit transition such as
+  `.OpacityTransition()`, `.WithTransitions()` or `.InteractionStates()` skip unchanged renders
+  again (issue #1702; follow-up to #1536, spec 014).** Each render rebuilds these declarations with
+  new arrays and WinUI objects, and the skip check compared those by reference, so such an element
+  always ran a full update. `.ScrollLinked()` also restarted its expressions on every parent render.
+  The declarations now compare by value: keyframes, scroll expressions with the same `ScrollViewer`,
+  transition durations and settings, and solid brushes by color and opacity. A changed or removed
+  declaration still updates. Turning Windows' "Animation effects" setting on or off now refreshes
+  every element in every Reactor host, so implicit transitions on unchanged elements follow it too.
+
+- **`WindowLevel.AlwaysOnTop` refused by Windows is now reapplied (spec 054, issue #1707).** Windows
+  can decline a runtime topmost request from an app that doesn't own the foreground, for example
+  while the workstation is locked. The call reports success but the window never becomes topmost, and
+  Reactor never retried, so `Spec.Level` said `AlwaysOnTop` while the window wasn't. Reactor now checks
+  the result, logs a `DiagnosticLog` warning once, and reapplies the level the next time the app is
+  activated, either by gaining the foreground or by one of its windows activating.
+
+- `.LayoutAnimation()` uses linear easing for position and optional size changes in
+  non-spring mode (#1652).
+
+- **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
+  layers mount no control of their own, so the ref points at the control their child mounted, and
+  unmount only cleared refs declared on that control's own element and its decorators. The ref kept
+  pointing at the control after it left the tree, and after an unrelated element rented it from the
+  pool. Unmount now clears every ref the reconciler pointed at the control, whichever layer declared
+  it.
+
+- **An exit `.Transition()` declared on a keyed `Memo(key, …)` now plays when the Memo is removed or
+  its key changes (issues #1663 and #1665).** The control used to leave the tree at once, while the
+  same exit declared on the element itself, or on the element a `ModifiedElement` wraps, kept it
+  until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
+  honoured too.
+
+- An enter fade (`.Transition(Transition.Fade)`, and the default enter under
+  `Animations.Animate(...)`) on an element with its own opacity (a `.Opacity(x)` modifier or a
+  style setter) now fades in, and ends at that opacity instead of 1.
+  XAML writes the element's opacity to the visual when it first renders it, which stopped the fade,
+  so `Border(...).Opacity(0.4).Transition(Transition.Fade)` snapped to 0.4. A pooled control that
+  gets no such write faded to 1 and stayed there. Reactor now restarts the fade once after that
+  first frame, keeping the element hidden until then, unless a modifier or `.Set(...)` changed the
+  opacity in between (spec 066 §3, issue #1680).
+
 - An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
   XAML writes that value to the visual when it first renders it, which stopped the animation, so
   `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
-  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
-  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+  once after that frame unless an intervening write, such as a `.Set(...)` callback, has taken
+  over opacity. A `.Opacity(...)` update is deferred while the keyframe still owns opacity.
+  A later style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
 
 - Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
   corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
@@ -224,6 +361,11 @@ Conventions for contributors:
   so `ItemsView` click and selection right after a reorder, and app code that calls
   `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
   microsoft/microsoft-ui-xaml#12659).
+
+- Markdown selection skips offscreen glyph queries during drag growth for single-run
+  printable-ASCII left-to-right paragraphs with positive axis-aligned 2D transforms.
+  Right-to-left Runs and other layouts retain the reference geometry path; offscreen
+  text remains selected for copy, UI Automation and scrolling (PR #1698).
 
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
@@ -1329,7 +1471,7 @@ Conventions for contributors:
   Shell link activation, property stores and removal queries no longer depend on
   built-in COM marshalling. Worker calls use a balanced explicit COM apartment scope and
   release transaction-owned interfaces deterministically. See the
-  [Jump list guide](docs/guide/windows.md#jump-list) (spec 036 §11.3).
+  [Jump list guide](docs/guide/desktop-integration.md#jump-list) (spec 036 §11.3).
 
 - **`.InteractionStates()` and `.Keyframes()` translations no longer move an element to its
   parent's origin** (issue #1432). Both animated the handoff visual's `Offset`, and on a

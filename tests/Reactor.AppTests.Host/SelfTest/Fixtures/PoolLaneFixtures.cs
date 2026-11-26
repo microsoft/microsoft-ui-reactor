@@ -497,14 +497,20 @@ internal static class PoolLaneFixtures
         {
             const string p = "ElementPoolLanes_MemoKeyframes";
             using var lab = new Lab(H);
-            var first = await lab.Show(Memo("k", static () => Target("M")).Keyframes("pulse", 1, Pulse));
+            var first = await lab.Show(Memo("k", static () => Target("M").Opacity(0.4)).Keyframes("pulse", 1, Pulse));
             H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
+            if (first is null) return;
+            var state = Reconciler.GetOrCreateReactorState(first);
+            H.Check(p + "_TracksOpacity", state.OpacityKeyframe is not null && state.DeclaredOpacity.Value == 0.4f);
             await lab.Show(null);
+            H.Check(p + "_ClearsOpacityState", state.OpacityKeyframe is null && state.DeclaredOpacity == default);
 
             var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));
             H.Check(p + "_Recycled", ReferenceEquals(renter, first));
-            H.Check(p + "_RenterPlays", renter is not null
-                && Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
+            // Return cleared the previous renter's local 0.4, so XAML pushes 1 to the visual on its
+            // next frame and stops this keyframe. The #1669 restart runs after a compositor commit.
+            H.Check(p + "_RenterPlays", renter is not null && await Harness.WaitForWithin(
+                () => Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"), 3000));
         }
     }
 
@@ -522,7 +528,7 @@ internal static class PoolLaneFixtures
             var hovered = await lab.Show(TextBlock("H").InteractionStates(b => b.PointerOver(foreground: hoverBrush)));
             H.Check(p + "_Mounted", hovered is WinUI.TextBlock);
             if (hovered is null) return;
-            Reconciler.SimulatePointerOverForTests(hovered, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(hovered, isOver: true);
             H.Check(p + "_HoverApplied", hovered.ReadLocalValue(WinUI.TextBlock.ForegroundProperty)
                 is Microsoft.UI.Xaml.Media.SolidColorBrush { Color.R: 255, Color.G: 0 });
             await lab.Show(null);
@@ -834,7 +840,7 @@ internal static class PoolLaneFixtures
             var source = await lab.Show(TextBox("t", static _ => { }).InteractionStates(b => b.PointerOver(foreground: hoverBrush)));
             H.Check(p + "_Mounted", source is WinUI.TextBox);
             if (source is null) return;
-            Reconciler.SimulatePointerOverForTests(source, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(source, isOver: true);
             // What PrepareConnectedAnimationSource does once WinUI accepts the source.
             ElementPool.ExcludeFromPool(source, releaseOnReturn: true);
             await lab.Show(null);
@@ -982,8 +988,236 @@ internal static class PoolLaneFixtures
             FrameworkElement? control = null;
             foreach (var name in new[] { "a", "b", "c" })
                 control = await lab.Show(Target("K").Keyframes(name, 1, Pulse));
-            var names = (control?.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.KeyframeNames;
-            H.Check(p + "_OnlyCurrent", names is not null && names.SetEquals(["c"]), names is null ? "null" : string.Join(",", names));
+            var names = control is null ? null : Reconciler.GetCompositionState(control)?.Keyframes;
+            H.Check(p + "_OnlyCurrent", names is not null && names.Count == 1 && names.ContainsKey("c"),
+                names is null ? "null" : string.Join(",", names.Keys.Select(k => k.Value)));
+
+            // .Keyframes() doesn't reject a null name, and one plays, retriggers and is removed like any other.
+            control = await lab.Show(Target("K").Keyframes(null!, 1, Pulse));
+            bool nullPlays = control is not null && Reconciler.KeyframeControllerForTests(control, null!, "Opacity") is not null;
+            bool stopped = false, nullRetriggers = false;
+            if (control is not null)
+            {
+                // Stop the first playback, so its cached controller can't stand in for a replay.
+                Reconciler.CancelOpacityRestart(control);
+                var visual = ElementCompositionPreview.GetElementVisual(control);
+                visual.StopAnimation("Opacity");
+                stopped = !Running(visual, "Opacity");
+                control = await lab.Show(Target("K").Keyframes(null!, 2, Pulse));
+                nullRetriggers = control is not null && visual.TryGetAnimationController("Opacity") is { } running
+                    && Equals(running, Reconciler.KeyframeControllerForTests(control, null!, "Opacity"));
+            }
+            control = await lab.Show(Target("K"));
+            names = control is null ? null : Reconciler.GetCompositionState(control)?.Keyframes;
+            H.Check(p + "_NullName", nullPlays && stopped && nullRetriggers && names is { Count: 0 },
+                $"plays={nullPlays} stopped={stopped} retriggers={nullRetriggers} left={names?.Count}");
+        }
+    }
+
+    /// <summary>
+    /// A control's composition state lives on the control and outlasts the pool's visual reset: the
+    /// handoff (and so the visual lane) stays, while what the previous renter owned (keyframe
+    /// triggers, the interaction tracker, modifier channels) goes. The features are declared on a
+    /// keyed <c>Memo</c>, a layer unmount doesn't reach, so only the pool reset can drop them.
+    /// </summary>
+    internal sealed class CompositionStateReset(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static KeyframeBuilder Pulse(KeyframeBuilder k) => k.Duration(60000).At(0f, opacity: 0.5f).At(1f, opacity: 1f);
+
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_CompositionStateReset";
+            using var lab = new Lab(H);
+            int trackers = InteractionStateApplier.InteractionTrackerCountForTests;
+            var control = await lab.Show(Memo("k", static () => Target("C")).Keyframes("pulse", 1, Pulse)
+                .InteractionStates(b => b.PointerOver(opacity: 0.8f)).Scale(1.1f));
+            var state = control is null ? null : Reconciler.GetCompositionState(control);
+            var visual = state?.HandedOutVisual;
+            H.Check(p + "_Owned", state is { VisualTaken: true, Keyframes.Count: 1, InteractionTracker: not null, TransformRest: not null }
+                && visual is not null && (state.ModifierProperties & AnimateProperty.Scale) != 0
+                && InteractionStateApplier.InteractionTrackerCountForTests == trackers + 1,
+                $"keyframes={state?.Keyframes?.Count} tracker={state?.InteractionTracker is not null} rest={state?.TransformRest is not null} props={state?.ModifierProperties}");
+            if (control is null || state is null) return;
+
+            await lab.Show(null);
+            H.Check(p + "_SameInstance", ReferenceEquals(Reconciler.GetCompositionState(control), state));
+            H.Check(p + "_HandoffKept", state.VisualTaken && ReferenceEquals(state.HandedOutVisual, visual)
+                && ElementPool.IsVisualTaken(control));
+            H.Check(p + "_RenterStateDropped", state is { Keyframes: null, InteractionTracker: null, TransformRest: null }
+                && state.ModifierProperties == default && InteractionStateApplier.InteractionTrackerCountForTests == trackers,
+                $"keyframes={state.Keyframes?.Count} tracker={state.InteractionTracker is not null} props={state.ModifierProperties}");
+
+            var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));
+            H.Check(p + "_VisualLaneRenter", ReferenceEquals(renter, control)
+                && ReferenceEquals(Reconciler.GetCompositionState(control), state) && state.Keyframes?.Count == 1);
+        }
+    }
+
+    /// <summary>
+    /// A <c>.Ref</c> declared on a layer that mounts no control of its own (a keyed <c>Memo</c>, a
+    /// legacy <see cref="ModifiedElement"/>, a flyout decorator) points at the control its child
+    /// mounted. Unmount clears it, so a pooled control an unrelated renter gets isn't still
+    /// referenced (#1659). The control's own ref is the positive control.
+    /// </summary>
+    internal sealed class WrapperRefs(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed record ThrowingEdgeElement(ElementRef<RefNode>? Target) : Element;
+
+        public override async Task RunAsync()
+        {
+            var cases = new (string Name, Func<ElementRef, Element> Build)[]
+            {
+                ("Own", static r => Target("A").Ref(r)),
+                ("KeyedMemo", static r => Memo("k", static () => Target("A")).Ref(r)),
+                ("NestedKeyedMemo", static r => Memo("outer", static () => Memo("inner", static () => Target("A"))).Ref(r)),
+                ("ModifiedElement", static r => new ModifiedElement(Target("A"), new ElementModifiers { Ref = r })),
+                ("Flyout", static r => Flyout(Target("A"), TextBlock("f")).Ref(r)),
+            };
+            foreach (var (name, build) in cases)
+            {
+                string p = "ElementPoolLanes_WrapperRefs_" + name;
+                using var lab = new Lab(H);
+                var r = new ElementRef();
+                var mounted = await lab.Show(build(r));
+                H.Check(p + "_RefSet", mounted is WinUI.Border && ReferenceEquals(r.Current, mounted),
+                    $"mounted={mounted?.GetType().Name} current={r.Current?.GetType().Name}");
+                await lab.Show(null);
+                H.Check(p + "_ClearedOnUnmount", r.Current is null, $"current={r.Current?.GetType().Name}");
+
+                var renter = await lab.Show(Target("B"));
+                // Only the flyout decorator's control might stay out of the pool; the rest must recycle
+                // for the renter step to reproduce the issue.
+                if (name != "Flyout")
+                    H.Check(p + "_Recycled", ReferenceEquals(renter, mounted));
+                H.Check(p + "_RenterNotReferenced", r.Current is null, $"current={r.Current?.GetType().Name}");
+            }
+
+            // Two layers that mount no control, each with its own ref: the control holds both.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_TwoLayers";
+                using var lab = new Lab(H);
+                ElementRef outer = new(), inner = new();
+                var mounted = await lab.Show(Memo("outer", () => Memo("inner", static () => Target("A")).Ref(inner)).Ref(outer));
+                H.Check(p + "_RefsSet", mounted is not null && ReferenceEquals(outer.Current, mounted)
+                    && ReferenceEquals(inner.Current, mounted),
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+                await lab.Show(null);
+                H.Check(p + "_BothCleared", outer.Current is null && inner.Current is null,
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+            }
+
+            // Updates on a wrapper layer: an unchanged ref stays tracked, a swapped one is dropped.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_Update";
+                using var lab = new Lab(H);
+                ElementRef r = new(), swapped = new();
+                static Element Wrapped(string text, ElementRef r) => new ModifiedElement(Target(text), new ElementModifiers { Ref = r });
+                var mounted = await lab.Show(Wrapped("A", r));
+                var updated = await lab.Show(Wrapped("A2", r));
+                H.Check(p + "_PatchedInPlace", mounted is not null && ReferenceEquals(updated, mounted));
+                H.Check(p + "_RefKept", mounted is not null && ReferenceEquals(r.Current, mounted));
+                await lab.Show(Wrapped("A3", swapped));
+                var tracked = (mounted?.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ProducerRefs;
+                H.Check(p + "_SwapClearsOld", r.Current is null && mounted is not null && ReferenceEquals(swapped.Current, mounted));
+                H.Check(p + "_SwapUntracks", ReferenceEquals(tracked, swapped), tracked?.GetType().Name ?? "null");
+                await lab.Show(null);
+                H.Check(p + "_ClearedOnUnmount", swapped.Current is null);
+                var renter = await lab.Show(Target("B"));
+                H.Check(p + "_Recycled", ReferenceEquals(renter, mounted));
+                H.Check(p + "_RenterNotReferenced", swapped.Current is null && r.Current is null);
+            }
+
+            // A direct Mount runs outside a Reconcile commit, so the ref's CurrentChanged dispatches
+            // synchronously and can throw after Current was set. Unmount must still clear the ref.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingDispatch";
+                using var reconciler = new Reconciler();
+                var r = new ElementRef();
+                Action<FrameworkElement?> boom = static v => { if (v is not null) throw new InvalidOperationException("boom"); };
+                r.CurrentChanged += boom;
+                bool threw = false;
+                try { reconciler.Mount(Memo("k", static () => Target("A")).Ref(r), static () => { }); }
+                catch (InvalidOperationException) { threw = true; }
+                r.CurrentChanged -= boom;
+                var control = r.Current;
+                H.Check(p + "_Threw", threw && control is WinUI.Border);
+                if (control is not null) reconciler.UnmountChild(control);
+                H.Check(p + "_ClearedOnUnmount", r.Current is null);
+            }
+
+            // Two tracked refs, each with a subscriber that throws when its ref is cleared: unmount
+            // clears both and still reports the failure.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingClear";
+                using var reconciler = new Reconciler();
+                ElementRef outer = new(), inner = new();
+                Action<FrameworkElement?> boom = static v => { if (v is null) throw new InvalidOperationException("boom"); };
+                var control = reconciler.Mount(Memo("outer", () => Memo("inner", static () => Target("A")).Ref(inner)).Ref(outer),
+                    static () => { });
+                outer.CurrentChanged += boom;
+                inner.CurrentChanged += boom;
+                bool threw = false;
+                try { if (control is not null) reconciler.UnmountChild(control); }
+                catch (InvalidOperationException) { threw = true; }
+                outer.CurrentChanged -= boom;
+                inner.CurrentChanged -= boom;
+                H.Check(p + "_Threw", control is not null && threw);
+                H.Check(p + "_BothCleared", outer.Current is null && inner.Current is null,
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+            }
+
+            // Unmount runs user-supplied reference setters with null, and one can throw. The
+            // control's own ref is still cleared.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingEdgeSetter";
+                using var reconciler = new Reconciler();
+                bool throwOnClear = false;
+                var throwingEdge = new Core.V1Protocol.Descriptor.ControlDescriptor<ThrowingEdgeElement, RefNode>()
+                    .Reference<RefNode>(get: static e => e.Target, set: (c, t) =>
+                    {
+                        if (t is null && throwOnClear) throw new InvalidOperationException("boom");
+                        c.Right = t;
+                    });
+                reconciler.RegisterHandler(new Core.V1Protocol.Descriptor.DescriptorHandler<ThrowingEdgeElement, RefNode>(throwingEdge));
+                var r = new ElementRef();
+                var control = reconciler.Mount(new ThrowingEdgeElement(new ElementRef<RefNode>(new ElementRef())).Ref(r), static () => { });
+                bool threw = false;
+                throwOnClear = true;
+                try { if (control is not null) reconciler.UnmountChild(control); }
+                catch (InvalidOperationException) { threw = true; }
+                finally { throwOnClear = false; }
+                H.Check(p + "_Threw", control is RefNode && threw);
+                H.Check(p + "_OwnRefCleared", r.Current is null);
+            }
+
+            // Detaching or returning a control directly, without unmounting it, clears the refs too,
+            // so a retained or pooled control doesn't keep retired ref cells alive.
+            foreach (bool detach in new[] { true, false })
+            {
+                string p = "ElementPoolLanes_WrapperRefs_Direct" + (detach ? "Detach" : "Return");
+                using var reconciler = new Reconciler();
+                var r = new ElementRef();
+                var control = reconciler.Mount(Memo("k", static () => Target("A")).Ref(r), static () => { }) as FrameworkElement;
+                H.Check(p + "_RefSet", control is not null && ReferenceEquals(r.Current, control));
+                if (control is null) continue;
+                if (detach) Reconciler.DetachReactorState(control);
+                else reconciler.ReturnControl(control);
+                var tracked = (control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ProducerRefs;
+                H.Check(p + "_Cleared", r.Current is null && tracked is null, $"current={r.Current is not null} tracked={tracked is not null}");
+            }
+
+            // A changed Memo key remounts: the ref moves to the replacement before the old control is
+            // unmounted, and that unmount must not clear it.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_KeyChange";
+                using var lab = new Lab(H);
+                var r = new ElementRef();
+                var first = await lab.Show(Memo("k1", static () => Target("A")).Ref(r));
+                var second = await lab.Show(Memo("k2", static () => Target("B")).Ref(r));
+                H.Check(p + "_Replaced", second is not null && !ReferenceEquals(first, second));
+                H.Check(p + "_RefFollowsReplacement", second is not null && ReferenceEquals(r.Current, second),
+                    $"current={(ReferenceEquals(r.Current, first) ? "old" : r.Current?.GetType().Name ?? "null")}");
+            }
         }
     }
 }

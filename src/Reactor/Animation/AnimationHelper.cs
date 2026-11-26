@@ -27,8 +27,8 @@ internal static class AnimationHelper
     // written as well once the visual was taken or Reactor wrote it there, because a UIElement
     // write that doesn't change the value commits nothing to the visual.
     private static bool WritesVisualOpacity(UIElement element)
-        => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
-            && (state.VisualTaken || (state.CompositionModifierProperties & AnimateProperty.Opacity) != 0);
+        => Reconciler.GetCompositionState(element) is { } state
+            && (state.VisualTaken || (state.ModifierProperties & AnimateProperty.Opacity) != 0);
 
     /// <summary>
     /// Spec 066 §3 invariant 2 and §4: a transform write that leaves the effective value at
@@ -40,7 +40,7 @@ internal static class AnimationHelper
     {
         // The actual handoff, not VisualTaken: .InteractionStates() sets that before its first
         // state change, while the facades are still writable.
-        if (!identity || element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { HandedOutVisual: not null })
+        if (!identity || Reconciler.GetCompositionState(element) is { HandedOutVisual: not null })
             return false;
         return property switch
         {
@@ -64,9 +64,9 @@ internal static class AnimationHelper
     /// to the visual, since the two would otherwise add up until the next render.
     /// </summary>
     internal static void EnableTranslation(UIElement element, Visual visual)
-        => EnableTranslation(element, Reconciler.GetOrCreateReactorState(element), visual);
+        => EnableTranslation(element, Reconciler.GetOrCreateCompositionState(element), visual);
 
-    private static void EnableTranslation(UIElement element, Reconciler.ReactorState state, Visual visual)
+    private static void EnableTranslation(UIElement element, Reconciler.CompositionState state, Visual visual)
     {
         if (state.TranslationEnabled) return;
         ElementCompositionPreview.SetIsTranslationEnabled(element, true);
@@ -81,15 +81,17 @@ internal static class AnimationHelper
 
     /// <summary>Whether Reactor enabled translation on the element's visual (<see cref="EnableTranslation(UIElement, Visual)"/>).</summary>
     internal static bool TranslationEnabled(UIElement element)
-        => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { TranslationEnabled: true };
+        => Reconciler.GetCompositionState(element) is { TranslationEnabled: true };
 
-    private static void MarkCompositionWrite(Reconciler.ReactorState state, string property, float value)
+    private static void MarkCompositionWrite(Reconciler.CompositionState state, string property, float value)
     {
         MarkCompositionWrite(state, property);
         if (property == "Rotation") (state.TransformRest ??= new()).RotationDegrees = value;
+        // An animated .Opacity() leaves UIElement.Opacity alone, so the rest value is kept here.
+        else if (property == "Opacity") (state.TransformRest ??= new()).Opacity = value;
     }
 
-    private static void MarkCompositionWrite(Reconciler.ReactorState state, string property, Vector3 value)
+    private static void MarkCompositionWrite(Reconciler.CompositionState state, string property, Vector3 value)
     {
         MarkCompositionWrite(state, property);
         if (property == "Scale") (state.TransformRest ??= new()).Scale = value;
@@ -97,17 +99,17 @@ internal static class AnimationHelper
         else if (property == "CenterPoint") (state.TransformRest ??= new()).CenterPoint = value;
     }
 
-    private static Reconciler.ReactorState MarkCompositionWrite(Reconciler.ReactorState state, string property)
+    private static Reconciler.CompositionState MarkCompositionWrite(Reconciler.CompositionState state, string property)
     {
         var flag = PropertyFlag(property);
-        state.CompositionModifierProperties |= flag;
+        state.ModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
-        if (flag == AnimateProperty.Opacity) Reconciler.CancelKeyframeOpacityCheck(state);
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelOpacityRestart(state);
         return state;
     }
 
-    private static Visual GetAnimationVisual(UIElement element, out Reconciler.ReactorState state) => GetElementVisual(element, out state);
+    private static Visual GetAnimationVisual(UIElement element, out Reconciler.CompositionState state) => GetElementVisual(element, out state);
 
     // The diagnostic is a filter that never catches, so the exception keeps its stack (spec 066 §9 row 1).
     private static Visual TakeVisual(UIElement element)
@@ -220,9 +222,9 @@ internal static class AnimationHelper
     /// <inheritdoc cref="GetElementVisual(UIElement)"/>
     /// <param name="element">The element whose visual to take.</param>
     /// <param name="state">The element's attached state, read once for the caller's bookkeeping.</param>
-    internal static Visual GetElementVisual(UIElement element, out Reconciler.ReactorState state)
+    internal static Visual GetElementVisual(UIElement element, out Reconciler.CompositionState state)
     {
-        if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { HandedOutVisual: { } handedOut } known)
+        if (Reconciler.GetCompositionState(element) is { HandedOutVisual: { } handedOut } known)
         {
             state = known;
             return handedOut;
@@ -267,9 +269,9 @@ internal static class AnimationHelper
         return visual;
     }
 
-    private static Reconciler.ReactorState MarkHandedOut(UIElement element, Visual visual)
+    private static Reconciler.CompositionState MarkHandedOut(UIElement element, Visual visual)
     {
-        var state = Reconciler.GetOrCreateReactorState(element);
+        var state = Reconciler.GetOrCreateCompositionState(element);
         state.VisualTaken = true;
         state.HandedOutVisual = visual;
         return state;
@@ -281,9 +283,10 @@ internal static class AnimationHelper
     /// to release, and this must not call GetElementVisual: handing out the visual moves the
     /// element to the pool's visual lane and locks its facades.
     /// </summary>
-    internal static void ResetCompositionModifier(UIElement element, string property, AnimationController? expectedController = null)
+    internal static void ResetCompositionModifier(UIElement element, string property, AnimationController? expectedController = null,
+        bool removeOpacityDeclaration = false)
     {
-        var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+        var state = Reconciler.GetCompositionState(element);
         var flag = PropertyFlag(property);
         if (state?.TransformRest is { } rest)
         {
@@ -293,22 +296,32 @@ internal static class AnimationHelper
                 case "Rotation": rest.RotationDegrees = 0; break;
                 case "Translation": rest.Translation = Vector3.Zero; break;
                 case "CenterPoint": rest.CenterPoint = Vector3.Zero; break;
+                case "Opacity": rest.Opacity = null; break;
             }
         }
-        if (state is null || (state.CompositionModifierProperties & flag) == 0) return;
+        var reactorState = removeOpacityDeclaration ? element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState : null;
+        if (reactorState is not null) reactorState.DeclaredOpacity = default;
+        if (state is null) return;
+        var opacityLoop = reactorState?.OpacityKeyframe is { Loops: true, ReplayedWithoutOpacity: false } playback
+            ? playback.Controller : null;
+        if ((state.ModifierProperties & flag) == 0
+            && !(flag == AnimateProperty.Opacity && WritesVisualOpacity(element)
+                && (opacityLoop is not null || (state.DeferredModifierResets & flag) != 0))) return;
         var visual = GetElementVisual(element);
         var animated = AnimatedChannel(visual, state, property, out var channel);
+        var controller = animated.TryGetAnimationController(channel);
         // A shared target can replace the deferred animation before its decorator plays.
-        if (expectedController is not null && !Equals(expectedController, animated.TryGetAnimationController(channel)))
+        if (expectedController is not null && !Equals(expectedController, controller))
         {
             ClearCompositionOwnership(state, flag);
             return;
         }
-        if (state.KeyframeChannelOwners?.TryGetValue(flag, out var owner) == true && owner.Entry.Definition.Loop
-            && animated.TryGetAnimationController(channel) is { } controller)
+        Reconciler.KeyframeChannelOwner owner = default;
+        bool hasOwner = state.KeyframeChannelOwners?.TryGetValue(flag, out owner) == true;
+        if (controller is not null && ((hasOwner && owner.Entry.Definition.Loop) || Equals(opacityLoop, controller)))
         {
             state.DeferredModifierResets |= flag;
-            state.KeyframeChannelOwners[flag] = owner with { DeferredController = controller };
+            if (hasOwner) state.KeyframeChannelOwners![flag] = owner with { DeferredController = controller };
             return;
         }
 
@@ -347,7 +360,7 @@ internal static class AnimationHelper
     /// <c>CenterPoint</c> under an active <c>.TransformOrigin</c>, whose value is the origin
     /// expression's offset in the visual's property set (spec 066 §8.2).
     /// </summary>
-    private static CompositionObject AnimatedChannel(Visual visual, Reconciler.ReactorState? state, string property, out string channel)
+    private static CompositionObject AnimatedChannel(Visual visual, Reconciler.CompositionState? state, string property, out string channel)
     {
         if (property == "CenterPoint" && TransformOriginBinding.IsActive(state))
         {
@@ -358,12 +371,12 @@ internal static class AnimationHelper
         return visual;
     }
 
-    private static void ClearCompositionOwnership(Reconciler.ReactorState state, AnimateProperty flag)
+    private static void ClearCompositionOwnership(Reconciler.CompositionState state, AnimateProperty flag)
     {
-        state.CompositionModifierProperties &= ~flag;
+        state.ModifierProperties &= ~flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
-        if (flag == AnimateProperty.Opacity) Reconciler.CancelKeyframeOpacityCheck(state);
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelOpacityRestart(state);
     }
 
     /// <summary>
@@ -422,6 +435,36 @@ internal static class AnimationHelper
                 return;
         }
         MarkCompositionWrite(state, property, value);
+    }
+
+    /// <summary>
+    /// Restores declared opacity at playback end and applies pending resets on explicit release.
+    /// </summary>
+    internal static void FinishOpacityKeyframe(UIElement element, Visual visual, AnimationController controller,
+        bool applyDeferredReset = true, bool cancelledRestart = false)
+    {
+        if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState reactorState
+            || reactorState.Composition is not { } state
+            || !Equals(controller, reactorState.OpacityKeyframe?.Controller)) return;
+        var current = visual.TryGetAnimationController("Opacity");
+        // The XAML push can complete the original batch before its restart check runs.
+        if (!applyDeferredReset && current is null && Equals(state.OpacityRestart?.Controller, controller)) return;
+
+        bool restoreDeferred = cancelledRestart && current is null && reactorState.DeclaredOpacity.Deferred;
+        reactorState.OpacityKeyframe = null;
+        reactorState.DeclaredOpacity.Deferred = false;
+        if (!Equals(controller, current) && !restoreDeferred) return;
+
+        if (reactorState.DeclaredOpacity.Value is { } value)
+        {
+            Reconciler.WithoutImplicitAnimations(visual, () => SetScalarDirect(element, "Opacity", value));
+        }
+        else if (applyDeferredReset && (state.DeferredModifierResets & AnimateProperty.Opacity) != 0)
+        {
+            // The keyframe is releasing opacity. Reset the visual without recreating the cleared local value.
+            state.KeyframeChannelOwners?.Remove(AnimateProperty.Opacity);
+            ResetCompositionModifier(element, "Opacity", controller);
+        }
     }
 
     /// <summary>

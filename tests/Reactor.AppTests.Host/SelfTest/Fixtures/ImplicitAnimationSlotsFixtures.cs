@@ -235,7 +235,7 @@ internal static class ImplicitAnimationSlotsFixtures
 
             await Update(Wrapped(null));
             H.Check(Name + "_InnerRestored", KeyDuration("Offset") == Inner, $"duration={KeyDuration("Offset")}");
-            int claims = (Control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims?.Count ?? 0;
+            int claims = Reconciler.GetCompositionState(Control)?.ImplicitClaims?.Count ?? 0;
             H.Check(Name + "_OneClaimLeft", claims == 1, $"claims={claims}");
         }
     }
@@ -255,7 +255,7 @@ internal static class ImplicitAnimationSlotsFixtures
         }
 
         private int Claims() =>
-            (Control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims?.Count ?? 0;
+            Reconciler.GetCompositionState(Control)?.ImplicitClaims?.Count ?? 0;
 
         protected override async Task Run()
         {
@@ -473,7 +473,7 @@ internal static class ImplicitAnimationSlotsFixtures
                 Element top = new SlotsForwarder(mid);
                 return outer is { } o ? top.LayoutAnimation(TimeSpan.FromMilliseconds(o)) : top;
             }
-            int Claims() => (Control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims?.Count ?? 0;
+            int Claims() => Reconciler.GetCompositionState(Control)?.ImplicitClaims?.Count ?? 0;
 
             await Update(Nested(Target(), 700, 800, 900));
             H.Check(Name + "_NestedOuterWins", KeyDuration("Offset") == TimeSpan.FromMilliseconds(900) && Claims() == 3,

@@ -1,17 +1,17 @@
 
 # Element Pool
 
-The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI controls so a scroll-heavy
-list or fast-mounting subtree doesn't allocate a fresh `TextBlock` /
-`Button` / `Border` on every render. Each WinUI type gets its own
-fixed-size stacks (cap 32 per lane) inside `ElementPool`; the
-[reconciler](reconciliation.md) rents on mount and calls
-`Return(element)` on unmount. This page documents the rental
-contract, the two lanes that keep a control whose composition visual
-was taken away from code that can't use it, the cleanup pass that
-resets a returned element, and the exclusions that keep pooling safe —
-transform-transition locks, non-poolable types, and parent-state
-corner cases.
+The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI
+controls so a scroll-heavy list or fast-mounting subtree doesn't allocate a
+fresh `TextBlock` / `Button` / `Border` on every render.
+
+Each WinUI type gets its own fixed-size stacks (cap 32 per lane) inside
+`ElementPool`; the [reconciler](reconciliation.md) rents on mount and calls
+`Return(element)` on unmount. This page documents the rental contract, the
+two lanes that keep a control whose composition visual was taken away from
+code that can't use it, the cleanup pass that resets a returned element, and
+the exclusions that keep pooling safe — transform-transition locks,
+non-poolable types, and parent-state corner cases.
 
 ## Renting on mount
 
@@ -120,7 +120,7 @@ public void Return(FrameworkElement element)
     // The lane follows the native control's marker, whichever wrapper reached it (#1643).
     var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
     // A renter returned before it loaded must not stay on the window's layout list.
-    if (state is not null) StopOpacitySync(element, state);
+    if (state?.Composition is { } composition) StopOpacitySync(element, composition);
     if (state?.PoolExcluded == true)
     {
         if (state.ReleaseWhenExcluded)
@@ -130,7 +130,7 @@ public void Return(FrameworkElement element)
         }
         return;
     }
-    var lanes = state?.VisualTaken == true ? _visualPools : _pools;
+    var lanes = state?.Composition?.VisualTaken == true ? _visualPools : _pools;
 
     if (!lanes.TryGetValue(type, out var stack))
     {

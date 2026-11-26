@@ -1,0 +1,20 @@
+/* Spliced into Blume's stylesheet last (blume/src/theme/entry.ts).
+   Applies to every published version, because each one builds with this toolchain. */
+
+/* Blume styles inline code only outside not-prose components, so code inside
+   <Steps> and <Tabs> lost its chip and read as bare monospace. Give it the same
+   chip as prose. Prompts style their own code. */
+:is([data-blume-step], [data-blume-tab-panel]) :not(pre) > code:not(blume-prompt *) {
+  background: var(--blume-code-background);
+  border-radius: 0.3rem;
+  color: var(--blume-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  font-weight: 500;
+  padding: 0.15em 0.35em;
+}
+
+/* Step titles are headings for the step, so use the heading color, not the body gray. */
+[data-blume-step] > p {
+  color: var(--blume-foreground);
+}

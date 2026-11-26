@@ -46,11 +46,16 @@ Every page declares one tier. The `dotnet run --project tools/Reactor.DocPipelin
 enforces the structural checklist below. Pick the tier the page is *meant*
 to be; do not mark a page Comprehensive that doesn't meet the bar.
 
+Every tier also opens with a page summary: the first paragraph after the `#`
+title is plain prose, has no links, and is at most 420 characters. The docs
+site shows it as the page subtitle, and `npm run site` in `docs/_website`
+fails a page that has none (`reference/` pages are exempt).
+
 | Tier | Structural minimum | When to use |
 |------|---------------------|-------------|
 | `stub` | front-matter + title + one paragraph | Placeholder for surface visibility while you draft. "Coming soon" content. |
 | `solid` | ≥3 resolved `snippet=` refs, ≥1 `screenshot://`, a Markdown reference table, `## Tips`, `## Next Steps` with ≥3 links | Default bar for any new page. Code-first, working examples, modifier table. |
-| `comprehensive` | All solid checks plus an ≥80-word mental-model lead paragraph, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
+| `comprehensive` | All solid checks plus an ≥80-word mental-model lead before the first `##`, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
 
 Stub example:
 
@@ -145,6 +150,43 @@ if the dep array is missing.
 Comprehensive pages must include at least one `<!-- ai:caveat -->` block.
 A missing close tag fails compile with `REACTOR_DOC_CAVEAT_001`.
 
+**Tabs, steps and prompts** — the docs site turns these markers into its
+Tabs, Steps and Prompt components. They are HTML comments, so the page in
+`docs/guide` still reads as plain Markdown on GitHub:
+
+````markdown
+<!-- tabs -->
+### winapp
+Text and code for the first tab.
+
+### dotnet new
+Each heading at the level of the first heading starts a new tab.
+<!-- /tabs -->
+
+<!-- steps -->
+1. **Install winapp.** Each item in the ordered list is one step. A bold
+   lead-in becomes the step title, without its trailing period.
+
+   ```powershell
+   winget install Microsoft.WinAppCli
+   ```
+2. **Run it.** Indent code and extra paragraphs under their item.
+<!-- /steps -->
+
+<!-- prompt -->
+```text
+The fenced block right after the marker becomes a prompt with a Copy button.
+```
+````
+
+Use tabs for different ways to do the same thing (tools, agents, OS
+versions), steps for an order the reader must follow, and a prompt for text
+the reader pastes into a coding agent. Each tab heading keeps its anchor, and
+a link to that anchor opens the tab. A steps block can't hold tabs or another
+steps block. `docs/_website/scripts/sync.mjs` writes a page that uses a marker
+as `.mdx`, and fails the sync with the file and line of a marker that is not
+closed or not followed by the right content.
+
 **Reference-page link marker** — link to an auto-generated reference page
 (Section 10 of the index) from a guide page:
 
@@ -155,8 +197,8 @@ The state hook (<!-- ref:UseState -->) is the building block.
 The marker accepts either a short name (`<!-- ref:UseState -->`) or a
 full XML-doc cref (`<!-- ref:M:Microsoft.UI.Reactor.Hooks.UseState -->`).
 The compiler resolves it to a relative link into
-`docs/guide/reference/<category>/<name>.md` and also feeds the reverse
-"Featured in" callout that appears on the reference page. Use the marker
+`docs/guide/reference/<category>/<page>.md` and also feeds the reverse
+"Learn more" links that appear on the reference page. Use the marker
 inline in prose — it is the only Reactor-specific syntax for cross-axis
 linking; everything else is standard XML doc `<see cref="..."/>` /
 `<seealso cref="..."/>` in the source.
@@ -501,16 +543,20 @@ these rules:
   by order number so readers can follow the learning path linearly.
 - **Link format.** Use relative `.md` paths: `[Getting Started](getting-started.md)`.
   Do not use absolute paths or `screenshot://` syntax for page links.
-- **Validate with `--strict`.** Before submitting, run `python -m mkdocs build --strict`
-  locally. The GitHub Pages publish *and* the PR CI both build with `--strict`, so any
-  broken cross-link or missing heading anchor aborts the build. Always link to a target
-  that exists; never rely on the non-strict build tolerating a dangling link, and never
-  silence the check — fix the link or the anchor.
+- **Build the site strictly.** Before submitting, run `npm ci` once, then
+  `npm run site` and `npm run validate` in `docs/_website` (Node 22.23.4 or newer).
+  The GitHub Pages publish *and* the PR CI both build strictly, so any broken
+  cross-link, missing heading anchor, or page missing from `docs/_website/nav.json`
+  aborts the build. Always link to a target that exists; never rely on a lenient
+  build tolerating a dangling link, and never silence the check — fix the link or
+  the anchor.
 
 **Topic order for sequential navigation:** see the full 64-page index in
-the "Topic Ideas" table at the bottom of this file. Authors should always
-trust the `order:` value in each template's front-matter as the source of
-truth; the bottom-of-file index is a snapshot of the spec-041 §7.1 layout.
+the "Topic Ideas" table at the bottom of this file. The `order:` value in each
+template's front-matter drives Previous/Next links and the topic index; the
+bottom-of-file index is a snapshot of the spec-041 §7.1 layout. The docs site
+sidebar is separate: a page's group, position and label there come from
+`docs/_website/nav.json`, so a new page also needs an entry in it.
 
 ---
 
@@ -768,7 +814,7 @@ no-ops (spec 033 §6).
 
 ## Topic Ideas for the Full Docset
 
-The 64-page layout mirrors spec 041 §7.1. Each row lists the target tier,
+The layout started from spec 041 §7.1 and has grown since. Each row lists the target tier,
 the `order:` slot, and a one-line description. "NEW" pages were authored
 as Stub-tier templates in Phase 1 and grow tier-by-tier through Phases
 2-4. Generate every page as `<topic>.md.dt` + `docs/_pipeline/apps/<topic>/`
@@ -779,10 +825,11 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
 | 0 | readme | comprehensive | Landing page: what Reactor is, the 10-section index, decision tree |
-| 1 | getting-started | comprehensive | Project setup, hello world, state, layout, todo + calculator |
-| 1.5 | thinking-in-reactor | NEW stub | Mental-model essay — function of state, no XAML, declarative shell |
-| 24 | xaml-developers | comprehensive | Migration cookbook: XAML/binding/MVVM/navigation → Reactor |
-| 1.7 | reactor-vs-xaml | NEW stub | Architectural essay (also indexed in §9): DependencyProperty → modifier, Binding → closure, DataTemplate → function component |
+| 0.5 | install | solid | Requirements, then create and run a project with `winapp`, `dotnet new` or a coding agent (tabs, steps, prompts) |
+| 1 | getting-started | comprehensive | "Your first app": a numbered tutorial — first component, state, layout, lists with keys, a finished app |
+| 1.2 | samples | solid | Map of the apps in `samples/`: what each shows, its source link and the command that runs it |
+| 1.5 | thinking-in-reactor | comprehensive | Mental model: UI as a function of state, render → diff → patch, data flow, keys, and a worked filterable-list example |
+| 2 | xaml-developers | comprehensive | "Coming from XAML": XAML/MVVM concept map, side-by-side examples, bindings → state, gradual adoption and interop |
 
 ### 2. Learn the framework
 
@@ -823,7 +870,9 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
 | 9 | navigation | comprehensive | UseNavigation, NavigationHandle, NavigationView, TabView, DeepLinkMap, lifecycle |
-| 21 | windows | solid | ReactorApp.Run, OpenWindow, WindowSpec, ShutdownPolicy, tray icons (moved from §3) |
+| 21 | windows | solid | ReactorApp.Run, OpenWindow, WindowSpec, ShutdownPolicy; tray icons and pickers moved to desktop-integration |
+| 21.5 | desktop-integration | comprehensive | Tray icons, the taskbar, jump lists, launch activation, file and folder pickers, the clipboard, drag and drop |
+| 13.5 | services | comprehensive | App services through Context\<T\>, Microsoft.Extensions.DependencyInjection, testable components |
 | 12 | async-resources | solid → comprehensive | UseResource, UseInfiniteResource, UseMutation, Pending (renamed from async-resources-cookbook) |
 | 14.5 | persistence | NEW stub → solid | UsePersisted, Window/Application scopes, migration |
 | 15 | localization | solid | LocaleProvider, UseIntl, RtlHelper, logical layout, pseudo-localization |
@@ -851,7 +900,14 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
-| 2 | dev-tooling | solid → comprehensive | `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu, reconcile-highlight + layout-cost overlays |
+| 2 | dev-tooling | solid | "Developer tools": overview of the Tools section, the inner dev loop one stage at a time, with a link to each tool page |
+| 2.1 | hot-reload | solid | `dotnet watch`, what survives a hot reload, rude edits, live preview (steps) |
+| 2.2 | devtools | solid | Turning devtools on, the dev menu and overlays, the MCP server, `mur devtools`, keeping devtools out of Release and AOT |
+| 2.3 | mur-cli | stub | Every `mur` command grouped by task, with install steps |
+| 2.4 | vs-extension | stub | The Visual Studio and VS Code preview extensions (tabs, steps) |
+| 2.5 | analyzers | solid | Every `REACTOR_*` rule with a stable anchor, severity settings |
+| 2.6 | build-with-ai | stub | Agent plugin, skill kit, `mur check`, the devtools MCP server, AI-readable site files (tabs, steps, prompts) |
+| 2.85 | native-aot | comprehensive | Publishing with Native AOT: setup, size options, devtools under AOT |
 | 22.6 | testing | NEW stub → solid | Renderer fixtures, headless tests, snapshot tests, a11y scanner |
 | 22.7 | performance | NEW stub → solid | ETW, EventDispatch walkthroughs, flame graphs |
 | 22.8 | packaging | NEW stub → solid | MSIX, single-file, ARM64, AOT considerations |
@@ -869,7 +925,6 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 |-------|------|------|-------------|
 | 30 | architecture-overview | NEW stub → comprehensive | Diagram-led: shell → element records → reconciler → WinUI tree |
 | 31 | reactivity-model | NEW stub → comprehensive | setState → re-render mental model; why hooks not INPC |
-| 1.7 | reactor-vs-xaml | NEW stub → comprehensive | (also indexed in §1) DependencyProperty/Binding/DataTemplate mapping |
 | 32 | hooks-internals | NEW stub → comprehensive | Hook slot table, dispatcher, closure capture, stale state |
 | 33 | reconciliation | NEW stub → comprehensive | Element-record diff, identity, `WithKey`, three phases — promotes `docs/reference/reconciliation.md` |
 | 34 | element-pool | NEW stub → solid | Pooling for GC pressure under scroll-heavy lists (spec 034) |
@@ -885,22 +940,18 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 
 ### 10. API Reference (auto-generated — spec §7.1.2)
 
-Section 10 is generated from XML doc comments in `src/Reactor*/` and
-landed in Phase 1 for the Hooks category. Authors do **not** hand-write
-template files for the leaves — they author `<summary>`, `<remarks>`,
-`<param>`, `<returns>`, `<example>`, and `<seealso cref="..."/>` in the
-canonical C# source, and the pipeline emits one MD page per public
-member into `docs/guide/reference/<category>/<name>.md`. The hand-
-written part is the per-category `index.md` (e.g.
-`docs/guide/reference/hooks/index.md`).
+Section 10 is generated from the XML doc comments and the built
+`Microsoft.UI.Reactor.dll`. Authors do **not** hand-write any reference
+page — they author `<summary>`, `<remarks>`, `<param>`, `<returns>`,
+`<example>`, and `<seealso cref="..."/>` in the canonical C# source, and
+the pipeline writes grouped pages under
+`docs/guide/reference/<category>/`: one page per public type with its
+members on it, one page per hook, and area pages that group related
+factories and modifiers (for example `factories/buttons.md`). Each
+category's `index.md` is generated too.
 
-Categories (driven by `docs/_pipeline/reference-map.yaml`):
-
-- **factories** — every element factory
-- **hooks** — every `Use*` hook (Phase 1 prototype: 73 pages)
-- **modifiers** — every chainable modifier
-- **elements** — every Element record type
-- **system** — App, Window, Navigation, Context, Command primitives
+Categories and groups are driven by `docs/_pipeline/reference-map.yaml`
+(hooks, factories, modifiers, elements, hosting, and more).
 
 Cross-axis linking: write `<!-- ref:UseState -->` in a guide template to
 link into the reference axis; write `<seealso cref="UseState"/>` in XML
@@ -922,4 +973,4 @@ doc to link from a reference page into the conceptual guide.
 - [ ] Page has a `## Next Steps` section with links to related and sequential topics
 - [ ] Readme links to all topic pages; all pages are reachable via link traversal
 - [ ] Run `dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only` to check all references resolve
-- [ ] Run `python -m mkdocs build --strict` — the publish step and PR CI both use it; a broken cross-link or missing heading anchor aborts the build. Fix the link, don't silence the check.
+- [ ] Run `npm run site` and `npm run validate` in `docs/_website` — the publish step and PR CI both build strictly; a broken cross-link, missing heading anchor, or page missing from `nav.json` aborts the build. Fix the link, don't silence the check.

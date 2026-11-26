@@ -1,7 +1,7 @@
 # Spec 066 — Transform modifiers on the composition visual
 
-> Status: **accepted** (2026-11-20), in progress (layers E and 0 have landed). Rollout in §13. Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
-> Plans fixes for [#1623](https://github.com/microsoft/microsoft-ui-reactor/issues/1623),
+> Status: **implemented** (2026-11-24). Accepted 2026-11-20. All §13 layers landed: E (#1645, #1646), V (#1653), 0 (#1644), 1 (#1654), 3 (#1656), 2 (#1661), 4 (#1668) and 5 (#1671). Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
+> Fixed [#1623](https://github.com/microsoft/microsoft-ui-reactor/issues/1623),
 > [#1624](https://github.com/microsoft/microsoft-ui-reactor/issues/1624),
 > [#1625](https://github.com/microsoft/microsoft-ui-reactor/issues/1625),
 > [#1626](https://github.com/microsoft/microsoft-ui-reactor/issues/1626),
@@ -143,6 +143,13 @@ Invariants:
    (not while it is off the tree or under a collapsed ancestor). An opacity keyframe started before that
    frame, next to `.Opacity(x)` or a style setter, would never play, so `ApplyKeyframeAnimations`
    restarts it once after that frame's commit unless a modifier or setter wrote the opacity in between (#1669).
+   An enter fade (`.Transition(Fade)`, and the ambient enter under `Animations.Animate`) starts at mount
+   too, so it gets the same restart. Until the check runs it hides the visual with `Visual.IsVisible`,
+   which XAML doesn't push, so the frame that pushes doesn't flash the element's opacity before the fade
+   starts again from 0. The fade ends at the element's own opacity, not 1: its `UIElement.Opacity`, or
+   the `.Opacity()` value while Reactor writes that to the visual (an animated modifier leaves
+   `UIElement.Opacity` alone). XAML pushes only a changed value, and a pooled renter whose opacity equals
+   its previous push gets no push at all, so a fade that ended at 1 would stay there (#1680).
 
 ## §4 Modifier behaviour
 
@@ -155,7 +162,7 @@ All four transform modifiers share one write path in `AnimationHelper`. `SetScal
 | `.Rotation(deg)` | `Visual.RotationAngle = rad(deg)` | same | `RotationAngle = 0` | explicit animation on `RotationAngle`, radians (#1621, unchanged) |
 | `.Translation(x,y,z)` | `SetIsTranslationEnabled(true)` once, then `Properties["Translation"] = v` | same | `Properties["Translation"] = Zero` | explicit animation on `Translation` (unchanged) |
 | `.CenterPoint(v)` | static `Visual.CenterPoint = v`, or the origin expression's offset when `.TransformOrigin` is set (§8) | same | `Zero`, or offset `Zero` | explicit animation on `CenterPoint`, or on the `ReactorOriginOffset` property when an origin is set, so the expression survives (§8.2) |
-| `.Opacity(o)` | `UIElement.Opacity = o` (no handoff). If Reactor has animated or written the visual's `Opacity` on this control (recorded in `CompositionModifierProperties`), also `StopAnimation("Opacity")` and write `Visual.Opacity = o`. A `UIElement.Opacity` write that doesn't change the value commits nothing, so without this the visual would stay at the animated value | same | `ClearValue(Opacity)`, plus the same visual stop-and-write when recorded | explicit animation on `Opacity` (unchanged) |
+| `.Opacity(o)` | `UIElement.Opacity = o` (no handoff). If Reactor has animated or written the visual's `Opacity` on this control (recorded in the control's `CompositionState.ModifierProperties`), also `StopAnimation("Opacity")` and write `Visual.Opacity = o`. A `UIElement.Opacity` write that doesn't change the value commits nothing, so without this the visual would stay at the animated value | same | `ClearValue(Opacity)`, plus the same visual stop-and-write when recorded | explicit animation on `Opacity` (unchanged) |
 
 Details:
 
@@ -167,7 +174,7 @@ Details:
   `CenterPoint` Zero), *and* the matching facade still reads identity. When a user setter left the
   facade non-identity, the write takes the visual so the modifier overrides the setter (§3 invariant 2).
   Once the visual is taken, every write goes to it, including identity.
-- **Rest values.** `ReactorState.TransformRest` (#1627) keeps the declared values that hover-out,
+- **Rest values.** `CompositionState.TransformRest` (#1627) keeps the declared values that hover-out,
   `Transition.Scale` and `Keyframes` restore. It works unchanged, because it already reads values from
   declarations and not from the facades.
 - **Decorators and keyed `Memo`.** `FindRemainingModifierOwner` and `GetRetainedModifierAnimationSource`
@@ -176,7 +183,7 @@ Details:
   `catch (UnauthorizedAccessException)`. It keeps the `StopAnimation` + direct-write + suspended
   `ImplicitAnimations` sequence (P4 shows `StopAnimation` alone leaves the last animated value) and the
   loop-keyframe deferral.
-- **`CompositionModifierProperties` / `PropertyFlag`.** They stay, but only to record which
+- **`CompositionState.ModifierProperties` / `PropertyFlag`.** They stay, but only to record which
   channels Reactor wrote, so the unset and pool reset know what to restore. They no longer pick a
   channel.
 
@@ -437,7 +444,7 @@ never meets a control it couldn't have met fresh, and most transformed elements 
 They aren't pooled today, because `_compositorTainted` excludes them. Each lane keeps its own cap of 32.
 
 **The lane marker lives on the native control (#1643).** `Return` decides the lane from a permanent
-`VisualTaken` flag in the native control's attached `ReactorState`. Every successful
+`VisualTaken` flag on the native control's attached state (`ReactorState.Composition`, a `CompositionState`). Every successful
 `AnimationHelper.GetElementVisual` sets it (§3 invariant 3), and pool cleanup never clears it. Today's
 `_compositorTainted` can't do this job, for two reasons. It's a `ConditionalWeakTable` keyed by the
 managed wrapper, which another RCW for the same control doesn't see (the duplicate-RCW problem
@@ -476,9 +483,9 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
    usually left the tree by then, where `ActualOffset` reads zero, so the renter's load-time sync (below) also writes its own
    layout offset, with its implicit `Offset` key held back. `Size`
    is left alone, since a fresh handoff visual doesn't reliably carry `ActualSize`.
-4. Clear the `ReactorState` composition bookkeeping. That covers `CompositionModifierProperties`,
+4. Clear the renter-owned fields of the control's `CompositionState` (`ResetForPool`). That covers `ModifierProperties`,
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the
-   origin bookkeeping, and the keyframe trigger table entries for the control. The origin itself is put
+   origin bookkeeping, the stagger delay and the keyframe trigger entries. `VisualTaken`, the handed-out visual and the renter's opacity sync stay. The interaction tracker is cleared with its handlers. The origin itself is put
    into the §8.2 inactive state, because the property set can't drop its entries.
 5. The plain-lane steps stay as they are (#1620 facade resets, `RenderTransform`, `FlowDirection`, …). The
    `Rotation`, `Scale`, `CenterPoint`, `RotationAxis` and `TransformMatrix` facade writes are skipped

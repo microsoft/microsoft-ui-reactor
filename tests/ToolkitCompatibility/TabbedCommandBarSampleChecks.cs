@@ -69,6 +69,7 @@ internal static class TabbedCommandBarSampleChecks
         var page = CompatibilityRoot.Descendants(WindowRoot).OfType<FrameworkElement>()
             .Single(e => AutomationProperties.GetAutomationId(e) == "Page.TabbedCommandBar");
         var originalTheme = page.RequestedTheme;
+        var profile = LocalEvidenceChecks.ReadAccessibilityProfile("before document theme check");
         try
         {
             page.RequestedTheme = ElementTheme.Light;
@@ -79,9 +80,12 @@ internal static class TabbedCommandBarSampleChecks
             await CompatibilityRoot.WaitAsync(() => Document.ActualTheme == ElementTheme.Dark, "Dark document");
             await Task.Delay(100);
             var dark = ((SolidColorBrush)Document.Background).Color;
-            Program.Check(light != dark, $"Document background did not respond to theme: light={light}, dark={dark}.");
-            CheckDocument(bar);
             Program.Results.Note($"actual sample theme backgrounds: light={light}; dark={dark}");
+            profile.RequireDocumentThemeResponse(
+                LocalEvidenceChecks.ReadAccessibilityProfile("after document theme check"), light == dark);
+            CheckDocument(bar);
+            if (profile.HighContrast)
+                Program.Results.Note("OS high contrast can map Light/Dark to the same brush; background inequality is not required. Actual-host appearance review remains separate.");
         }
         finally { page.RequestedTheme = originalTheme; }
 

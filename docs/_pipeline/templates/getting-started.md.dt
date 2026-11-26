@@ -1,671 +1,393 @@
 ---
-title: "Getting Started with Reactor"
+title: "Your first app"
 app: getting-started
 order: 1
 audience: beginner
 goal: |
-  Walk a new developer through creating their first Reactor app from scratch.
-  Cover project setup, the hello-world pattern, state management with UseState
-  and UseReducer, layout with VStack/HStack, and build two real mini-apps
-  (todo list, calculator). End with practical tips for new Reactor developers.
+  A numbered, step-by-step tutorial for a developer who has finished
+  Installation. Build one small app at a time: the first component, state
+  (a counter), layout basics, lists with keys, and a finished todo app. Say
+  what the reader sees after each step. End with the calculator as the next
+  challenge, then patterns, common mistakes and tips for new Reactor
+  developers.
 tier: comprehensive
 ---
 
-A Microsoft.UI.Reactor (Reactor) app is a tree of [components](components.md) driven by
-[hooks](hooks.md), hosted in a WinUI window that the framework opens and
-manages for you. You write one C# file, call `ReactorApp.Run<T>`, and your
-component's `Render()` method returns the element tree that becomes the
-native control tree. State lives in `UseState` and friends; every setter
-invocation re-runs `Render()`; the reconciler diffs the new tree against
-the previous one and patches the WinUI controls in place. This page is
-the bootstrap walkthrough — installing the framework, scaffolding a
-project, and growing from hello-world to a todo list and a calculator.
-By the end you will have run code, seen a screenshot of each step, and
-recognized the [layout](layout.md) primitives and [hooks](hooks.md) that
-the rest of the docset elaborates.
+# Your first app
 
-# Getting Started with Reactor
+Build a Reactor app step by step, from a single line of text to a working
+todo list.
 
-<!-- ai:lock -->
-> **Prerequisites:** .NET 10+ and the Windows App SDK.
-<!-- /ai:lock -->
+In this tutorial you write five small Microsoft.UI.Reactor (Reactor) apps.
+Each step adds one idea. You start with a [component](components.md) that
+shows text. Then you add state with the `UseState` [hook](hooks.md), arrange
+controls with [layout](layout.md) containers, and show a list where each row
+has a key. In the last step you put it all together in a todo app. After each
+step you run the app and see the result. You need about 30 minutes, and you
+do not need to know XAML or React.
 
-> **Public preview package available.** Reactor ships `Microsoft.UI.Reactor`
-> `{{reactorVersion}}` on NuGet.org, and the project templates ship in the
-> official Windows App SDK `dotnet new` pack
-> (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`) — so `dotnet new reactor`
-> works from a plain .NET SDK install, no source checkout required.
-> `bootstrap.ps1` is for *contributors*: it installs `mur`, packs source-built
-> framework snapshots, and registers those same templates. Broader signed
-> distribution is tracked in
-> [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md).
+Before you start, follow [Installation](install.md) to create a project and
+check that `dotnet run` opens a window.
 
-Reactor is a declarative UI framework for building native Windows apps in pure C#.
-No XAML, no data binding, no view models. You describe your UI as a function of
-state and Reactor keeps the screen in sync.
+| Step | You learn | You see |
+|---|---|---|
+| [1. Your first component](#step-1-your-first-component) | `ReactorApp.Run`, `Render()`, elements and modifiers | A greeting that follows what you type |
+| [2. Add state](#step-2-add-state) | `UseState`, event handlers, values computed from state | A counter with three buttons |
+| [3. Layout basics](#step-3-layout-basics) | `VStack`, `HStack`, spacing and nesting | Rows and columns of controls |
+| [4. Lists with keys](#step-4-lists-with-keys) | `ForEach`, `WithKey`, replacing a list in state | A list you can add to and remove from |
+| [5. Finish the todo app](#step-5-finish-the-todo-app) | `UseReducer`, `When`, records for data | A complete todo list |
 
-> **Prefer Rust?** The same declarative WinUI idea is available in Rust through
-> [windows-reactor](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md),
-> a separate library in [windows-rs](https://github.com/microsoft/windows-rs) built
-> around components and typed messages, available on
-> [crates.io](https://crates.io/crates/windows-reactor). This guide covers
-> Microsoft.UI.Reactor, the C# library.
+## How to run each step
 
-## Setup
-
-If you just want to build an app, scaffold one and go — you do not need to
-clone this repo:
+Step 1 and Step 5 show a complete `App.cs` file. Steps 2 to 4 show one
+component class. To run a class, replace the old class in `App.cs` with it.
+Then change the `ReactorApp.Run<T>()` line at the top to the class name. The
+first comment in each snippet shows the line to use, for example
+`ReactorApp.Run<CounterExample>("Counter");`. Keep the `using` lines at the
+top of the file. Then run:
 
 ```powershell
-winget install Microsoft.WinAppCli
-winapp new -t reactor -n MyApp
-cd MyApp
 dotnet run
 ```
 
-`winapp` is the Windows App SDK CLI. `winapp new` installs the template pack on
-demand (and offers to update a stale one), so there is no separate install step
-and no version to pin.
+Close the window before you run the next step. To see changes without closing
+the window, use `dotnet watch` instead (see
+[Hot reload with `dotnet watch`](#hot-reload-with-dotnet-watch)).
 
-That gives you five starting points — `reactor` (blank), `reactor-mvu`
-(Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell),
-`reactor-tabview` (`TabView` shell), and `reactor-singlefile`, a single `.cs` file
-with no project (see [One file, no project](#one-file-no-project)).
-`winapp new --list` prints them all, and omitting `-t` picks one interactively.
+## Step 1: Your first component
 
-Prefer plain .NET tooling? Install the pack yourself, then scaffold with
-`dotnet new`:
-
-```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
-dotnet new reactor -n MyApp
-```
-
-The pack is prerelease-only today, and `dotnet new install` resolves stable
-versions unless you pin one explicitly — which is the step `winapp new` removes.
-
-Scaffolded apps are **packaged** (single-project MSIX) by default, so `dotnet run`
-registers a loose-layout package and launches the app with full package
-identity — the same thing F5 does in Visual Studio. That requires **Developer
-Mode** (Settings → System → For developers). For a plain unpackaged `.exe`
-instead, add `--packaging Unpackaged` to any of the four project templates:
-`dotnet new reactor -n MyApp --packaging Unpackaged` (`winapp new` has no
-equivalent switch). See [Packaging](packaging.md) for how the two shapes differ.
-
-If `dotnet new` rejects `--packaging` or can't find `reactor-singlefile`, the
-installed pack predates them; `winapp new --list --template-version latest`
-updates it.
-
-## One file, no project
-
-A Reactor app does not need a `.csproj`. .NET 10 runs a single `.cs` file
-directly, and file-level `#:` directives supply the configuration a project file
-otherwise would:
-
-```csharp
-#:package Microsoft.UI.Reactor@{{reactorVersion}}
-#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
-#:property OutputType=WinExe
-#:property TargetFramework=net10.0-windows10.0.22621.0
-#:property UseWinUI=true
-
-using Microsoft.UI.Reactor;
-using Microsoft.UI.Reactor.Core;
-using static Microsoft.UI.Reactor.Factories;
-
-ReactorApp.Run<MyApp>("Hello Reactor");
-
-class MyApp : Component
-{
-    public override Element Render()
-    {
-        var (count, setCount) = UseState(0);
-
-        return VStack(
-            Heading($"Count: {count}"),
-            HStack(8,
-                Button("-", () => setCount(count - 1)),
-                Button("+", () => setCount(count + 1))
-            )
-        );
-    }
-}
-```
-
-Save it as `counter.cs` and run it:
-
-```powershell
-dotnet run counter.cs
-```
-
-That is the whole app — one file, no scaffolding, no build output to manage.
-It is the fastest way to try an idea, reproduce a bug, or paste a complete
-runnable example into an issue. Like a scaffolded app, it runs packaged:
-`Microsoft.Windows.SDK.BuildTools.WinApp` makes `dotnet run` synthesize an
-appxmanifest from the `#:property` values, register the app, and launch it with
-package identity, which needs **Developer Mode**. If you have the
-[winapp CLI](https://github.com/microsoft/winappCli) 0.7.0 or later,
-`winapp run counter.cs` does the same.
-
-`Microsoft.UI.Reactor` brings the Windows App SDK in transitively, exactly as in
-the [minimal `.csproj`](index.md#minimal-project-setup). The rest of the header:
-
-| Directive | Why it is required |
-|---|---|
-| `Microsoft.Windows.SDK.BuildTools.WinApp` | Lets `dotnet run` package the app. It carries its own copy of the winapp CLI, so that does not need installing. Without it, plain `dotnet run` cannot package the app, and it dies at startup with `COMException … REGDB_E_CLASSNOTREG` — an error that says nothing about the missing package — unless you run it unpackaged (below). |
-| `OutputType=WinExe` | Links the app for the Windows GUI subsystem. Without it the build still succeeds, but the `.exe` is a console binary, so Windows opens a console window alongside your UI for as long as the app runs. |
-| `TargetFramework=net10.0-windows10.0.22621.0` | Reactor ships `net10.0-windows10.0.22621`. A lower Windows version compiles against nothing and you get `CS0234: the namespace 'Reactor' does not exist`, as if the package were missing. |
-| `UseWinUI=true` | Brings in the WinUI 3 targets. |
-
-You don't have to type the header: `dotnet new reactor-singlefile -n Counter`
-scaffolds `Counter/Counter.cs` with the same five directives and a starter
-component, and `dotnet run Counter.cs` from that folder launches it. The
-template's pins differ from the block above — it targets a newer Windows SDK
-(`windows10.0.26100.0`) and lets the `Microsoft.Windows.SDK.BuildTools.WinApp`
-version float (`@*`) — and both headers work.
-
-### Running it unpackaged
-
-`WindowsPackageType` decides whether the app runs packaged, and `dotnet run` and
-`winapp run` both obey it. Declare the app unpackaged to run it as a plain `.exe`:
-
-```csharp
-#:property WindowsPackageType=None
-```
-
-An unpackaged app has no package identity, so `Package.Current` and `ms-appx:`
-URIs are unavailable.
-
-Either way the app is framework-dependent: it uses the Windows App Runtime
-installed on the machine. To carry it with the app instead, add
-`#:property WindowsAppSDKSelfContained=true`. That mode also needs the
-architecture named with `-r win-x64` or `-r win-arm64`, because the runtime it
-copies is native code built separately for each CPU — `-r` on its own does not
-bundle anything.
-
-## Contributor setup (one-time)
-
-Working *on* Reactor rather than with it? Clone and bootstrap:
-
-```powershell
-git clone https://github.com/microsoft/microsoft-ui-reactor.git
-cd microsoft-ui-reactor
-./bootstrap.ps1
-```
-
-`bootstrap.ps1` packs and installs `mur` as a `dotnet tool` global
-install (so it's on PATH cross-shell with no manual `$env:Path` edits), runs
-`mur pack-local` to produce local source-built framework snapshots, installs the
-Windows App SDK template pack,
-and drops the Reactor agent plugin under `~/.claude/plugins/reactor`
-(symlink when allowed, copy otherwise).
-
-### After `git pull`
-
-The source checkout changes — your local framework snapshots, CLI and plugin
-do not, unless you repack them. Two options:
-
-```powershell
-mur upgrade           # repacks the framework and refreshes the plugin
-./bootstrap.ps1       # same, plus the `mur` global tool and the template pack
-```
-
-`mur upgrade` is the lightweight path. Re-run `bootstrap.ps1` when you want to
-pick up CLI changes (a `mur` process can't replace its own binary mid-run).
-
-The `dotnet new reactor` templates are not repacked by either: they ship in the
-Windows App SDK pack, so `git pull` never invalidates them. `mur upgrade` only
-*checks* that they still resolve; `bootstrap.ps1` installs the pack when it is
-missing, and `winapp new --list --template-version latest` updates it.
-
-### Verify the install
-
-```powershell
-mur doctor
-```
-
-Lists every dependency the rest of this guide assumes — .NET 10+ SDK, `mur` on
-PATH, current `local-nupkgs/` developer feed, the `dotnet new reactor` template
-registration, and the optional Claude plugin. Each line is PASS / WARN / FAIL
-with a one-line remediation for anything broken.
-
-> **What this gets you.** A globally-resolvable `mur` (via `~/.dotnet/tools`),
-> the `dotnet new reactor` templates, a local NuGet feed at
-> `<repo>/local-nupkgs/`
-> for source-built smoke tests, and an agent plugin so AI assistants generate
-> against the real factories (`mur --skill` / `mur --api` print the same
-> content). Run `mur upgrade` whenever you pull new CLI, plugin, or
-> framework changes.
-
-> **Only need the framework package?** Reference the published
-> `Microsoft.UI.Reactor` package directly from NuGet.org. Run the bootstrap only
-> when you want the local project template, the `mur` CLI, or the agent plugin
-> from this source checkout.
-
-### Manual setup
-
-If you'd rather not run `bootstrap.ps1`, here is exactly what it does, step
-by step. Every command is a stock `dotnet` or `git` invocation — no Reactor
-tooling required until the very last step, where you build `mur` from source
-and install it as a global tool. Each block below corresponds to a numbered
-phase in `bootstrap.ps1`, so the script is a useful cross-reference if
-anything goes wrong.
-
-| # | Step | What it produces |
-|---|------|------------------|
-| 1 | `dotnet --list-sdks` | Confirms .NET 10+ is installed |
-| 2 | `git clone` + `cd` | Local source checkout |
-| 3 | `dotnet pack src/Reactor.Cli` | `Microsoft.UI.Reactor.Cli.<ver>.nupkg` in `local-nupkgs/` |
-| 4 | `dotnet tool install -g` | `mur` resolvable cross-shell from `~/.dotnet/tools` |
-| 5 | `mur pack-local` | Source-built framework snapshots in `local-nupkgs/` |
-| 6 | `dotnet new install` | `dotnet new reactor` templates registered |
-| 7 | Symlink/copy `plugins/reactor` | Reactor agent kit under `~/.claude/plugins/reactor` (optional) |
-| 8 | `mur doctor` | Verification that 1–7 all stuck |
-
-**1. Confirm prerequisites.** Reactor requires .NET 10 or later. The Windows
-App SDK is pulled in transitively when the framework builds.
-
-```powershell
-dotnet --list-sdks
-# Expect at least one entry starting with "10."
-```
-
-**2. Clone and enter the repo.** Everything below assumes the working
-directory is the repo root.
-
-```powershell
-git clone https://github.com/microsoft/microsoft-ui-reactor.git
-cd microsoft-ui-reactor
-```
-
-**3. Pack `mur` as a global-tool nupkg.** `Reactor.Cli.csproj` sets
-`PackAsTool=true`, so `dotnet pack` produces a tool package. The
-`-p:Platform` flag matters because the build step runs the SignaturesGen
-apphost to refresh `skills/reactor.api.txt`; that apphost must match the
-host architecture.
-
-```powershell
-$hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
-dotnet pack src/Reactor.Cli/Reactor.Cli.csproj `
-    -c Release `
-    "-p:Platform=$hostArch" `
-    -o local-nupkgs `
-    --nologo
-# Produces local-nupkgs/Microsoft.UI.Reactor.Cli.<version>.nupkg
-```
-
-**4. Install `mur` as a dotnet global tool.** This is what puts `mur` on
-PATH cross-shell with no `$env:Path` edits. If a previous install exists,
-use `update` instead of `install`.
-
-```powershell
-dotnet tool install -g `
-    --add-source ./local-nupkgs `
-    Microsoft.UI.Reactor.Cli `
-    --no-cache --ignore-failed-sources
-
-# If `mur` was already installed:
-# dotnet tool update -g --add-source ./local-nupkgs Microsoft.UI.Reactor.Cli --no-cache --ignore-failed-sources
-```
-
-`dotnet tool install -g` adds `~/.dotnet/tools` to the **user** PATH, which
-the current shell does not automatically inherit. For this session only,
-prepend it manually so the next step finds `mur`:
-
-```powershell
-$env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
-```
-
-New PowerShell windows pick up the user-PATH change on their own.
-
-**5. Pack local framework snapshots.** This produces the source-built
-`0.0.0-local` framework nupkgs so recipes and smoke tests in this clone resolve
-your working tree instead of the published package.
-
-```powershell
-mur pack-local
-# Produces:
-#   local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg
-#   local-nupkgs/Microsoft.UI.Reactor.Advanced.0.0.0-local.nupkg
-#   local-nupkgs/Microsoft.UI.Reactor.Devtools.0.0.0-local.nupkg
-```
-
-If you'd rather not depend on the freshly-installed `mur`, you can invoke
-the source project directly:
-
-```powershell
-dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj `
-    -c Release "-p:Platform=$hostArch" -- pack-local
-```
-
-**6. Install the `dotnet new reactor` templates.** These come from the Windows
-App SDK template pack on NuGet.org, not from this checkout:
-
-```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
-```
-
-The pack is prerelease-only today, so pin a version explicitly — a bare
-`dotnet new install` resolves stable versions only. `winapp new -t reactor`
-collapses both steps: it installs the newest pack on demand, then scaffolds.
-
-**7. (Optional) Install the Reactor agent plugin.** If you use Claude Code
-or another agent and want it to author Reactor code with the right
-factories, drop the in-repo plugin folder into your agent's plugin path. A
-symlink is preferred so edits in the checkout are immediately visible; a
-copy works when you can't create symlinks (Developer Mode off + non-admin
-shell).
-
-```powershell
-$pluginSrc = (Resolve-Path "plugins/reactor").Path
-$pluginDst = "$env:USERPROFILE\.claude\plugins\reactor"
-New-Item -ItemType Directory -Path (Split-Path $pluginDst) -Force | Out-Null
-if (Test-Path $pluginDst) { Remove-Item $pluginDst -Recurse -Force }
-try {
-    New-Item -ItemType SymbolicLink -Path $pluginDst -Target $pluginSrc -ErrorAction Stop | Out-Null
-} catch {
-    Copy-Item $pluginSrc $pluginDst -Recurse -Force
-}
-```
-
-For Copilot CLI or other agents, follow that tool's plugin-install path and
-point it at `<repo>/plugins/reactor`.
-
-**8. Verify.** `mur doctor` performs the same checks the bootstrap script's
-final stage relies on — SDK version, `mur` resolvability, local developer
-nupkgs present, template registered, and plugin installed.
-
-```powershell
-mur doctor
-```
-
-#### Refreshing after `git pull`
-
-Without the bootstrap script, repeat **steps 5 and 6** after every pull —
-the framework nupkg and the template both need to be regenerated against
-the new source. Repeat **steps 3 and 4** only when `src/Reactor.Cli/`
-itself changes (a running `mur` process cannot replace its own binary, so
-the install must happen from a shell that isn't already running `mur`).
-
-> **Why a global tool instead of just running from `bin/<arch>/`?** Both
-> work. The repo's CLI csproj still mirrors `mur.exe` to `bin/<arch>/` after
-> every build for the legacy PATH layout. The global-tool install is just
-> the friendliest default — it puts `mur` on PATH cross-shell, cross-CWD,
-> with no arch-aware PATH munging, and `dotnet tool update -g` becomes the
-> upgrade verb.
-
-<!-- ai:caveat -->
-The Reactor templates ship in the Windows App SDK `dotnet new` pack
-(`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), so `dotnet new reactor`
-needs no source checkout. If it's missing, `winapp new -t reactor` installs the
-pack on demand and scaffolds in one step. To install it without scaffolding, run
-`dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` —
-the pack is prerelease-only today, so the explicit version pin is required.
-<!-- /ai:caveat -->
-
-## Creating a Project
-
-With the templates installed, scaffold a new app from anywhere on disk:
-
-```powershell
-dotnet new reactor -n MyApp
-cd MyApp
-dotnet run
-```
-
-The template wires up the `Microsoft.UI.Reactor` package reference, the
-WinUI 3 target framework, MSIX packaging (unless you pass
-`--packaging Unpackaged`), and a working `App.cs` that mounts a
-single Reactor component. No `App.xaml`, no `MainWindow.xaml.cs` — just one C#
-file. Swap `reactor` for `reactor-mvu`, `reactor-navview` or `reactor-tabview`
-to start from a richer shell.
-
-For local framework smoke tests, generate with
-`dotnet new reactor -n MyLocalApp --reactor-version 0.0.0-local` and run
-from inside the source checkout or another folder that has the local feed
-configured.
-
-> **Why a custom template?** A `dotnet new console` does not produce a WinUI
-> app — it builds a console target with no UI thread, no `OutputType=WinExe`,
-> no WindowsAppSDK reference, and no `[STAThread]` entry point. `reactor`
-> sets all of those plus the Reactor package reference, MSIX packaging and a
-> backdrop-aware root component, so you get a window on first `dotnet run`
-> instead of a console-host stub.
-
-## Your First App
-
-The template's `App.cs` is the canonical hello-world. Replace its contents
-with the snippet below to match the rest of this guide (the template
-defaults to a slightly richer starter; the simpler form is easier to walk
-through):
+Replace the contents of `App.cs` with this code:
 
 ```csharp snippet="getting-started/hello-world"
 ```
 
-Run it with `dotnet run` and you'll see this:
+Run `dotnet run`. You see a greeting and a text box. Type a name, and the
+greeting changes as you type:
 
-![Hello World app running](screenshot://getting-started/hello-world)
+![The hello world app: a "Hello, World!" heading above a text box that holds the name](screenshot://getting-started/hello-world)
 
-Here's what's happening:
+Here is what each part does:
 
-- **`ReactorApp.Run<T>`** launches a window and mounts your root component.
-- **Devtools support** is enabled by the app project's
-  `Reactor.DevtoolsSupport` switch, not by a `Run` parameter. The doc apps
-  inherit that switch from `docs/_pipeline/apps/Directory.Build.props` so the
-  screenshot pipeline can launch them with `--devtools`; real apps usually make
-  the switch Debug-only so release builds stay trimmed.
-- **[`UseState`](hooks.md)** returns the current value and a setter. When you call the
-  setter, Reactor re-renders the component with the new value.
-- **[`VStack`](layout.md)** stacks children vertically. The number `16` is the pixel spacing.
-- **`TextBlock(...).FontSize(24).Bold()`** is the fluent modifier pattern — every
-  element supports chainable modifiers for styling and layout.
+- **`ReactorApp.Run<T>`** opens a window and mounts your root component in it.
+- **`class GettingStartedApp : Component`** is a component. Its `Render()`
+  method returns the UI as a tree of elements.
+- **[`UseState`](reference/hooks/UseState.md)** returns the current value and
+  a setter. When you call the setter, Reactor runs `Render()` again with the
+  new value.
+- **[`VStack`](layout.md)** stacks its children from top to bottom. The `16`
+  is the space between them, in pixels.
+- **`TextBlock(...).FontSize(24).Bold()`** shows the modifier pattern. Every
+  element has chainable modifiers for style and layout.
 
-Type in the text box and the greeting updates instantly. There's no event
-wiring or property notification — just state in, UI out.
+There is no event wiring and no property-changed notification. The text box
+calls `setName`, and the greeting reads `name`. State goes in, and UI comes
+out.
 
-## Understanding State
+## Step 2: Add state
 
-Every interactive UI needs state. In Reactor, `UseState` is the primary hook for
-managing values that change over time.
-
-### Counter Example
-
-Here's a counter that tracks a single number:
+Every interactive UI needs state. Replace the `GettingStartedApp` class with
+this counter, and change the `Run` line to
+`ReactorApp.Run<CounterExample>("Counter");`:
 
 ```csharp snippet="getting-started/usestate-counter"
 ```
 
-![Counter with buttons](screenshot://getting-started/counter)
+Run the app. You see "Count: 0" above three buttons. Click **+ 1** and the
+number goes up. Click **Reset** and it goes back to 0:
 
-Each call to `setCount` triggers a re-render. Reactor diffs the old and new
-element trees and updates only the WinUI controls that actually changed.
+![The counter app: "Count: 0" above the buttons "- 1", "Reset" and "+ 1"](screenshot://getting-started/counter)
 
-### Multiple State Values
+Each call to `setCount` makes Reactor render the component again. Reactor
+compares the new element tree with the old one and updates only the WinUI
+controls that changed. Here, that is the text of one `TextBlock`.
 
-Components can call `UseState` multiple times — each call tracks an independent
-value:
+### Several pieces of state
+
+A component can call `UseState` more than once. Each call holds its own value.
+Try this example:
 
 ```csharp snippet="getting-started/multiple-state"
 ```
 
-The `fullName` variable is derived from `firstName` and `lastName` on every
-render. In Reactor, you don't need computed properties or bindings — plain C#
-expressions work because `Render()` runs every time state changes.
+You see two text boxes and a slider. Type a first and last name, and the
+greeting shows the full name. Move the slider, and the greeting gets bigger or
+smaller.
 
-## Layout Basics
+`fullName` is computed from `firstName` and `lastName` on every render. You do
+not need computed properties or bindings. A plain C# expression works,
+because `Render()` runs again every time the state changes.
 
-Reactor provides a small set of layout primitives that compose together:
+## Step 3: Layout basics
+
+Reactor has a small set of layout containers that you nest inside each other.
+Try this example:
 
 ```csharp snippet="getting-started/layout-basics"
 ```
 
-![Layout demo](screenshot://getting-started/layout-basics)
+You see a heading, a row of three buttons, and two columns of text side by
+side:
 
-| Element | Purpose |
-|---------|---------|
-| `VStack` | Vertical stack (children top to bottom) |
-| `HStack` | Horizontal stack (children left to right) |
-| `Grid` | Row/column grid with proportional sizing |
-| `ScrollView` | Scrollable wrapper for overflow content |
-| `Border` | Container with background, corner radius, stroke |
+![The layout demo: a heading, a row of buttons named One, Two and Three, and two columns of items](screenshot://getting-started/layout-basics)
 
-All layout elements accept an optional spacing parameter as their first
-argument: `VStack(12, child1, child2)` adds 12px between children.
+These containers cover most layouts:
 
-## Building a Todo App
+| Element | What it does |
+|---|---|
+| `VStack` | Stacks children from top to bottom. |
+| `HStack` | Places children from left to right. |
+| `Grid` | Places children in rows and columns, with fixed or proportional sizes. |
+| `ScrollView` | Scrolls content that does not fit. |
+| `Border` | Draws a background, a corner radius or an outline around one child. |
 
-Let's put these pieces together into something real. A todo app needs a list
-of items, a way to add new ones, and checkboxes to mark them done.
+`VStack` and `HStack` take the spacing as an optional first argument:
+`VStack(12, child1, child2)` puts 12 pixels between the children. The
+[Layout](layout.md) guide covers `Grid` and the other containers.
 
-First, define a simple record for items:
+## Step 4: Lists with keys
 
-```csharp snippet="todo-app/todo-record"
+Most apps show a list that changes. This example keeps a list of fruit in
+state. You can add a fruit or remove one:
+
+```csharp snippet="getting-started/keyed-list"
 ```
 
-Now the full component:
+You see an **Add fruit** button and two rows, Apple and Banana, each with a
+**Remove** button. Click **Add fruit** and a new row appears at the end. Click
+**Remove** on a row and only that row goes away.
+
+Three things make this work:
+
+- **`ForEach(fruits, fruit => ...)`** turns each item into an element.
+- **`.WithKey(fruit.Id)`** gives each row a stable identity. When you remove
+  Apple, Reactor knows which row went away and keeps the other rows as they
+  are. Use an ID from your data, not the position in the list. The
+  [Rules of Reactor](rules-of-reactor.md#3-lists-need-stable-keys) explain
+  why.
+- **`setFruits([.. fruits, new Fruit(...)])`** creates a **new** list.
+  Reactor renders again only when the setter gets a value that is different
+  from the old one. If you change the old list in place and pass it back,
+  Reactor sees the same object and does nothing.
+
+The start list is a `static readonly` field. `UseState` uses its argument only
+on the first render, so there is no need to build a new list on every render.
+
+## Step 5: Finish the todo app
+
+Now put the pieces together. A todo app needs a list of items, a way to add
+items, and check boxes to mark them done.
+
+Replace the contents of `App.cs` with this code:
 
 ```csharp snippet="todo-app/todo-app"
 ```
 
-![Todo app](screenshot://todo-app/todo-app)
+Then add a record for one todo item at the end of the file:
 
-Key patterns to notice:
+```csharp snippet="todo-app/todo-record"
+```
 
-- **[`UseReducer`](hooks.md)** is like `UseState` but the setter receives a function
-  `Func<T, T>` — you transform the previous value into the next value. This
-  is the right tool when your new state depends on the old state (like
-  appending to a list).
-- **`items.Select(...).ToArray()`** maps data into elements. Reactor reconciles
-  the list efficiently using keys.
-- **`WithKey`** gives each item a stable identity so Reactor can reorder, add,
-  and remove items without rebuilding the entire list.
-- **`When(condition, () => element)`** conditionally renders content without
-  an if/else cluttering the tree.
+Run the app. You see three todo items, and the first one is already checked.
+Below the list is a **Clear completed (1)** button. Type a new item and click
+**Add**: the item appears at the end of the list. Check an item, and the
+"completed" count goes up. The **Add** button is turned off while the text box
+is empty:
 
-## Building a Calculator
+![The todo app: a "Todo List" heading, a count of completed items, a text box with an Add button, and three items with check boxes and Remove buttons](screenshot://todo-app/todo-app)
 
-Here's a more complex example that manages multiple pieces of related state:
+New ideas in this step:
+
+- **[`UseReducer`](reference/hooks/UseReducer.md)** is like `UseState`, but
+  its setter takes a function of type `Func<T, T>`. The function gets the
+  current list and returns the next one. Use it when the new state depends on
+  the old state, as when you add an item to a list.
+- **[`UseMemo`](reference/hooks/UseMemo.md)** builds the start list once, on
+  the first render, instead of on every render.
+- **`items.Select(...).ToArray()`** maps data to elements, like `ForEach` in
+  Step 4. Each row still gets a key with `WithKey(item.Id)`.
+- **`When(condition, () => element)`** shows an element only when the
+  condition is true, without an `if`/`else` in the middle of the tree.
+- **`item with { Done = done }`** creates a changed copy of a record. The old
+  item stays as it was.
+
+You now have a complete Reactor app.
+
+## Next challenge: a calculator
+
+The calculator keeps four pieces of related state and changes them from plain
+C# methods. Replace the contents of `App.cs` with this code and run it:
 
 ```csharp snippet="calculator/calculator-app"
 ```
 
-![Calculator](screenshot://calculator/calculator)
+![The calculator app: a display above a grid of digit and operator buttons](screenshot://calculator/calculator)
 
-This demonstrates how plain C# control flow (methods, switch expressions,
-local functions) works naturally inside Reactor components. There's no special
-command pattern needed — just call `setDisplay(...)` and the UI updates.
+Methods, `switch` expressions and local functions all work inside a component.
+You do not need a command pattern. A button calls a method, the method calls
+`setDisplay(...)`, and the UI updates. Try to add a percent key or a
+backspace key.
+
+<!-- ai:caveat -->
+The argument you pass to `UseState` or `UseReducer` is the **initial** value.
+Reactor reads it only on the first render. If you pass a different value
+later, the state does not change. Call the setter instead. Hooks are also
+matched by the order you call them, so call them at the top of `Render()`,
+never inside an `if` or a loop.
+<!-- /ai:caveat -->
 
 ## Patterns
 
 ### Hot reload with `dotnet watch`
 
-The single fastest authoring loop is `dotnet watch run` from the project
-directory. Reactor's [dev tooling](dev-tooling.md) hooks watch's
-file-change events so a save in `App.cs` re-runs `Render()` without
-restarting the window. State that lives in `UseState` is preserved
-across the patch (the hook slot table survives), so a counter at 42
-stays at 42 after a layout tweak. State held in static fields is
-*not* preserved — keep startup state in `UseState` if you want it to
-survive hot reload.
+The fastest way to work is to run `dotnet watch` from the project folder.
+When you save `App.cs`, Reactor runs `Render()` again without restarting the
+window. State in `UseState` is kept, so a counter at 42 stays at 42 after you
+change the layout. Static fields keep their values too, because the process
+keeps running. See [Hot reload](hot-reload.md) for what resets state.
 
-### First event, first state — the minimum interactive app
+### First event, first state
 
-Every Reactor app eventually has the same two ingredients: an event
-handler that calls a setter, and a value rendered from the setter's
-state slot. The hello-world snippet above wires `setName` to
-`TextBox`'s change handler and reads `name` back in the
-`TextBlock("Hello, ...")` line — that round trip is the entire reactivity
-contract. Once it feels routine, every other [hook](hooks.md) is just
-a specialization (`UseReducer` for derived updates, `UseEffect` for
-side effects, `UseRef` for non-rendering bookkeeping).
+Every interactive app has the same two parts: an event handler that calls a
+setter, and a value that `Render()` reads from state. In Step 1, the text box
+calls `setName`, and the `TextBlock` reads `name`. That round trip is the
+whole model. The other [hooks](hooks.md) build on it: `UseReducer` for updates
+that depend on the old value, `UseEffect` for side effects, and `UseRef` for
+values that do not cause a render.
 
 ### Running with devtools
 
-The dev menu needs **two** independent signals, and neither one is
-`#if DEBUG`. First the build-time capability — the `Reactor.DevtoolsSupport`
-feature switch, which `dotnet new reactor` already sets in Debug
-configurations along with the `Microsoft.UI.Reactor.Devtools` package. Second a
-session opt-in on the command line:
+The dev menu needs **two** separate signals. Neither one is `#if DEBUG`.
 
-```powershell
-dotnet run -- --devtools app
-```
+1. **Build-time capability.** The `Reactor.DevtoolsSupport` feature switch.
+   `dotnet new reactor` sets it in Debug builds, together with the
+   `Microsoft.UI.Reactor.Devtools` package.
+2. **Session opt-in.** A command-line argument:
 
-`dotnet run` hands everything after `--` to the app, and a packaged scaffold
-still receives it when it launches with package identity. The default profile in
-the scaffolded `Properties/launchSettings.json` deliberately passes no
-arguments — a plain `dotnet run -c Debug` starts the app with **no** dev menu.
-Keep the `app`, too: a bare `--devtools`, whether typed or passed by a launch
-profile, is read as `--devtools run`, the heavier session behind
-[`mur devtools`](dev-tooling.md#mcp-server) that also starts an MCP endpoint.
+   ```powershell
+   dotnet run -- --devtools app
+   ```
 
-`UseDevtools()` returns `true` only when both signals are present, which is what
-gates the reconcile-highlight overlay and the rest of the menu. The signals
-don't draw anything themselves: the menu is the `DevtoolsMenu(...)` element, so
-it appears only if your tree renders one. If yours doesn't yet, add it to the
-title bar as shown in [In-App Dev Menu](dev-tooling.md#in-app-dev-menu). Release
-builds drop the package and the switch, so the devtools code trims away
-entirely. The [dev tooling](dev-tooling.md) page covers the full menu.
+`dotnet run` passes everything after `--` to the app, and a packaged app still
+gets it. The default profile in the template's
+`Properties/launchSettings.json` passes no arguments, so a plain
+`dotnet run -c Debug` starts the app **without** the dev menu. Keep the word
+`app`: a bare `--devtools` means `--devtools run`, the heavier session behind
+[`mur devtools`](devtools.md#mcp-server) that also starts an MCP endpoint.
+
+`UseDevtools()` returns `true` only when both signals are present. The
+signals do not draw anything by themselves. The menu is the `DevtoolsMenu(...)`
+element, so it appears only if your tree renders one. To add it to the title
+bar, see [In-app dev menu](devtools.md#in-app-dev-menu). Release builds
+leave out the package and the switch, so the devtools code is trimmed away.
 
 ## Common Mistakes
 
-### Editing `bin/` artifacts to "see your change"
+### Changing a list in place
 
-Reactor doesn't watch the build output. Edit the source files under
-your project (`App.cs`, components in subdirectories) and rebuild —
-either via `dotnet run` or under `dotnet watch run`. The `bin/` tree
-is regenerated on every build; any hand-edit there is silently
-overwritten.
+```csharp
+// Don't: this changes the old list and passes the same object back
+names.Add("Ada");
+setNames(names);
+```
 
-### Trying to use Reactor inside a WinUI `Page` or `UserControl`
+The setter compares the new value with the old one. The same list object
+counts as "no change", so the screen does not update. Build a new list
+instead, as in Step 4: `setNames([.. names, "Ada"])`.
 
-Reactor expects to own the window. `ReactorApp.Run<T>` opens a
-`Window`, mounts your component tree directly, and drives the
-reconciler from that root. Writing Reactor *elements* in a WinUI
-`Page`'s markup does not work — there is no XAML loader for them. To
-put Reactor inside an existing WinUI page, declare a
-`ReactorHostControl` there and name the root component:
-`<reactor:ReactorHostControl ComponentType="local:StatsCard" />` with
-`xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"` (see
-[Reactor for XAML Developers](xaml-developers.md)). For WinForms, see
-[WinForms interop](winforms-interop.md) for `XamlIslandControl`.
+### Calling a setter twice and expecting two updates
 
-### Reaching for `INotifyPropertyChanged` out of habit
+```csharp
+// Don't: both calls read the same count, so the result is count + 1
+setCount(count + 1);
+setCount(count + 1);
+```
 
-XAML developers often try to back state with a view model. In Reactor,
-state IS the binding — `UseState` returns `(value, setter)` and the
-setter triggers the re-render. You can still bridge an existing
-`INotifyPropertyChanged` source with `UseObservable` (see
-[advanced](advanced.md)), but for new screens, hooks are the shorter
-path. The [Reactor for XAML developers](xaml-developers.md) page maps
-each XAML idiom to its Reactor equivalent.
+`count` is a normal local variable. It keeps the value from the current
+render until `Render()` runs again. To change a value based on its latest
+state, use `UseReducer` and pass a function, as the todo app does:
+`updateItems(list => [.. list, item])`.
+
+### Using the list position as the key
+
+```csharp
+// Don't: the key moves to another item when a row is removed
+items.Select((item, index) => Row(item).WithKey(index.ToString()))
+```
+
+When you remove a row, every row after it gets a new index, so Reactor matches
+rows to the wrong items. The `REACTOR_DSL_002` analyzer flags index keys, and
+`REACTOR_DSL_001` warns when a list item has no key. Use an ID from the data.
+See [Collections](collections.md#stable-identity-with-withkey).
+
+### Editing files under `bin/`
+
+Reactor does not read the build output. Edit the source files in your
+project, such as `App.cs`, and run `dotnet run` or `dotnet watch` again. The
+build replaces the `bin/` folder each time, so changes there are lost.
+
+### Writing Reactor elements in a XAML `Page`
+
+`ReactorApp.Run<T>` opens a window and owns the whole tree. Reactor elements
+are C# records, so there is no XAML loader for them, and you cannot write them
+in a `Page` or `UserControl` file. To show a Reactor component inside an
+existing WinUI page, add a `ReactorHostControl` to the page and name the
+component:
+
+```xml
+<reactor:ReactorHostControl ComponentType="local:StatsCard" />
+```
+
+Declare the prefix with `xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"`.
+See [Coming from XAML](xaml-developers.md). For WinForms, see
+[WinForms interop](winforms-interop.md).
+
+### Using `INotifyPropertyChanged` out of habit
+
+If you come from XAML, you may reach for a view model. In Reactor, state is
+the binding: `UseState` returns a value and a setter, and the setter causes
+the render. You can still connect an existing `INotifyPropertyChanged` source
+with `UseObservable` (see [Advanced patterns](advanced.md)), but for new code
+hooks are shorter. [Coming from XAML](xaml-developers.md) maps each XAML idea
+to Reactor.
 
 ## Tips
 
-**Think in functions, not objects.** Your `Render()` method is a pure function
-from state to UI. Every time state changes, it runs again from the top. Don't
-try to mutate the UI imperatively.
+**Think in functions, not objects.** `Render()` turns state into UI. It runs
+again from the top every time the state changes. Do not change the UI
+directly.
 
-**Keep state as high as it needs to be, but no higher.** If only one component
-uses a value, `UseState` in that component. If siblings need to share state,
-lift it to their parent.
+**Keep state as high as it needs to be, but no higher.** If only one
+component uses a value, keep it in that component. If two sibling components
+need the same value, move it to their parent.
 
-**Use records for data.** C# records give you immutable data with value
-equality for free. Reactor uses this for efficient memoization — if your props
-haven't changed structurally, the component skips re-rendering.
+**Use records for data.** C# records are immutable and compare by value. Use
+`with` to make a changed copy, as the todo app does.
 
-**Prefer composition over inheritance.** Build small components that each do
-one thing, then compose them in parent components. You'll rarely need more than
-`Component` or `Component<TProps>` as a base class.
+**Build small components.** Give each component one job, then combine them in
+a parent component. See [Components](components.md).
 
-**Fluent modifiers are your friend.** Instead of wrapping elements in layout
-containers for simple styling, chain modifiers: `TextBlock("hi").Margin(8).Bold()`
-reads cleanly and avoids unnecessary nesting.
+**Use modifiers for simple styling.** Instead of wrapping an element in a
+container, chain modifiers: `TextBlock("hi").Margin(8).Bold()`.
 
 ## Next Steps
 
-- **[Dev Tooling](dev-tooling.md)** — Set up hot reload and preview mode for a faster development loop
-- **[Components](components.md)** — Break your app into reusable pieces with `Component<TProps>` and typed record props
-- **[Hooks](hooks.md)** — Deep dive into [UseState](reference/hooks/UseState.md), [UseReducer](reference/hooks/UseReducer.md), [UseEffect](reference/hooks/UseEffect.md), [UseMemo](reference/hooks/UseMemo.md), and more
-- **[Layout](layout.md)** — Master VStack, HStack, Grid, and responsive patterns
-- **[Effects and Lifecycle](effects.md)** — Use `UseEffect` for side effects like timers, file I/O, and API calls
+- **[Thinking in Reactor](thinking-in-reactor.md)**: the mental model behind
+  what you just built.
+- **[Components](components.md)**: split your app into reusable parts with
+  `Component<TProps>` and typed props.
+- **[Hooks](hooks.md)**: [UseState](reference/hooks/UseState.md),
+  [UseReducer](reference/hooks/UseReducer.md),
+  [UseEffect](reference/hooks/UseEffect.md),
+  [UseMemo](reference/hooks/UseMemo.md) and more.
+- **[Layout](layout.md)**: `Grid`, flex layout and responsive patterns.
+- **[Collections](collections.md)**: `ListView`, virtualized lists and keys
+  for large data sets.
+- **[Effects and lifecycle](effects.md)**: timers, file access and API calls
+  with `UseEffect`.
+- **[Hot reload and live preview](hot-reload.md)**: see each change in the
+  running app as you save.
+- **[Devtools](devtools.md)**: the dev menu, the element tree inspector and
+  the MCP server.
+
+Working on Reactor itself? The source checkout setup is in
+[CONTRIBUTING.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/CONTRIBUTING.md).

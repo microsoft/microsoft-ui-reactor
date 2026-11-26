@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Markup;
@@ -8,6 +9,8 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 using Color = global::Windows.UI.Color;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
+
+internal sealed partial class ThemeFixtureFontIcon : WinUI.FontIcon { }
 
 /// <summary>
 /// <see cref="ThemeRef"/> modifiers applied through the synthesized <c>{ThemeResource}</c> Style:
@@ -70,6 +73,422 @@ internal static class ThemeRefStyleFixtures
     {
         ((FrameworkElement)VisualTreeHelper.GetParent(control))!.RequestedTheme = ElementTheme.Dark;
         return await Harness.WaitFor(isDark);
+    }
+
+    internal sealed class ForegroundAppliedAfterBackgroundCallback(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var background = new SolidColorBrush(DarkColor);
+            var foreground = new SolidColorBrush(ExplicitColor);
+            var callbackForeground = new SolidColorBrush(OtherExplicitColor);
+            var initial = Button("contrast").Background(new SolidColorBrush(LightColor))
+                .Foreground(new SolidColorBrush(HoverColor));
+            var button = (WinUI.Button)reconciler.Mount(initial, static () => { })!;
+            bool callbackRan = false;
+            var token = button.RegisterPropertyChangedCallback(WinUI.Control.BackgroundProperty, (sender, _) =>
+            {
+                ((WinUI.Button)sender).Foreground = callbackForeground;
+                callbackRan = true;
+            });
+            try
+            {
+                var next = initial.Background(background).Foreground(foreground);
+                var replacement = reconciler.Update(initial, next, button, static () => { });
+                H.Check("ForegroundOrder_BackgroundCallbackRanOnSameControl",
+                    replacement is null && callbackRan && ReferenceEquals(button.Background, background));
+                H.Check("ForegroundOrder_DeclaredBrushWins", ReferenceEquals(button.Foreground, foreground),
+                    $"foreground={ColorOf(button.Foreground)}");
+            }
+            finally
+            {
+                button.UnregisterPropertyChangedCallback(WinUI.Control.BackgroundProperty, token);
+                reconciler.UnmountChild(button);
+            }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class SharedForegroundLookup(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrsSharedForeground", async host =>
+        {
+            var modifierBrush = new SolidColorBrush(HoverColor);
+            var typedBrush = new SolidColorBrush(ExplicitColor);
+            var nextTypedBrush = new SolidColorBrush(OtherExplicitColor);
+            var setterBrush = new SolidColorBrush(DarkColor);
+            var source = new WinUI.AnimatedVisuals.AnimatedBackVisualSource();
+            var theme = Theme.Ref("TrsSharedForeground");
+            Action<int>? setPhase = null;
+            Brush? foregroundBeforeSameBrushSetter = null;
+
+            host.Mount(ctx =>
+            {
+                var (phase, setter) = ctx.UseState(0);
+                setPhase = setter;
+                var rich = RichTextBlock("shared foreground");
+                var icon = AnimatedIcon(source).Size(32, 32);
+                return VStack(
+                    phase switch
+                    {
+                        0 => rich.Foreground(typedBrush).Foreground<RichTextBlockElement>(modifierBrush),
+                        1 or 3 => rich.Foreground(nextTypedBrush).Foreground<RichTextBlockElement>(modifierBrush),
+                        2 => rich.Foreground(nextTypedBrush),
+                        4 => rich.Foreground(nextTypedBrush).Set(control => control.Foreground = setterBrush),
+                        5 => rich.Foreground(nextTypedBrush).Set(control =>
+                        {
+                            foregroundBeforeSameBrushSetter = control.Foreground;
+                            control.Foreground = modifierBrush;
+                        }),
+                        _ => rich.Foreground(theme),
+                    },
+                    phase switch
+                    {
+                        0 or 1 => icon.Foreground(modifierBrush),
+                        2 => icon.Foreground(theme),
+                        _ => icon,
+                    }).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+
+            var rich = H.FindControl<WinUI.RichTextBlock>(_ => true);
+            var icon = H.FindControl<WinUI.AnimatedIcon>(_ => true);
+            H.Check("SharedForeground_ControlsPresent", rich is not null && icon is not null);
+            if (rich is null || icon is null) return;
+
+            H.Check("SharedForeground_RichTextModifierApplied", ReferenceEquals(rich.Foreground, modifierBrush));
+            H.Check("SharedForeground_IconBrushApplied", ReferenceEquals(icon.Foreground, modifierBrush));
+
+            setPhase!(1);
+            await Harness.Render();
+            H.Check("SharedForeground_ModifierKeepsPrecedence", ReferenceEquals(rich.Foreground, modifierBrush));
+
+            setPhase!(2);
+            await Harness.Render();
+            H.Check("SharedForeground_RichTextRestoresTypedBrush", ReferenceEquals(rich.Foreground, nextTypedBrush));
+            H.Check("SharedForeground_IconLocalBrushCleared", !HasLocal(icon, WinUI.IconElement.ForegroundProperty));
+            H.Check("SharedForeground_IconThemeApplied", ColorOf(icon.Foreground) == LightColor,
+                $"foreground={ColorOf(icon.Foreground)}");
+
+            setPhase!(3);
+            await Harness.Render();
+            H.Check("SharedForeground_RichTextModifierReapplied", ReferenceEquals(rich.Foreground, modifierBrush));
+            H.Check("SharedForeground_IconThemeRemoved", ColorOf(icon.Foreground) != LightColor);
+
+            setPhase!(4);
+            await Harness.Render();
+            H.Check("SharedForeground_RichTextRemovalKeepsSetterBrush", ReferenceEquals(rich.Foreground, setterBrush),
+                $"foreground={ColorOf(rich.Foreground)}");
+
+            setPhase!(3);
+            await Harness.Render();
+            setPhase!(5);
+            await Harness.Render();
+            H.Check("SharedForeground_RichTextRemovalKeepsSameSetterBrush",
+                ReferenceEquals(foregroundBeforeSameBrushSetter, nextTypedBrush)
+                && ReferenceEquals(rich.Foreground, modifierBrush),
+                $"before setter={ColorOf(foregroundBeforeSameBrushSetter)}, after={ColorOf(rich.Foreground)}");
+
+            setPhase!(6);
+            await Harness.Render();
+            H.Check("SharedForeground_RichTextThemeApplied", ColorOf(rich.Foreground) == LightColor,
+                $"foreground={ColorOf(rich.Foreground)}");
+            H.Check("SharedForeground_SameControls",
+                ReferenceEquals(rich, H.FindControl<WinUI.RichTextBlock>(_ => true))
+                && ReferenceEquals(icon, H.FindControl<WinUI.AnimatedIcon>(_ => true)));
+        });
+    }
+
+    internal sealed class RichTextForegroundRestoredAfterSkippedRender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            Brush? declaredRed = null;
+            Action<int>? setPhase = null;
+            using var host = H.CreateHost();
+            try
+            {
+                host.Mount(ctx =>
+                {
+                    var (phase, set) = ctx.UseState(0);
+                    setPhase = set;
+                    var rich = RichTextBlock("foreground").Foreground(black);
+                    if (phase == 2) return rich;
+                    var covered = rich.Foreground<RichTextBlockElement>("#FF0000");
+                    declaredRed = covered.Modifiers!.Foreground;
+                    return covered;
+                });
+                await Harness.Render();
+
+                var text = H.FindControl<WinUI.RichTextBlock>(_ => true);
+                var firstRed = declaredRed;
+                H.Check("SkippedRichForeground_RedApplied", ColorOf(firstRed) == Microsoft.UI.Colors.Red
+                    && ReferenceEquals(text?.Foreground, firstRed));
+                if (text is null) return;
+
+                setPhase!(1);
+                await Harness.Render();
+                H.Check("SkippedRichForeground_EqualBrushSkipped", !ReferenceEquals(declaredRed, firstRed)
+                    && ColorOf(declaredRed) == Microsoft.UI.Colors.Red && host.Reconciler.DebugElementsSkipped > 0
+                    && ReferenceEquals(text.Foreground, firstRed));
+
+                setPhase!(2);
+                await Harness.Render();
+                H.Check("SkippedRichForeground_ExplicitBlackRestored",
+                    ReferenceEquals(text, H.FindControl<WinUI.RichTextBlock>(_ => true))
+                    && ReferenceEquals(text.Foreground, black), $"foreground={ColorOf(text.Foreground)}");
+            }
+            finally
+            {
+                H.SetContent(null);
+                await Harness.Render();
+            }
+        }
+    }
+
+    internal sealed class RichTextForegroundRemovedDuringHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var red = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var next = RichTextBlock("foreground").Foreground(black)
+                .InteractionStates(s => s.PointerOver(foreground: green));
+            var initial = next.Foreground<RichTextBlockElement>(red);
+            var text = (WinUI.RichTextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("RichTextHoverRemoval_CommonRedApplied", ReferenceEquals(text.Foreground, red));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("RichTextHoverRemoval_HoverGreenApplied", ReferenceEquals(text.Foreground, green));
+
+                var replacement = reconciler.Update(initial, next, text, static () => { });
+                H.Check("RichTextHoverRemoval_SameControlStaysGreen", replacement is null && ReferenceEquals(text.Foreground, green));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("RichTextHoverRemoval_ExplicitBlackRestored", ReferenceEquals(text.Foreground, black),
+                    $"foreground={ColorOf(text.Foreground)}");
+
+                var withoutStates = RichTextBlock("foreground").Foreground(black);
+                reconciler.Update(next, initial, text, static () => { });
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("RichTextHoverRemoval_GreenBeforeDroppingStates", ReferenceEquals(text.Foreground, green));
+
+                replacement = reconciler.Update(initial, withoutStates, text, static () => { });
+                H.Check("RichTextHoverRemoval_BothRemovedRestoresBlackImmediately",
+                    replacement is null && ReferenceEquals(text.Foreground, black), $"foreground={ColorOf(text.Foreground)}");
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("RichTextHoverRemoval_BlackRemainsAfterExit", ReferenceEquals(text.Foreground, black));
+
+                reconciler.Update(withoutStates, initial, text, static () => { });
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("RichTextHoverRemoval_GreenBeforeSetterUpdate", ReferenceEquals(text.Foreground, green));
+
+                var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+                Brush? beforeSetter = null;
+                var withSetter = withoutStates.Set(control =>
+                {
+                    beforeSetter = control.Foreground;
+                    control.Foreground = blue;
+                });
+                replacement = reconciler.Update(initial, withSetter, text, static () => { });
+                H.Check("RichTextHoverRemoval_BlackRestoredBeforeSetter", ReferenceEquals(beforeSetter, black),
+                    $"foreground={ColorOf(beforeSetter)}");
+                H.Check("RichTextHoverRemoval_SetterBrushWins", replacement is null && ReferenceEquals(text.Foreground, blue));
+            }
+            finally { reconciler.UnmountChild(text); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class AnimatedIconInteractionStatesRemovedDuringHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var white = new SolidColorBrush(Microsoft.UI.Colors.White);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var withoutStates = AnimatedIcon(new WinUI.AnimatedVisuals.AnimatedBackVisualSource()).Foreground(white);
+            var initial = withoutStates.InteractionStates(s => s.PointerOver(foreground: green));
+            var icon = (WinUI.AnimatedIcon)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("AnimatedIconHoverRemoval_NormalWhiteApplied", ReferenceEquals(icon.Foreground, white));
+                InteractionStateApplier.SimulatePointerOverForTests(icon, isOver: true);
+                H.Check("AnimatedIconHoverRemoval_HoverGreenApplied", ReferenceEquals(icon.Foreground, green));
+
+                var replacement = reconciler.Update(initial, withoutStates, icon, static () => { });
+                H.Check("AnimatedIconHoverRemoval_SameIconRestoresWhiteImmediately",
+                    replacement is null && ReferenceEquals(icon.Foreground, white), $"foreground={ColorOf(icon.Foreground)}");
+
+                reconciler.Update(withoutStates, initial, icon, static () => { });
+                InteractionStateApplier.SimulatePointerOverForTests(icon, isOver: true);
+                H.Check("AnimatedIconHoverRemoval_GreenBeforeSetterUpdate", ReferenceEquals(icon.Foreground, green));
+
+                Brush? beforeSetter = null;
+                var withSetter = withoutStates.Set(control =>
+                {
+                    beforeSetter = control.Foreground;
+                    // A setter may intentionally keep the very brush the state wrote.
+                    control.Foreground = green;
+                });
+                replacement = reconciler.Update(initial, withSetter, icon, static () => { });
+                H.Check("AnimatedIconHoverRemoval_WhiteRestoredBeforeSetter", ReferenceEquals(beforeSetter, white),
+                    $"foreground={ColorOf(beforeSetter)}");
+                H.Check("AnimatedIconHoverRemoval_SameInstanceSetterBrushWins",
+                    replacement is null && ReferenceEquals(icon.Foreground, green));
+            }
+            finally { reconciler.UnmountChild(icon); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class FlyoutKeepsHoverForegroundWhenTargetDropsInteractionStates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var white = new SolidColorBrush(Microsoft.UI.Colors.White);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var target = AnimatedIcon(new WinUI.AnimatedVisuals.AnimatedBackVisualSource()).Foreground(white);
+            var initial = Flyout(target.InteractionStates(s => s.PointerOver(opacity: 0.8f)), TextBlock("flyout"))
+                .InteractionStates(s => s.PointerOver(foreground: green));
+            var next = initial with { Target = target };
+            var icon = (WinUI.AnimatedIcon)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("FlyoutHoverForeground_NormalWhiteApplied", ReferenceEquals(icon.Foreground, white));
+                InteractionStateApplier.SimulatePointerOverForTests(icon, isOver: true);
+                H.Check("FlyoutHoverForeground_OuterGreenApplied", ReferenceEquals(icon.Foreground, green));
+
+                var replacement = reconciler.Update(initial, next, icon, static () => { });
+                H.Check("FlyoutHoverForeground_TargetDropsStatesOuterStaysGreen",
+                    replacement is null && ReferenceEquals(icon.Foreground, green), $"foreground={ColorOf(icon.Foreground)}");
+            }
+            finally { reconciler.UnmountChild(icon); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class DerivedIconThemeForeground(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrsDerivedIcon", async host =>
+        {
+            host.Mount(_ => VStack(new XamlHostElement(() => new ThemeFixtureFontIcon()).Foreground(Theme.Ref("TrsDerivedIcon")))
+                .RequestedTheme(ElementTheme.Light));
+            await Harness.Render();
+            var icon = H.FindControl<ThemeFixtureFontIcon>(_ => true);
+            H.Check("DerivedIconForeground_Mounted", icon is not null);
+            if (icon is null) return;
+            H.Check("DerivedIconForeground_Light", ColorOf(icon.Foreground) == LightColor);
+            H.Check("DerivedIconForeground_Dark", await FlipToDark(icon, () => ColorOf(icon.Foreground) == DarkColor));
+        });
+    }
+
+    internal sealed class RichTextForegroundResetOutranksSetter(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var common = new SolidColorBrush(ExplicitColor);
+            var setterBrush = new SolidColorBrush(OtherExplicitColor);
+            var initial = RichTextBlock("reset").Foreground<RichTextBlockElement>(common);
+            var text = (WinUI.RichTextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("RichTextReset_CommonApplied", ReferenceEquals(text.Foreground, common));
+                bool setterRan = false;
+                var next = RichTextBlock("reset").Set(control =>
+                {
+                    control.Foreground = setterBrush;
+                    setterRan = ReferenceEquals(control.Foreground, setterBrush);
+                });
+                var replacement = reconciler.Update(initial, next, text, static () => { });
+                H.Check("RichTextReset_SetterRanOnSameControl", replacement is null && setterRan);
+                H.Check("RichTextReset_LocalValueCleared", !HasLocal(text, WinUI.RichTextBlock.ForegroundProperty));
+            }
+            finally { reconciler.UnmountChild(text); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class PooledRichTextDoesNotKeepForeground(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed class PooledHandler : IElementHandler<RichTextBlockElement, WinUI.RichTextBlock>
+        {
+            public WinUI.RichTextBlock Mount(MountContext ctx, RichTextBlockElement element)
+            {
+                var control = ctx.RentControl<WinUI.RichTextBlock>();
+                Reconciler.SetElementTag(control, element);
+                return control;
+            }
+
+            public void Update(UpdateContext ctx, RichTextBlockElement oldEl, RichTextBlockElement newEl, WinUI.RichTextBlock control) { }
+
+            public void Unmount(UnmountContext ctx, WinUI.RichTextBlock control) => ctx.ReturnControl(control);
+        }
+
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            reconciler.RegisterHandler(new PooledHandler());
+            var brush = new SolidColorBrush(ExplicitColor);
+            var first = (WinUI.RichTextBlock)reconciler.Mount(
+                RichTextBlock("first").Foreground<RichTextBlockElement>(brush), static () => { })!;
+            try
+            {
+                H.Check("PooledRichText_FirstBrushApplied", ReferenceEquals(first.Foreground, brush));
+            }
+            finally { reconciler.UnmountChild(first); }
+
+            var second = (WinUI.RichTextBlock)reconciler.Mount(RichTextBlock("second"), static () => { })!;
+            try
+            {
+                H.Check("PooledRichText_SameControl", ReferenceEquals(first, second));
+                H.Check("PooledRichText_NoLocalForeground",
+                    !HasLocal(second, WinUI.RichTextBlock.ForegroundProperty), $"foreground={ColorOf(second.Foreground)}");
+            }
+            finally { reconciler.UnmountChild(second); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class PolymorphicIconKeepsForeground(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var brush = new SolidColorBrush(ExplicitColor);
+            Action<bool>? setFontIcon = null;
+            using var host = H.CreateHost();
+            try
+            {
+                host.Mount(ctx =>
+                {
+                    var (fontIcon, set) = ctx.UseState(false);
+                    setFontIcon = set;
+                    return VStack(Icon(fontIcon ? FontIcon("\uE8A5") : SymbolIcon("Save")).Foreground(brush));
+                });
+                await Harness.Render();
+
+                var symbol = H.FindControl<WinUI.SymbolIcon>(_ => true);
+                H.Check("PolymorphicIcon_SymbolHasForeground", ReferenceEquals(symbol?.Foreground, brush));
+
+                setFontIcon!(true);
+                await Harness.Render();
+                var font = H.FindControl<WinUI.FontIcon>(_ => true);
+                H.Check("PolymorphicIcon_FontHasSameForeground", ReferenceEquals(font?.Foreground, brush),
+                    $"foreground={ColorOf(font?.Foreground)}");
+            }
+            finally
+            {
+                H.SetContent(null);
+                await Harness.Render();
+            }
+        }
     }
 
     internal sealed class RichTextBlockForeground(Harness h) : SelfTestFixtureBase(h)
@@ -196,39 +615,49 @@ internal static class ThemeRefStyleFixtures
             var hover = new SolidColorBrush(HoverColor);
             var pressed = new SolidColorBrush(ExplicitColor);
             var key = new ThemeRef("TrsHoverBrush");
+            var iconSource = new WinUI.AnimatedVisuals.AnimatedBackVisualSource();
             host.Mount(_ => VStack(
                 VStack(Border(TextBlock("trs-hover-bg")).Background(key)
                     .InteractionStates(s => s.PointerOver(background: hover).Pressed(background: pressed))),
                 VStack(TextBlock("trs-hover-fg").Foreground(key)
                     .InteractionStates(s => s.PointerOver(foreground: hover).Pressed(foreground: pressed))),
                 VStack(Button("trs-hover-button").Foreground(key)
+                    .InteractionStates(s => s.PointerOver(foreground: hover).Pressed(foreground: pressed))),
+                VStack(RichTextBlock("trs-hover-rich-text").Foreground(key)
+                    .InteractionStates(s => s.PointerOver(foreground: hover).Pressed(foreground: pressed))),
+                VStack(AnimatedIcon(iconSource).Size(32, 32).Foreground(key)
                     .InteractionStates(s => s.PointerOver(foreground: hover).Pressed(foreground: pressed)))).RequestedTheme(ElementTheme.Light));
             await Harness.Render();
 
             var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trs-hover-bg" });
             var text = H.FindText("trs-hover-fg");
             var button = H.FindControl<WinUI.Button>(b => b.Content is "trs-hover-button");
-            H.Check("ThemeRefStyle_Hover_Present", border is not null && text is not null && button is not null);
-            if (border is null || text is null || button is null) return;
+            var rich = H.FindControl<WinUI.RichTextBlock>(_ => true);
+            var icon = H.FindControl<WinUI.AnimatedIcon>(_ => true);
+            H.Check("ThemeRefStyle_Hover_Present",
+                border is not null && text is not null && button is not null && rich is not null && icon is not null);
+            if (border is null || text is null || button is null || rich is null || icon is null) return;
 
             (FrameworkElement Control, DependencyProperty Property, string Name)[] cases =
             [
                 (border, WinUI.Border.BackgroundProperty, "BorderBackground"),
                 (text, WinUI.TextBlock.ForegroundProperty, "TextForeground"),
                 (button, WinUI.Control.ForegroundProperty, "ButtonForeground"),
+                (rich, WinUI.RichTextBlock.ForegroundProperty, "RichTextForeground"),
+                (icon, WinUI.IconElement.ForegroundProperty, "IconForeground"),
             ];
             foreach (var (control, property, name) in cases)
             {
                 H.Check($"ThemeRefStyle_Hover_{name}_NormalIsTheme", ColorOf(control.GetValue(property)) == LightColor,
                     $"value={ColorOf(control.GetValue(property))}");
-                Reconciler.SimulatePointerOverForTests(control, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(control, isOver: true);
                 H.Check($"ThemeRefStyle_Hover_{name}_HoverBrush", ReferenceEquals(control.GetValue(property), hover));
                 // Pressed sets its own brush: the press must not capture the hover brush as the
                 // value to restore.
-                Reconciler.SimulatePressedForTests(control, isPressed: true);
+                InteractionStateApplier.SimulatePressedForTests(control, isPressed: true);
                 H.Check($"ThemeRefStyle_Hover_{name}_PressedBrush", ReferenceEquals(control.GetValue(property), pressed));
-                Reconciler.SimulatePressedForTests(control, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(control, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(control, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(control, isOver: false);
                 H.Check($"ThemeRefStyle_Hover_{name}_LocalReleased", !HasLocal(control, property),
                     $"local={control.ReadLocalValue(property)}");
                 H.Check($"ThemeRefStyle_Hover_{name}_NormalRestored", ColorOf(control.GetValue(property)) == LightColor);
@@ -255,8 +684,8 @@ internal static class ThemeRefStyleFixtures
             var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trs-opacity" });
             H.Check("ThemeRefStyle_Opacity_NormalIsTheme", ColorOf(border?.Background) == LightColor);
             if (border is null) return;
-            Reconciler.SimulatePointerOverForTests(border, isOver: true);
-            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
             H.Check("ThemeRefStyle_Opacity_NoLocalBackground", !HasLocal(border, WinUI.Border.BackgroundProperty));
             H.Check("ThemeRefStyle_Opacity_ThemeLive",
                 await FlipToDark(border, () => ColorOf(border.Background) == DarkColor),
@@ -299,11 +728,11 @@ internal static class ThemeRefStyleFixtures
                 object Local() => border.ReadLocalValue(WinUI.Border.BackgroundProperty);
 
                 // Over → Pressed → Over → Normal: the press must not recapture the hover brush.
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
-                Reconciler.SimulatePressedForTests(border, isPressed: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: true);
                 H.Check("ThemeRefStyle_Explicit_PressedBrush", ReferenceEquals(border.Background, pressed));
-                Reconciler.SimulatePressedForTests(border, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Explicit_FirstRestoredAfterPress", ReferenceEquals(Local(), first),
                     $"bg={ColorOf(border.Background)}");
 
@@ -311,7 +740,7 @@ internal static class ThemeRefStyleFixtures
                 setPhase!(1);
                 await Harness.Render();
                 H.Check("ThemeRefStyle_Explicit_SecondApplied", ReferenceEquals(border.Background, second));
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
                 H.Check("ThemeRefStyle_Explicit_HoverBrush", ReferenceEquals(border.Background, hover));
 
                 // A re-render during the hover writes a new brush: it stands, and leaving the hover
@@ -319,17 +748,17 @@ internal static class ThemeRefStyleFixtures
                 setPhase!(2);
                 await Harness.Render();
                 H.Check("ThemeRefStyle_Explicit_ThirdAppliedDuringHover", ReferenceEquals(Local(), third));
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Explicit_ThirdKeptOnExit", ReferenceEquals(Local(), third),
                     $"bg={ColorOf(border.Background)}");
 
                 // And once the hover starts over that brush, a press and release still come back to it.
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
                 setPhase!(1);
                 await Harness.Render();
-                Reconciler.SimulatePressedForTests(border, isPressed: true);
-                Reconciler.SimulatePressedForTests(border, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: true);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Explicit_MidHoverBrushRestoredAfterPress", ReferenceEquals(Local(), second),
                     $"bg={ColorOf(border.Background)}");
             }
@@ -367,11 +796,11 @@ internal static class ThemeRefStyleFixtures
                 H.Check("ThemeRefStyle_Bound_Initial", ReferenceEquals(border?.Background, first));
                 if (border is null) return;
 
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
-                Reconciler.SimulatePressedForTests(border, isPressed: true);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: true);
                 H.Check("ThemeRefStyle_Bound_PressedBrush", ReferenceEquals(border.Background, pressed));
-                Reconciler.SimulatePressedForTests(border, isPressed: false);
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                InteractionStateApplier.SimulatePressedForTests(border, isPressed: false);
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
                 H.Check("ThemeRefStyle_Bound_Restored", ReferenceEquals(border.Background, first),
                     $"bg={ColorOf(border.Background)}");
 
@@ -731,7 +1160,7 @@ internal static class ThemeRefStyleFixtures
             await Harness.Render();
             var themed = H.FindText("trs-pool-themed");
             H.Check("ThemeRefStyle_Pool_Themed", themed is not null && ColorOf(themed.Foreground) == LightColor
-                && Reconciler.HasThemeStyleMarkerForTests(themed));
+                && ThemeBindingApplier.HasThemeStyleMarkerForTests(themed));
 
             setPhase!(1);
             await Harness.Render();
@@ -742,7 +1171,7 @@ internal static class ThemeRefStyleFixtures
             H.Check("ThemeRefStyle_Pool_SameInstanceRented", plain is not null && ReferenceEquals(plain, themed));
             H.Check("ThemeRefStyle_Pool_StyleCleared", plain is not null && plain.Style is null && ColorOf(plain.Foreground) != LightColor,
                 $"fg={ColorOf(plain?.Foreground)}");
-            H.Check("ThemeRefStyle_Pool_MarkerCleared", plain is not null && !Reconciler.HasThemeStyleMarkerForTests(plain));
+            H.Check("ThemeRefStyle_Pool_MarkerCleared", plain is not null && !ThemeBindingApplier.HasThemeStyleMarkerForTests(plain));
         });
     }
 

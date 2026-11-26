@@ -1,6 +1,9 @@
 
 # WPF Interop
 
+Host Reactor components inside a WPF app with a XAML island, until a
+first-class WPF host control ships.
+
 **Status: coming soon.** A first-class Microsoft.UI.Reactor (Reactor) WPF host control
 (`Reactor.Interop.Wpf`) is on the roadmap but not yet shipped. The only
 host wrapper in the box today is `Reactor.Interop.WinForms`.
@@ -143,5 +146,5 @@ setup — a WPF host has to reproduce it.
   view-models from WPF.
 - **[Threading and Dispatch](threading-and-dispatch.md)** — How Reactor's
   hook setters auto-marshal across dispatchers.
-- **[XAML Developers](xaml-developers.md)** — Migration cookbook for
+- **[Coming from XAML](xaml-developers.md)** — Migration guide for
   WPF/XAML pages moving to Reactor's declarative shell.

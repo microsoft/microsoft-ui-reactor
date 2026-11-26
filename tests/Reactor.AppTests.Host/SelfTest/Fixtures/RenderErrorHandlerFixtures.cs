@@ -1240,7 +1240,7 @@ internal static class RenderErrorHandlerFixtures
     {
         public override async Task RunAsync()
         {
-            int baseline = Reconciler.InteractionTrackerCountForTests;
+            int baseline = InteractionStateApplier.InteractionTrackerCountForTests;
 
             // App fallback for a failing root (the internal guard), first failure plus retries.
             var host = H.CreateHost();
@@ -1252,8 +1252,8 @@ internal static class RenderErrorHandlerFixtures
                 host.RequestRender();
                 await Harness.Render();
             }
-            H.Check("RenderErrorHandler_SubtreeRollback_Guard", Reconciler.InteractionTrackerCountForTests == baseline,
-                $"baseline={baseline} now={Reconciler.InteractionTrackerCountForTests}");
+            H.Check("RenderErrorHandler_SubtreeRollback_Guard", InteractionStateApplier.InteractionTrackerCountForTests == baseline,
+                $"baseline={baseline} now={InteractionStateApplier.InteractionTrackerCountForTests}");
 
             // Ordinary user ErrorBoundary: mount, then retries (the update path, where the
             // failed retry is a fresh subtree, not part of the boundary's attached child).
@@ -1266,8 +1266,8 @@ internal static class RenderErrorHandlerFixtures
                 await Harness.Render();
             }
             H.Check("RenderErrorHandler_SubtreeRollback_Boundary",
-                Reconciler.InteractionTrackerCountForTests == baseline && H.FindText("InteractiveBoundaryFallback") is not null,
-                $"baseline={baseline} now={Reconciler.InteractionTrackerCountForTests}");
+                InteractionStateApplier.InteractionTrackerCountForTests == baseline && H.FindText("InteractiveBoundaryFallback") is not null,
+                $"baseline={baseline} now={InteractionStateApplier.InteractionTrackerCountForTests}");
 
             // Retry that grows the attached child: the new control lands inside it, so the
             // boundary's own unmount of that child covers it and it is torn down exactly once.
@@ -1288,9 +1288,9 @@ internal static class RenderErrorHandlerFixtures
             growHost.RequestRender();
             await Harness.Render();
             H.Check("RenderErrorHandler_SubtreeRollback_AttachedOnce",
-                Reconciler.InteractionTrackerCountForTests == baseline && s_nativeResources == 0
+                InteractionStateApplier.InteractionTrackerCountForTests == baseline && s_nativeResources == 0
                     && H.FindText("GrowFallback") is not null,
-                $"baseline={baseline} now={Reconciler.InteractionTrackerCountForTests} live={s_nativeResources}");
+                $"baseline={baseline} now={InteractionStateApplier.InteractionTrackerCountForTests} live={s_nativeResources}");
         }
     }
 

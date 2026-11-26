@@ -542,6 +542,9 @@ internal static class SelfTestRunner
                         bool crashed = false;
                         try
                         {
+                            // Each fixture's Render waits on its own CreateHost hosts, not on
+                            // the never-disposed hosts every earlier fixture left behind.
+                            Harness.ForgetCreatedHosts();
                             var fixture = SelfTestFixtureRegistry.Create(fixtureName, harness);
                             if (fixture is null)
                             {

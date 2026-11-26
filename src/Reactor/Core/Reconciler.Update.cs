@@ -173,13 +173,14 @@ public sealed partial class Reconciler
             // #721 — refresh the cached gesture/drag dispatch closures so a skipped
             // element whose only change is a per-render gesture/drag closure dispatches
             // the latest closure (not a stale capture) without re-arming the trampolines.
-            if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
+            if ((GestureDispatch.HasGestureOrDragSlots(modifiers) || GestureDispatch.HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
-                RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+                GestureDispatch.RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
             // A virtualized host's own skipped element re-snapshots here at its own depth
             // (no-op for every other control or a decorator sharing it, and
             // allocation-free when nothing changed).
             RefreshContextCaptureOnSkip(control, newEl, effectiveTheme);
+            RetargetKeyframeOwnersOnSkip(control, oldEl, newEl);
             // No validation refresh here, deliberately (issue #1262). A `.Validate()`
             // verdict is republished only by a component that re-rendered, and that
             // component's output is on the dirty ancestor path, which this arm declines
@@ -206,7 +207,7 @@ public sealed partial class Reconciler
         if (oldEl.ThemeBindings is not null && newEl.ThemeBindings is null
             && control is FrameworkElement clearThFe)
         {
-            ClearThemeBindings(clearThFe);
+            ThemeBindingApplier.ClearThemeBindings(clearThFe);
         }
         DebugUIElementsModified++;
 
@@ -341,24 +342,40 @@ public sealed partial class Reconciler
             }
         }
 
-        // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
-        //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
-        //   (3) global `ControlRegistry`, (4) composition-primitive switch.
+        // A keyed Memo's update can hand back a replaced control; keep the old control's layer order for it.
+        bool memoWrappedDecorator = newEl is KeyedMemoElement
+            && control.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoWrapsDecorator: true };
+
+        var foregroundUpdate = ForegroundModifier.UpdateAction.None;
         // V1 Update returns the UIElement to install in the parent's
         // slot. Standard handlers always return `control` unchanged
         // (§13 Q12 — no substitution on the public author surface);
         // decorator-style handlers (§14 Phase 3 completion) may return
         // a different instance (target-wrapping decorators whose
         // Target changed type). When the returned instance equals
-        // `control`, set `result` to null so callers preserve identity.
+        // `control`, return null so callers preserve identity.
+        UIElement? UpdateWithV1Handler(IV1HandlerEntry entry)
+        {
+            var oldForeground = oldModifiers?.Foreground;
+            var foreground = modifiers?.Foreground;
+            if (oldForeground is not null || foreground is not null)
+                foregroundUpdate = ForegroundModifier.PrepareUpdate(entry, control, oldEl, newEl, oldForeground, foreground,
+                    hasModifierParent: modifierParent is not null);
+            var v1Result = entry.Update(oldEl, newEl, control, requestRerender, this);
+            ownsControl = entry.OwnsControl(newEl);
+            return ReferenceEquals(v1Result, control) ? null : v1Result;
+        }
+
         // A handler's own opacity write (a descriptor such as Button's IsDisabledFocusable dimming)
-        // replaces a pending keyframe restart as a modifier's does (#1669). Free when none is pending.
-        var opacityProbe = new KeyframeOpacityProbe(control);
+        // replaces a pending opacity restart as a modifier's does (#1669). Free when none is pending.
+        var opacityProbe = new OpacityRestartProbe(control);
+
+        // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
+        //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
+        //   (3) global `ControlRegistry`, (4) composition-primitive switch.
         if (_v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
         {
-            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
-            result = ReferenceEquals(v1Result, control) ? null : v1Result;
-            ownsControl = v1Entry.OwnsControl(newEl);
+            result = UpdateWithV1Handler(v1Entry);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
@@ -368,9 +385,7 @@ public sealed partial class Reconciler
         }
         else if (TryResolveFromControlRegistry(newEl.GetType(), out v1Entry))
         {
-            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
-            result = ReferenceEquals(v1Result, control) ? null : v1Result;
-            ownsControl = v1Entry.OwnsControl(newEl);
+            result = UpdateWithV1Handler(v1Entry);
         }
         else
         {
@@ -421,6 +436,27 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        // Mount recorded a keyed Memo's exit on the control it shares (#1663); keep it current when
+        // the Memo declares, retimes or drops one under an unchanged key.
+        if (newEl is KeyedMemoElement)
+        {
+            bool newExit = newEl.ElementTransition?.GetExitTransition() is not null;
+            bool oldExit = oldEl.ElementTransition?.GetExitTransition() is not null;
+            if (newExit || oldExit)
+            {
+                var memoState = GetOrCreateReactorState(target);
+                memoState.MemoTransition = newExit ? newEl.ElementTransition : null;
+                // The layer order holds while the Memo keeps its exit (a resource refresh passes the
+                // same Memo as old and new), and a replaced control, whose state starts fresh, takes
+                // the order the old control had. A new exit sits over a flyout on the control only
+                // when no outer layer is updating the control.
+                if (!newExit) memoState.MemoWrapsDecorator = false;
+                else if (!oldExit)
+                    memoState.MemoWrapsDecorator = modifierParent is null && memoState.DecoratorElement is not null;
+                else if (result is not null)
+                    memoState.MemoWrapsDecorator = memoWrappedDecorator;
+            }
+        }
         // A nested update can replace the control or introduce its first
         // restorable inner declaration. Publish the edge before outer restoration.
         if (modifierParent is not null && (result is not null || mountedModifierTarget is null))
@@ -464,7 +500,8 @@ public sealed partial class Reconciler
             && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
-                ownsControl: ownsControl && result is null);
+                ownsControl: ownsControl && result is null,
+                foregroundUpdate: ReferenceEquals(target, control) ? foregroundUpdate : ForegroundModifier.UpdateAction.NewTarget);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
@@ -500,8 +537,8 @@ public sealed partial class Reconciler
         if (target is FrameworkElement captionFe && modifiers?.AutomationName is null)
             UpdateDefaultAutomationName(
                 captionFe,
-                ResolveCaptionForElement(oldEl),
-                ResolveCaptionForElement(newEl));
+                AccessibilityApplier.ResolveCaptionForElement(oldEl),
+                AccessibilityApplier.ResolveCaptionForElement(newEl));
 
         // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
         if (newEl.ThemeBindings is not null && target is FrameworkElement thFe)
@@ -550,9 +587,9 @@ public sealed partial class Reconciler
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)
-            ApplyInteractionStates(target, newEl.InteractionStates);
+            InteractionStateApplier.ApplyInteractionStates(target, newEl.InteractionStates);
         else if (oldEl.InteractionStates is not null)
-            ClearInteractionStates(target);
+            InteractionStateApplier.ClearInteractionStates(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
         if (keyframes is not null)

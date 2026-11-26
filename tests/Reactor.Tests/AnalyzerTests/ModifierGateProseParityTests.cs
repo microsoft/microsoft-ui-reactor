@@ -41,6 +41,7 @@ public class ModifierGateProseParityTests
         ["RelativePanel"] = "RelativePanel",
         ["TextBlock"] = "TextBlock",
         ["RichTextBlock"] = "RichTextBlock",
+        ["IconElement"] = "IconElement",
     };
 
     [Theory]
@@ -68,6 +69,12 @@ public class ModifierGateProseParityTests
 
         // Each gate clause ends at the end of its sentence or table cell.
         var clause = Regex.Match(row, $@"\b{Regex.Escape(clauseName)}:\s*(?<body>[^.|]+)");
+        if (themed && !ModifierTable.Properties.Values.Any(info => info.ThemeControlGate is not null))
+        {
+            Assert.False(clause.Success, $"Remove the '{clauseName}:' clause from {SkillPath} when it has no overrides.");
+            return;
+        }
+
         Assert.True(clause.Success, $"No '{clauseName}:' clause in the REACTOR_MOD_003 row of {SkillPath}.");
 
         // "Background → Panel/Control/Border; Foreground and fonts → Control/TextBlock; …"
@@ -108,7 +115,7 @@ public class ModifierGateProseParityTests
         }
         else
         {
-            // The five direct-write gate statements cover 9 properties once fonts are expanded.
+            // The direct-write gate statements cover 9 properties once fonts are expanded.
             Assert.True(
                 stated.Count >= 9,
                 $"Only {stated.Count} gate statements were parsed out of the {SkillPath} " +

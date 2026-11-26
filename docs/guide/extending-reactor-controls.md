@@ -1,4 +1,10 @@
 
+# Extending Reactor with Native Controls
+
+How to wrap a native Windows control as a Reactor element — a third-party
+WinUI control, a custom `Control` subclass, or an existing WinUI control
+that the built-in catalog has not yet covered.
+
 Microsoft.UI.Reactor (Reactor) ships handlers for the built-in WinUI
 control gallery, but the protocol that drives them is the same surface
 authors use to add their own native controls. The contract you wire
@@ -18,17 +24,12 @@ writing a line of imperative interpreter code. Read the reference
 companion [The Control Reconciler Protocol](control-reconciler-protocol.md)
 for the model the steps here plug into.
 
-# Extending Reactor with Native Controls
-
-The audience is anyone wrapping a native Windows control — a third-
-party WinUI control, a custom `Control` subclass, or an existing WinUI
-control that the built-in catalog has not yet covered. The walk-through
-ports `Microsoft.UI.Xaml.Controls.RatingControl` end-to-end so the
-shape of every step is concrete; the patterns transfer to anything
+The walk-through ports `Microsoft.UI.Xaml.Controls.RatingControl` end-to-end
+so the shape of every step is concrete; the patterns transfer to anything
 that descends from `FrameworkElement`. Cross-reference the built-in
-descriptors in `src/Reactor/Core/V1Protocol/Descriptor/Descriptors/`
-as you adapt the example — they are the production examples of every
-shape this page mentions.
+descriptors in `src/Reactor/Core/V1Protocol/Descriptor/Descriptors/` as you
+adapt the example — they are the production examples of every shape this
+page mentions.
 
 ## The four-step playbook
 
@@ -840,8 +841,9 @@ against the public surface only).
 descriptor and the handler instance are registered once per host.
 Per-control state needs to live on the **control** — either on the
 attached state DP (use `Reconciler.SetElementTag` / `GetElementTag`)
-or on the typed event payload box (use
-`Reconciler.GetOrCreateControlEventPayload<TPayload>`). The pool
+or on the typed event payload box (declare it through the
+`HandCodedEvent<TPayload, …>` / `HandCodedControlled<TPayload, …>`
+descriptor builders, whose `slotIsNull` / `setSlot` pair manages the box). The pool
 reset contract clears both on `ReturnControl`; descriptor-level state
 survives pool rent and corrupts the next mount.
 

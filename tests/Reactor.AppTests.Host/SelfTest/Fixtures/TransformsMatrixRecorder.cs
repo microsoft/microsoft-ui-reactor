@@ -377,10 +377,10 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
         if (_case.Feature == FeatureAxis.InteractionStates)
         {
-            Reconciler.SimulatePointerOverForTests(t, isOver: true);
+            InteractionStateApplier.SimulatePointerOverForTests(t, isOver: true);
             await Settle();
             f["active"] = await Pose(pose, step, name);
-            Reconciler.SimulatePointerOverForTests(t, isOver: false);
+            InteractionStateApplier.SimulatePointerOverForTests(t, isOver: false);
             await Settle();
             return;
         }

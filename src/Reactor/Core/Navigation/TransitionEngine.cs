@@ -230,10 +230,10 @@ internal static class TransitionEngine
         var generation = global::System.Threading.Interlocked.Increment(ref _transitionGeneration);
         _elementGeneration.GetOrCreateValue(outgoing).Value = generation;
         _elementGeneration.GetOrCreateValue(incoming).Value = generation;
-        // The transition owns both pages' opacity now (it hides, fades and normalizes them), so a
-        // keyframe restart waiting for XAML's opacity push must not show a page early (#1669).
-        Core.Reconciler.CancelKeyframeOpacityCheck(outgoing);
-        Core.Reconciler.CancelKeyframeOpacityCheck(incoming);
+        // The transition owns both pages' opacity now (it hides, fades and normalizes them), so an
+        // opacity restart waiting for XAML's opacity push must not show a page early (#1669).
+        Core.Reconciler.CancelOpacityRestart(outgoing);
+        Core.Reconciler.CancelOpacityRestart(incoming);
         return generation;
     }
 
@@ -251,7 +251,13 @@ internal static class TransitionEngine
     {
         try
         {
-            return new global::Windows.UI.ViewManagement.UISettings();
+            var settings = new global::Windows.UI.ViewManagement.UISettings();
+            // Implicit transitions check the setting when they're applied, and an unchanged
+            // element skips its update, so a change refreshes every host (issue #1702).
+            // ColorValuesChanged doesn't fire for this setting.
+            if (Core.UiSettingsCapabilities.HasAnimationsEnabledChanged)
+                settings.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
+            return settings;
         }
         catch (global::System.Runtime.InteropServices.COMException ex)
         {
@@ -267,6 +273,44 @@ internal static class TransitionEngine
             Core.Diagnostics.DiagnosticLog.SwallowedError(
                 Core.Diagnostics.LogCategory.Navigation, "UISettings activation", ex);
             return null;
+        }
+    }
+
+    private static void OnAnimationsEnabledChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
+        => RefreshHostsForAnimationsChange();
+
+    // The setting at the last poll: -1 before the first, then 0 or 1.
+    private static int _polledAnimationsEnabled = -1;
+
+    /// <summary>
+    /// Where the change notification doesn't exist (before Windows 10 2004), each host's root
+    /// pass calls this, and a setting that moved since the last poll refreshes every host. The
+    /// first poll only records the value. UI thread.
+    /// </summary>
+    internal static void PollAnimationsEnabled()
+    {
+        int now = AnimationsEnabled ? 1 : 0;
+        int before = global::System.Threading.Interlocked.Exchange(ref _polledAnimationsEnabled, now);
+        if (before >= 0 && before != now)
+            RefreshHostsForAnimationsChange();
+    }
+
+    /// <summary>
+    /// Asks every live host for a pass that skips no element, so implicit transitions are
+    /// applied again under the current setting. Any thread. Internal so a selftest can drive
+    /// what the settings notification does.
+    /// </summary>
+    internal static void RefreshHostsForAnimationsChange()
+    {
+        try
+        {
+            Core.ThemeResourceListeners.NotifyAll();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Raised on the WinRT notification thread, where nothing above would catch it.
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Navigation, "AnimationsEnabledChanged refresh", ex);
         }
     }
 

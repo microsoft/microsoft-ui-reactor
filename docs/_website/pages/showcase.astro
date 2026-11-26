@@ -1,0 +1,73 @@
+---
+// Apps built with Reactor. The list lives in components/showcase-apps.ts.
+import data from "blume:data";
+import Icon from "blume/components/Icon.astro";
+import PageLayout from "blume/components/layout/PageLayout.astro";
+
+import AppCard from "../components/AppCard.astro";
+import { SHOWCASE_APPS, SUBMIT_URL } from "../components/showcase-apps";
+
+const { config, navigation, fontCssVars } = data;
+
+const featured = SHOWCASE_APPS.filter((app) => app.featured);
+const others = SHOWCASE_APPS.filter((app) => !app.featured);
+---
+
+<PageLayout
+  site={{ title: config.title, description: config.description }}
+  logo={config.logo}
+  banner={config.banner}
+  analytics={config.analytics}
+  navigation={navigation}
+  fontCssVars={fontCssVars}
+  favicon={config.favicon}
+  appleIcon={config.appleIcon}
+  themeMode={config.theme.mode}
+  searchEnabled={config.search.enabled}
+  siteUrl={config.site}
+  ogEnabled={config.og.enabled}
+  page={{
+    title: "Showcase - Reactor",
+    description: "Apps built with Reactor. Every one is open source, so you can read the code.",
+    route: "/showcase",
+  }}
+>
+  <div class="mx-auto max-w-6xl px-4 pb-24 pt-12 sm:px-6 sm:pt-16 lg:px-8">
+    <h1 class="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">Showcase</h1>
+    <p class="mt-4 max-w-[60ch] text-lg leading-relaxed text-muted-foreground">
+      Apps built with Reactor. Every one is open source, so you can read the code.
+    </p>
+
+    <ul class="mt-12 grid gap-x-8 gap-y-12 lg:grid-cols-2">
+      {featured.map((app, index) => (
+        <li>
+          <AppCard app={app} large flip={index % 2 === 1} />
+        </li>
+      ))}
+    </ul>
+
+    <ul class="mt-16 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+      {others.map((app, index) => (
+        <li>
+          <AppCard app={app} flip={(index + Math.floor(index / 6)) % 2 === 1} />
+        </li>
+      ))}
+    </ul>
+
+    <section class="mt-24 flex flex-col gap-6 border-t border-border pt-10 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 class="font-display text-2xl font-semibold tracking-tight text-foreground">Built something with Reactor?</h2>
+        <p class="mt-2 max-w-[52ch] text-muted-foreground">
+          Tell us about it. Open-source apps with a public repository can be added to this page.
+        </p>
+      </div>
+      <a
+        href={SUBMIT_URL}
+        class="inline-flex shrink-0 items-center gap-1.5 self-start rounded-full bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:self-auto"
+      >
+        Submit your app
+        <Icon name="arrow-up-right" size={14} />
+      </a>
+    </section>
+  </div>
+</PageLayout>

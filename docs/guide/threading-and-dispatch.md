@@ -1,14 +1,16 @@
 
 # Threading and Dispatch
 
-Microsoft.UI.Reactor (Reactor) has one UI thread invariant: the reconciler, every hook setter,
-and every WinUI property write must happen on the thread that captured
-the dispatcher at app bootstrap. When a setter is called from a
-background task, [`RenderContext`](hooks.md) auto-marshals it onto that
-captured dispatcher; if you opt a hook into `threadSafe: true`, the
-write happens in place under a per-cell lock instead. This page covers
-which call sites enforce the invariant, how the marshal works, and the
-two error modes that bypass it loudly rather than silently.
+Microsoft.UI.Reactor (Reactor) has one UI thread invariant: the reconciler,
+every hook setter, and every WinUI property write must happen on the thread
+that captured the dispatcher at app bootstrap.
+
+When a setter is called from a background task, [`RenderContext`](hooks.md)
+auto-marshals it onto that captured dispatcher; if you opt a hook into
+`threadSafe: true`, the write happens in place under a per-cell lock
+instead. This page covers which call sites enforce the invariant, how the
+marshal works, and the two error modes that bypass it loudly rather than
+silently.
 
 ## The UI-thread invariant
 
@@ -253,7 +255,7 @@ event that never fires, so callers guard with an equality check first.
 dropped without spending a token, because the engine cannot predict
 which DPs a user's `.Set(...)` will write. Both counters live on a
 `DependencyObject` attached property rather than
-a `ConditionalWeakTable` because [WinRT projection](reactor-vs-xaml.md)
+a `ConditionalWeakTable` because the WinRT projection
 can hand the same native object back as different managed wrappers,
 and only the attached DP survives that round-trip.
 

@@ -96,7 +96,7 @@ public class GestureTypesTests
         {
             Pan = new PanGestureConfig(_ => { }) { Axis = PanAxis.Both },
         };
-        var mode = Reconciler.ComputeManipulationMode(m);
+        var mode = GestureDispatch.ComputeManipulationMode(m);
         Assert.True(mode.HasFlag(ManipulationModes.TranslateX));
         Assert.True(mode.HasFlag(ManipulationModes.TranslateY));
         Assert.False(mode.HasFlag(ManipulationModes.TranslateInertia));
@@ -109,7 +109,7 @@ public class GestureTypesTests
         {
             Pan = new PanGestureConfig(_ => { }) { Axis = PanAxis.Horizontal },
         };
-        var mode = Reconciler.ComputeManipulationMode(m);
+        var mode = GestureDispatch.ComputeManipulationMode(m);
         Assert.True(mode.HasFlag(ManipulationModes.TranslateX));
         Assert.False(mode.HasFlag(ManipulationModes.TranslateY));
     }
@@ -121,7 +121,7 @@ public class GestureTypesTests
         {
             Pan = new PanGestureConfig(_ => { }) { Axis = PanAxis.Vertical, WithInertia = true },
         };
-        var mode = Reconciler.ComputeManipulationMode(m);
+        var mode = GestureDispatch.ComputeManipulationMode(m);
         Assert.True(mode.HasFlag(ManipulationModes.TranslateY));
         Assert.True(mode.HasFlag(ManipulationModes.TranslateInertia));
     }
@@ -134,7 +134,7 @@ public class GestureTypesTests
             Pan = new PanGestureConfig(_ => { }) { Axis = PanAxis.Horizontal },
             Pinch = new PinchGestureConfig(_ => { }),
         };
-        var mode = Reconciler.ComputeManipulationMode(m);
+        var mode = GestureDispatch.ComputeManipulationMode(m);
         Assert.True(mode.HasFlag(ManipulationModes.TranslateX));
         Assert.False(mode.HasFlag(ManipulationModes.TranslateY));
         Assert.True(mode.HasFlag(ManipulationModes.Scale));
@@ -147,7 +147,7 @@ public class GestureTypesTests
         {
             Rotate = new RotateGestureConfig(_ => { }) { WithInertia = true },
         };
-        var mode = Reconciler.ComputeManipulationMode(m);
+        var mode = GestureDispatch.ComputeManipulationMode(m);
         Assert.True(mode.HasFlag(ManipulationModes.Rotate));
         Assert.True(mode.HasFlag(ManipulationModes.RotateInertia));
     }
@@ -155,7 +155,7 @@ public class GestureTypesTests
     [Fact]
     public void ComputeManipulationMode_NoGestures_IsNone()
     {
-        var mode = Reconciler.ComputeManipulationMode(new ElementModifiers());
+        var mode = GestureDispatch.ComputeManipulationMode(new ElementModifiers());
         Assert.Equal(ManipulationModes.None, mode);
     }
 

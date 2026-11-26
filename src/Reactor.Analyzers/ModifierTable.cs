@@ -301,8 +301,7 @@ internal static class ModifierTable
     private static readonly string[] ControlBorderGridStackRelative = { "Control", "Border", "Grid", "StackPanel", "RelativePanel" };
     private static readonly string[] PanelControlBorder = { "Panel", "Control", "Border" };
     private static readonly string[] ControlOrTextBlock = { "Control", "TextBlock" };
-    private static readonly string[] ForegroundThemeControlGate =
-        [..ControlOrTextBlock, "RichTextBlock"];
+    private static readonly string[] ForegroundControlGate = { "Control", "TextBlock", "RichTextBlock", "IconElement" };
     private static readonly string[] RichTextBlockOnly = { "RichTextBlockElement" };
     private static readonly string[] TextOrRichTextBlock = { "TextBlockElement", "RichTextBlockElement" };
 
@@ -494,8 +493,7 @@ internal static class ModifierTable
             { "FontFamily", new ModifierInfo("FontFamily", controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontSize",   new ModifierInfo("FontSize",   controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontWeight", new ModifierInfo("FontWeight", controlGate: ControlOrTextBlock, elementTypes: RichTextBlockOnly) },
-            { "Foreground", new ModifierInfo("Foreground", controlGate: ControlOrTextBlock,
-                elementTypes: RichTextBlockOnly, themeControlGate: ForegroundThemeControlGate) },
+            { "Foreground", new ModifierInfo("Foreground", controlGate: ForegroundControlGate, elementTypes: RichTextBlockOnly) },
 
             // ── Type-specific modifiers (REACTOR_MOD_002, Info) ──────────────────────
             // No generic overload exists, so the rewrite only compiles on these element
@@ -726,7 +724,7 @@ internal static class ModifierTable
         new Dictionary<string, string>(System.StringComparer.Ordinal)
         {
             ["Animate"] = "Reconciler.ApplyPropertyAnimation takes the visual to install its implicit animations.",
-            ["InteractionStates"] = "Reconciler.TransitionToState takes the visual on the first state change to animate it.",
+            ["InteractionStates"] = "InteractionStateApplier.TransitionToState takes the visual on the first state change to animate it.",
             ["Transition"] = "Reconciler.ApplyEnterTransition/ApplyExitTransition take the visual to animate enter and exit.",
             ["Keyframes"] = "Reconciler.ApplyKeyframeAnimations takes the visual to start the keyframe animation.",
             ["LayoutAnimation"] = "Reconciler.ApplyLayoutAnimation takes the visual to install its Offset/Size implicit animations.",

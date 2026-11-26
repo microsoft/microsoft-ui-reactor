@@ -268,7 +268,7 @@ public class DragDataTests
     [Fact]
     public void BuildDragEndContext_Move_SucceedsUncancelled()
     {
-        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.Move);
+        var ctx = DragDropDispatch.BuildDragEndContext(DataPackageOperation.Move);
         Assert.Equal(DragOperations.Move, ctx.CompletedOperation);
         Assert.False(ctx.WasCancelled);
     }
@@ -276,7 +276,7 @@ public class DragDataTests
     [Fact]
     public void BuildDragEndContext_Copy_SucceedsUncancelled()
     {
-        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.Copy);
+        var ctx = DragDropDispatch.BuildDragEndContext(DataPackageOperation.Copy);
         Assert.Equal(DragOperations.Copy, ctx.CompletedOperation);
         Assert.False(ctx.WasCancelled);
     }
@@ -284,7 +284,7 @@ public class DragDataTests
     [Fact]
     public void BuildDragEndContext_None_IsCancelled()
     {
-        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.None);
+        var ctx = DragDropDispatch.BuildDragEndContext(DataPackageOperation.None);
         Assert.Equal(DragOperations.None, ctx.CompletedOperation);
         Assert.True(ctx.WasCancelled);
     }
@@ -292,7 +292,7 @@ public class DragDataTests
     [Fact]
     public void BuildDragEndContext_Link_SucceedsUncancelled()
     {
-        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.Link);
+        var ctx = DragDropDispatch.BuildDragEndContext(DataPackageOperation.Link);
         Assert.Equal(DragOperations.Link, ctx.CompletedOperation);
         Assert.False(ctx.WasCancelled);
     }

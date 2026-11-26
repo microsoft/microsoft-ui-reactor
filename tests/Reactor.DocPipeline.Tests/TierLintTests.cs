@@ -146,6 +146,63 @@ public class TierLintTests
     }
 
     [Fact]
+    public void Mental_model_lead_counts_prose_after_the_title()
+    {
+        var lead = string.Join(' ', Enumerable.Repeat("word", 80));
+        var body = $"# Title\n\nShort intro.\n\n{lead}\n\n## First section\n\nMore.";
+        Assert.True(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
+    public void Mental_model_lead_ignores_code_and_later_sections()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var later = string.Join(' ', Enumerable.Repeat("word", 80));
+        var body = $"# Title\n\nShort intro.\n\n```csharp\n{code}\n# not a title\n```\n\n## First section\n\n{later}";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
+    public void Mental_model_lead_does_not_count_an_indented_code_block()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\nShort intro.\n\n    {code}\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
+    public void A_fence_marker_indented_four_spaces_does_not_close_the_block()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\n```csharp\n    ```\n{code}\n```\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
+    public void An_inline_triple_backtick_span_is_not_a_fence()
+    {
+        var lead = string.Join(' ', Enumerable.Repeat("word", 80));
+        var body = $"# Title\n\n```UseState``` is a hook.\n\n{lead}\n\n## First section\n";
+        Assert.True(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
+    public void Mental_model_lead_does_not_count_code_inside_a_longer_fence()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\nShort intro.\n\n````markdown\n```csharp\n{code}\n```\n````\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
+    public void A_fence_line_with_trailing_text_does_not_close_the_block()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\n```csharp\n```not a close\n{code}\n```\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
     public void Comprehensive_missing_caveat_emits_009()
     {
         var body = ComprehensiveBodyTemplate();

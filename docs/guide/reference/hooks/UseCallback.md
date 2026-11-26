@@ -1,67 +1,101 @@
 # UseCallback
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCallback(System.Action,System.Object[])`
+Returns a stable callback reference that doesn't change between renders.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public Action UseCallback(Action callback, params object[] dependencies)
+public Action UseCallback<T1>(Action callback, T1 d1)
+public Action UseCallback<T1, T2>(Action callback, T1 d1, T2 d2)
+public Action UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3)
+```
+
+Declared on [`RenderContext`](../components/RenderContext.md).
+
+**Learn more:** [Hooks](../../hooks.md), [Performance](../../performance.md)
 
 ## Overloads
 
-- [`UseCallback(Action, object[])`](#usecallbackaction-object)
-- [`UseCallback<T1>(Action, T1)`](#usecallbackt1action-t1)
-- [`UseCallback<T1, T2>(Action, T1, T2)`](#usecallbackt1-t2action-t1-t2)
-- [`UseCallback<T1, T2, T3>(Action, T1, T2, T3)`](#usecallbackt1-t2-t3action-t1-t2-t3)
+| Overload | Description |
+| --- | --- |
+| [`UseCallback(Action, object[])`](#usecallbackaction-object) | Returns a stable callback reference that doesn't change between renders. |
+| [`UseCallback<T1>(Action, T1)`](#usecallbackt1action-t1) | Single-dependency `UseCallback` overload that avoids the `params object[]` allocation (and value-type boxing) on the deps-unchanged path. |
+| [`UseCallback<T1, T2>(Action, T1, T2)`](#usecallbackt1-t2action-t1-t2) | Two-dependency `UseCallback` overload that avoids the `params object[]` allocation on the deps-unchanged path. |
+| [`UseCallback<T1, T2, T3>(Action, T1, T2, T3)`](#usecallbackt1-t2-t3action-t1-t2-t3) | Three-dependency `UseCallback` overload that avoids the `params object[]` allocation on the deps-unchanged path. |
 
-## `UseCallback(Action, object[])`
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCallback(System.Action,System.Object[])`
-
-### Summary
+### `UseCallback(Action, object[])`
 
 Returns a stable callback reference that doesn't change between renders.
 
-## `UseCallback<T1>(Action, T1)`
+```csharp
+public Action UseCallback(Action callback, params object[] dependencies)
+```
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCallback``1(System.Action,``0)`
+**Parameters**
 
-### Summary
+| Name | Type | Description |
+| --- | --- | --- |
+| `callback` | `Action` |  |
+| `dependencies` | `object[]` |  |
 
-Single-dependency `UseCallback` overload that avoids the
-`params object[]` allocation (and value-type boxing) on the
-deps-unchanged path. Returns a stable reference until `d1`
-changes.
+### `UseCallback<T1>(Action, T1)`
 
-### Discussion
+Single-dependency `UseCallback` overload that avoids the `params object[]` allocation (and value-type boxing) on the deps-unchanged path. Returns a stable reference until `d1` changes.
 
-If `d1`'s compile-time type is an array of reference types
-(e.g. `string[]`), it is treated as a dependency <em>list</em> and compared
-element-wise — matching the `params object[]` overload — not as a single
-reference-compared value. A dependency whose static type is not an array is
-always compared as one value, even if its runtime value happens to be an array.
+```csharp
+public Action UseCallback<T1>(Action callback, T1 d1)
+```
 
-## `UseCallback<T1, T2>(Action, T1, T2)`
+**Parameters**
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCallback``2(System.Action,``0,``1)`
+| Name | Type | Description |
+| --- | --- | --- |
+| `callback` | `Action` |  |
+| `d1` | `T1` |  |
 
-### Summary
+**Remarks**
 
-Two-dependency `UseCallback` overload that avoids the
-`params object[]` allocation on the deps-unchanged path.
+If `d1`'s compile-time type is an array of reference types (e.g. `string[]`), it is treated as a dependency *list* and compared element-wise — matching the `params object[]` overload — not as a single reference-compared value. A dependency whose static type is not an array is always compared as one value, even if its runtime value happens to be an array.
 
-## `UseCallback<T1, T2, T3>(Action, T1, T2, T3)`
+### `UseCallback<T1, T2>(Action, T1, T2)`
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCallback``3(System.Action,``0,``1,``2)`
+Two-dependency `UseCallback` overload that avoids the `params object[]` allocation on the deps-unchanged path.
 
-### Summary
+```csharp
+public Action UseCallback<T1, T2>(Action callback, T1 d1, T2 d2)
+```
 
-Three-dependency `UseCallback` overload that avoids the
-`params object[]` allocation on the deps-unchanged path.
+**Parameters**
 
-## Featured in
+| Name | Type | Description |
+| --- | --- | --- |
+| `callback` | `Action` |  |
+| `d1` | `T1` |  |
+| `d2` | `T2` |  |
 
-- [Hooks](../../hooks.md)
+### `UseCallback<T1, T2, T3>(Action, T1, T2, T3)`
 
+Three-dependency `UseCallback` overload that avoids the `params object[]` allocation on the deps-unchanged path.
+
+```csharp
+public Action UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `callback` | `Action` |  |
+| `d1` | `T1` |  |
+| `d2` | `T2` |  |
+| `d3` | `T3` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected Action UseCallback(Action callback, params object[] dependencies)
+protected Action UseCallback<T1>(Action callback, T1 d1)
+protected Action UseCallback<T1, T2>(Action callback, T1 d1, T2 d2)
+protected Action UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3)
+```

@@ -241,7 +241,7 @@ public sealed partial class ReactorWindow : IDisposable
     /// keeps the <c>TitleBarIconDefault</c> record — which is keyed on it — reachable and
     /// consistent, so the push and the record can never end up on different wrappers for
     /// one native element. That duplicate-RCW hazard is documented in
-    /// <c>Reconciler.cs</c>'s <c>ReactorAttached.StateProperty</c> notes, where it caused a
+    /// <c>Reconciler.ReactorState.cs</c>'s <c>ReactorAttached.StateProperty</c> notes, where it caused a
     /// real event-subscription bug.
     /// <para>Released on unmount by <see cref="ClearTitleBarControl"/>, and unconditionally
     /// in <see cref="Dispose"/> — the close path does not unmount the root tree, so
@@ -1025,9 +1025,56 @@ public sealed partial class ReactorWindow : IDisposable
             WindowLevel.Floating => HWND_TOP,
             _ => HWND_NOTOPMOST,
         };
-        _ = NativeShell.SetWindowPos(_hwnd, insertAfter, 0, 0, 0, 0,
-            NativeShell.SWP_NOMOVE | NativeShell.SWP_NOSIZE | NativeShell.SWP_NOACTIVATE);
+        if (level == WindowLevel.AlwaysOnTop && RefuseTopmostForTests > 0)
+        {
+            // Simulates the OS refusal: SetWindowPos "succeeds" but nothing moves.
+            RefuseTopmostForTests--;
+        }
+        else
+        {
+            _ = NativeShell.SetWindowPos(_hwnd, insertAfter, 0, 0, 0, 0,
+                NativeShell.SWP_NOMOVE | NativeShell.SWP_NOSIZE | NativeShell.SWP_NOACTIVATE);
+        }
+
+        if (level != WindowLevel.AlwaysOnTop || IsTopmostBitSet())
+        {
+            _warnedTopmostRefused = false;
+            return;
+        }
+
+        // Issue #1707. Windows can refuse HWND_TOPMOST from a process that doesn't own the
+        // foreground (e.g. while the workstation is locked): SetWindowPos returns TRUE but the
+        // insert-after is rewritten and WS_EX_TOPMOST stays clear. Nothing reports the refusal,
+        // so the bit is the only signal. ReapplyRefusedTopmost reapplies the level once the app
+        // gains the foreground (WM_ACTIVATEAPP) or one of its windows activates.
+        if (!_warnedTopmostRefused)
+        {
+            _warnedTopmostRefused = true;
+            Interlocked.Increment(ref TopmostRefusedWarningCountForTests);
+            DiagnosticLog.Warning(
+                LogCategory.Hosting,
+                "ReactorWindow.WindowLevel",
+                "Windows declined WindowLevel.AlwaysOnTop (WS_EX_TOPMOST is still clear), typically because "
+                + "another process owns the foreground. Reactor reapplies it the next time the app is "
+                + "activated.");
+        }
     }
+
+    private bool IsTopmostBitSet()
+        => ((long)NativeShell.GetWindowLongPtr(_hwnd, NativeShell.GWL_EXSTYLE) & NativeShell.WS_EX_TOPMOST) != 0;
+
+    // Edge-trigger for the topmost-refused warning: ApplyChrome re-applies the level on any
+    // unequal spec, so an app whose topmost request stays refused would otherwise warn on
+    // every unrelated field change. Re-armed once the bit is observed set or the level changes.
+    private bool _warnedTopmostRefused;
+    internal static int TopmostRefusedWarningCountForTests;
+
+    /// <summary>
+    /// Number of upcoming <see cref="WindowLevel.AlwaysOnTop"/> applies to drop without calling
+    /// <c>SetWindowPos</c>, reproducing the observable outcome of an OS refusal (issue #1707),
+    /// which otherwise needs a locked or background session.
+    /// </summary>
+    internal int RefuseTopmostForTests;
 
     internal static int TaskbarVisibilityCycleCountForTests;
 
@@ -1466,6 +1513,12 @@ public sealed partial class ReactorWindow : IDisposable
             case WindowMessageMonitor.WM_WINDOWPOSCHANGED:
                 DispatchZOrderChanged(args);
                 break;
+            case WindowMessageMonitor.WM_ACTIVATEAPP:
+                // The app just gained the foreground, which can happen without any Reactor
+                // window activating (a tray flyout, a NoActivate overlay). Issue #1707.
+                if (args.WParam != 0)
+                    ReapplyRefusedTopmost();
+                break;
             case WindowMessageMonitor.WM_SHOWWINDOW:
                 if (args.WParam != 0)
                 {
@@ -1790,23 +1843,44 @@ public sealed partial class ReactorWindow : IDisposable
         IsActive = isActive;
         IsVisible = true;
         if (isActive)
-            ReassertFloatingWindowsForActivation(this);
+            ReassertWindowLevelsForActivation(this);
         if (isActive && !wasActive)
             Activated?.Invoke(this, EventArgs.Empty);
         else if (!isActive && wasActive)
             Deactivated?.Invoke(this, EventArgs.Empty);
     }
 
-    private static void ReassertFloatingWindowsForActivation(ReactorWindow activated)
+    private static void ReassertWindowLevelsForActivation(ReactorWindow activated)
     {
         var windows = ReactorApp.Windows;
         for (int i = 0; i < windows.Count; i++)
         {
             var candidate = windows[i];
-            if (ReferenceEquals(candidate, activated) || candidate._disposed) continue;
-            if (candidate.Spec.Level != WindowLevel.Floating) continue;
-            candidate.ApplyWindowLevel(WindowLevel.Floating);
+            if (candidate._disposed) continue;
+            var spec = candidate.Spec;
+            if (spec.Level == WindowLevel.Floating)
+            {
+                if (!ReferenceEquals(candidate, activated))
+                    candidate.ApplyWindowLevel(WindowLevel.Floating);
+            }
+            else
+            {
+                // The app now owns the foreground, so Windows grants a topmost request it
+                // refused earlier (issue #1707). This includes the activated window itself.
+                candidate.ReapplyRefusedTopmost();
+            }
         }
+    }
+
+    private void ReapplyRefusedTopmost()
+    {
+        if (_disposed) return;
+        var spec = Spec;
+        if (spec.Level != WindowLevel.AlwaysOnTop || !IsTopLevelChromeAllowed(spec)) return;
+        if (IsTopmostBitSet())
+            _warnedTopmostRefused = false; // granted some other way; the next refusal warns again
+        else
+            ApplyWindowLevel(WindowLevel.AlwaysOnTop);
     }
 
     private void OnNativeSizeChanged(object sender, Microsoft.UI.Xaml.WindowSizeChangedEventArgs args)

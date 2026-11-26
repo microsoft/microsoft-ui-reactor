@@ -14,18 +14,20 @@ tier: solid
 
 # Performance
 
-A Microsoft.UI.Reactor (Reactor) app emits a structured account of its own work — one event at
-the start and end of every reconcile pass, every component render,
-every effect flush, every state write, every WinUI routed-event hop —
-through one managed `EventSource` named `Microsoft-UI-Reactor`. You
-attach a profiler, mask in the keywords you care about, run the
-scenario, and read the resulting span hierarchy. This page walks the
-top-down workflow: how to take a trace with `dotnet-trace` or PerfView,
-what each span means, how to find the outlier, and how to reproduce a
-benchmark from `tests/perf_bench/` so a regression has a number behind
-it. The deep "how does the pipeline emit these events" story lives in
-[Perf Instrumentation](perf-instrumentation.md) — read that next if
-you're adding a new event id, not before you take your first trace.
+A top-down performance workflow: take a trace with `dotnet-trace` or
+PerfView, learn what each span means, find the outlier, and reproduce a
+benchmark so a regression has a number behind it.
+
+A Microsoft.UI.Reactor (Reactor) app emits a structured account of its own
+work — one event at the start and end of every reconcile pass, every
+component render, every effect flush, every state write, every WinUI
+routed-event hop — through one managed `EventSource` named
+`Microsoft-UI-Reactor`. You attach a profiler, mask in the keywords you care
+about, run the scenario, and read the resulting span hierarchy. Benchmarks
+live in `tests/perf_bench/`. The deep "how does the pipeline emit these
+events" story lives in [Perf Instrumentation](perf-instrumentation.md) —
+read that next if you're adding a new event id, not before you take your
+first trace.
 
 ## Reference
 
@@ -163,7 +165,7 @@ The `EventDispatch` keyword covers the per-event trampoline that lets
 Reactor swap your handler closure between renders without
 detaching from the WinUI event:
 
-```csharp snippet="source:src/Reactor/Core/Reconciler.cs#event-trampoline"
+```csharp snippet="source:src/Reactor/Core/ModifierEvents.cs#event-trampoline"
 ```
 
 The pattern matters for performance because the trampoline is bound

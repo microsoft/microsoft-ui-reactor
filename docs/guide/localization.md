@@ -1,10 +1,10 @@
 
 # Localization
 
-Microsoft.UI.Reactor (Reactor)'s localization system wraps your component tree in a `LocaleProvider`
-that supplies an `IntlAccessor` to every descendant via [context](context.md).
-You look up messages, format numbers and dates, and detect RTL layouts — all
-locale-aware, all reactive.
+Microsoft.UI.Reactor (Reactor)'s localization system wraps your component
+tree in a `LocaleProvider` that supplies an `IntlAccessor` to every
+descendant via context. You look up messages, format numbers and dates, and
+detect RTL layouts — all locale-aware, all reactive.
 
 | API | Purpose |
 |-----|---------|

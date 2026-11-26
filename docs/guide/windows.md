@@ -1,4 +1,3 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Windowing Overview](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/windowing/windowing-overview).
 
 # Windows
 
@@ -8,6 +7,8 @@ windows with `WindowSpec` and `ReactorApp.OpenWindow`, while keeping the same
 declarative component model used inside a page.
 
 ![Window lifecycle from WindowSpec to ReactorWindow host, native AppWindow chrome, display and taskbar integration, then close/dispose cleanup](images/windows/lifecycle.svg)
+
+> **WinUI reference:** For the full property surface and design guidance, see [Windowing Overview](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/windowing/windowing-overview).
 
 ## Lifecycle basics
 
@@ -248,6 +249,9 @@ Caveats:
 - `ZOrderChanged.IsCovered` is a covered hint based on HWND insertion order, not
   pixel-accurate occlusion.
 - `Floating` is app-local. Use `AlwaysOnTop` only when you need global topmost.
+- Windows can decline an `AlwaysOnTop` change made while the app isn't in the
+  foreground, for example while the workstation is locked. Reactor logs a warning
+  and reapplies it the next time the app is activated.
 - Runtime taskbar visibility flips hide/show the HWND once so the shell refreshes.
 
 ## Chrome & appearance
@@ -630,247 +634,21 @@ Caveats:
   point of the API, but keep it in mind for a long-lived spec carrying a large
   multi-resolution `.ico`.
 
-## Tray icons
+## Tray, taskbar, jump lists and pickers
 
-`ReactorApp.OpenTrayIcon` registers a notification-area icon for the process;
-`UseTrayIcon` scopes one to a component and closes it on unmount. Both take a
-`TrayIconSpec`, and mutating `Icon`, `Tooltip` or `IsVisible` re-applies through
-`Shell_NotifyIcon`.
+Features that reach the Windows shell outside a window now have their own
+page, [Desktop integration](desktop-integration.md):
 
-```csharp
-class TrayHost : Component
-{
-    public override Element Render()
-    {
-        var icon = UseMemo(() => WindowIcon.FromPath("Assets/TrayIcon.ico"));
-        var tray = UseTrayIcon(new TrayIconSpec(
-            Icon: icon,
-            Tooltip: "My App",
-            Key: WindowKey.Of("main-tray")));
+- [Tray icons](desktop-integration.md#tray-icons) and tray menus
+- [Taskbar integration](desktop-integration.md#taskbar-integration): progress,
+  overlay icons and thumbnail toolbars
+- [Jump lists](desktop-integration.md#jump-list) and
+  [launch activation](desktop-integration.md#launch-activation)
+- [File and folder pickers](desktop-integration.md#file-and-folder-pickers)
+- Clipboard and drag and drop
 
-        UseEffect(() =>
-        {
-            if (tray is null) return () => { };
-            void onClick(object? s, EventArgs e)
-                => ReactorApp.PrimaryWindow?.Activate();
-            tray.Click += onClick;
-            return () => tray.Click -= onClick;
-        }, tray ?? (object)"no-tray");
-
-        return TextBlock("Tray icon registered while this component is mounted.");
-    }
-}
-```
-
-The icon does not have to be a file. `WindowIcon.FromBytes` takes encoded `.ico`
-or PNG data, and `WindowIcon.FromRgba` takes a raw pixel buffer — so an embedded
-resource, a downloaded asset, or a badge you draw at runtime reaches the shell
-without a temporary file on disk:
-
-```csharp
-// A tray icon can also come from bytes already in memory — no temporary file.
-class BinaryTrayHost : Component
-{
-    public override Element Render()
-    {
-        // Encoded .ico or PNG data: an embedded resource, a download, a database blob.
-        var embedded = UseMemo(() => WindowIcon.FromBytes(LoadEmbeddedIcon()));
-
-        // Or a raw RGBA8 buffer you drew yourself, for a badge that changes at runtime.
-        var drawn = UseMemo(() => WindowIcon.FromRgba(UnreadBadge(16, 16), 16, 16));
-
-        var tray = UseTrayIcon(new TrayIconSpec(
-            Icon: embedded,
-            Tooltip: "My App",
-            Key: WindowKey.Of("binary-tray")));
-
-        UseEffect(() =>
-        {
-            // Swapping the source reloads the shell bitmap.
-            if (tray is not null) tray.Icon = drawn;
-            return () => { };
-        }, drawn);
-
-        return TextBlock("Tray icon built from in-memory data.");
-    }
-
-    static byte[] LoadEmbeddedIcon()
-    {
-        var assembly = typeof(BinaryTrayHost).Assembly;
-        using var stream = assembly.GetManifestResourceStream("MyApp.TrayIcon.ico")
-            ?? throw new InvalidOperationException(
-                "Embedded resource 'MyApp.TrayIcon.ico' not found — check the file's Build Action.");
-        using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
-    }
-
-    // width * height * 4 bytes, top-down, one pixel as R, G, B, A.
-    static byte[] UnreadBadge(int width, int height)
-    {
-        var pixels = new byte[width * height * 4];
-        for (int i = 0; i < pixels.Length; i += 4)
-        {
-            pixels[i] = 0xE8;     // R
-            pixels[i + 1] = 0x11; // G
-            pixels[i + 2] = 0x23; // B
-            pixels[i + 3] = 0xFF; // A
-        }
-        return pixels;
-    }
-}
-```
-
-Caveats:
-
-- Ship a multi-size `.ico` (16, 20, 24, 32, 40 px) where you can. The tray asks for
-  the DPI-aware small-icon size, and both the file loader and the in-memory loader
-  pick the closest frame rather than rescaling a single one.
-- `ms-appx:///` resources are not usable here — see the table above. A packaged app
-  should ship a sidecar `.ico` or embed the bytes.
-- Tooltips are truncated to the shell's 127-character `szTip` buffer, and surface to
-  Narrator as the icon's accessible name.
-- **Tray clicks are not authenticated.** The callback arrives as a Win32 message any
-  process at the same integrity level can synthesise. Use click handlers for
-  reversible UI actions; gate anything destructive behind an in-app confirmation.
-
-## Taskbar integration
-
-`TaskbarItem` groups the per-window taskbar features while keeping the older
-shortcuts on `ReactorWindow` for compatibility. The jump list is the one
-taskbar surface that is *not* on `TaskbarItem`, because it is per-process
-rather than per-window — see [Jump list](#jump-list) below.
-
-```csharp
-var taskbar = UseWindow()!.TaskbarItem;
-taskbar.Description = "Build in progress";
-taskbar.Progress.State = TaskbarProgressState.Normal;
-taskbar.Progress.Value = 0.42;
-taskbar.SetThumbnailToolbar([
-    new ThumbnailToolbarButton("pause", WindowIcon.FromPath("pause.ico"), "Pause", () => Pause())
-]);
-```
-
-Facade members:
-
-- `Progress` — same instance as `ReactorWindow.Progress`.
-- `Overlay` — same instance as `ReactorWindow.Overlay`.
-- `Description` — forwards to `ITaskbarList3.SetThumbnailTooltip`.
-- `SetThumbnailToolbar` / `ClearThumbnailToolbar` — same toolbar pipeline as the
-  `ReactorWindow` shortcut methods.
-
-Caveats:
-
-- Shell COM calls are best-effort; Reactor keeps last-set managed state where relevant.
-- Thumbnail toolbars support at most seven buttons.
-- Overlay and thumbnail icons need HICON-compatible sources: a `FromPath` file or
-  `FromBytes` / `FromRgba` data. Resource URIs are not overlay HICONs.
-
-### Jump list
-
-`JumpList` is a process-wide static: the shell attaches one list per
-application identity, not per window. `JumpList.UpdateAsync` replaces the
-whole list, and `JumpList.ClearAsync` removes it.
-
-Activating an entry re-launches the process with the entry's `Arguments`
-string. Reactor surfaces that as `LaunchKind.JumpList` on the
-`ReactorAppContext` handed to the `ReactorApp.Run(Action<ReactorAppContext>)`
-startup callback. The recommended convention is to put a deep-link URI in
-`Arguments` (that is what `JumpListItem.ForUri` is for) and resolve it through
-a [`DeepLinkMap<TRoute>`](navigation.md):
-
-```csharp
-// In a real app, load this list from the app's tracked destinations.
-private static readonly List<JumpListItem> Destinations = [
-    JumpListItem.ForUri("New document", "contoso://new"),
-    JumpListItem.ForUri("Open dashboard", "contoso://dashboard",
-        description: "Jump straight to the dashboard"),
-    new JumpListItem("Report a bug", "contoso://bug",
-        Kind: JumpListItemKind.Custom, GroupCategory: "Help"),
-];
-
-// Unpackaged apps must set an AppUserModelId once, before the first
-// UpdateAsync — the shell has no other stable identity to hang the
-// jump list off. Packaged apps inherit it from the manifest.
-public static async Task PublishAsync()
-{
-    JumpList.AppUserModelId = "Contoso.Reactor.Demo";
-    JumpList.ShowRecent = true;
-
-    var removed = await JumpList.GetRemovedArgumentsAsync();
-    PruneDestinations(removed);
-    removed = await JumpList.UpdateAsync(Destinations);
-    // Also process removals made after the query. A successful update
-    // clears the OS records, even for entries absent from this batch.
-    PruneDestinations(removed);
-    // Persist the updated tracked destinations in your app's data store.
-    // New user activity can explicitly add an eligible destination again.
-}
-
-private static void PruneDestinations(IReadOnlyList<string> removed) =>
-    Destinations.RemoveAll(item => item.Kind != JumpListItemKind.Separator
-        && removed.Contains(item.Arguments, StringComparer.Ordinal));
-
-// Entries come back as a plain process re-launch. Resolve the argument
-// string through the same DeepLinkMap the app already uses for routes;
-// never act on it unvalidated. DeepLinkResult.Routes is the resolved
-// back stack, deepest route last.
-public static void Start(DeepLinkMap<string> routes) =>
-    ReactorApp.Run(ctx =>
-    {
-        if (ctx.LaunchActivation.Kind == LaunchKind.JumpList &&
-            ctx.LaunchActivation.TryResolve(routes, out var deepLink))
-        {
-            ReactorApp.OpenWindow(
-                new WindowSpec { Title = deepLink.Routes[^1] },
-                () => new SettingsWindow());
-        }
-    });
-```
-
-| API | Purpose |
-| --- | --- |
-| `JumpList.AppUserModelId` | Shell identity. Required before the first `UpdateAsync` on unpackaged apps; ignored under MSIX. |
-| `JumpList.ShowRecent` / `ShowFrequent` | Toggle the OS-managed categories. Contents are shell-owned. |
-| `JumpList.UpdateAsync(items)` | Replace the whole list and return user removals observed in that transaction. UI thread only. |
-| `JumpList.ClearAsync()` | Remove the app's entries and return the transaction's observed removals. |
-| `JumpList.GetRemovedArgumentsAsync()` | Read user-removed entries' argument strings without updating the list. UI thread only. |
-| `JumpListItem.ForUri(...)` | Deep-link entry — `Arguments` is the URI. |
-| `JumpListItem.ForCommandLine(...)` | argv-style entry; escapes each value for `CommandLineToArgvW`. |
-| `JumpListItemKind` | `Task`, `Custom` (needs `GroupCategory`), `Separator` |
-
-Caveats:
-
-- **Argument strings round-trip through the shell into the next process
-  launch.** Reactor never auto-executes them. Validate through `DeepLinkMap`
-  before acting, and build entries carrying non-literal data with
-  `JumpListItem.ForCommandLine` so a hostile value cannot break out into a
-  neighbouring argv slot.
-- Jump-list entries, tray "Open", and thumbnail-toolbar buttons are
-  indistinguishable at the WinUI activation surface — all three arrive as
-  `LaunchKind.JumpList`. Encode any finer distinction in the URI itself.
-- Icons on the packaged path require `WindowIcon.FromResource`
-  (`ms-appx:///…`); `FromPath` values are silently ignored there.
-- `UpdateAsync` validates the whole batch before touching the shell, so one
-  bad entry never leaves a half-populated list behind. Non-separator entries
-  must have a non-empty `Title`.
-- **Respect user removals.** Before updating, query `GetRemovedArgumentsAsync()`
-  and prune matching arguments from the app's destination tracking data (not the
-  underlying files). Also retain the arguments returned by `UpdateAsync` or
-  `ClearAsync`: they capture removals observed inside that transaction, including
-  removals arriving after the earlier query and removals absent from the new batch.
-  A successful update clears Windows' removal records. Without updating its own
-  tracking data, an app can reintroduce a removed destination on its next refresh.
-  Only offer it again after new user activity; compare arguments ordinally.
-  Results report observations, not commit success; logged shell HRESULT failures
-  keep the existing non-throwing behavior. The return type is now
-  `Task<IReadOnlyList<string>>`; await-only source callers continue to compile,
-  but existing consumers must rebuild their binaries.
-- On unpackaged apps, removal queries cover shell links targeting the current
-  executable, which is the shape this wrapper creates, not `IShellItem` file
-  destinations or links to other executables. Removal filtering applies to
-  custom categories, not the non-removable User Tasks group. The packaged path
-  uses each loaded item's `RemovedByUser` flag, including ungrouped entries.
+The icon tables above still apply. They say which icon source each of those
+surfaces accepts.
 
 ## Displays
 
@@ -899,100 +677,6 @@ Caveats:
 - `ReactorDisplay.Displays` is a snapshot. Use `UseDisplays()` to re-render on changes.
 - `NearestTo` accepts DIP coordinates in Reactor's approximate display space.
 
-## Pickers
-
-Picker methods create `Microsoft.Windows.Storage.Pickers` dialogs owned by the
-component's window, so each dialog is modal to the right window without any
-HWND interop. They also work in elevated (administrator) apps, unlike the UWP
-`Windows.Storage.Pickers` dialogs. `Component` and `RenderContext` expose the
-same operations:
-
-| Method | Options | Returns | Cancellation |
-| --- | --- | --- | --- |
-| `PickFileAsync` | `FilePickerOptions` | `PickFileResult?` | `null` |
-| `PickMultipleFilesAsync` | `FilePickerOptions` | `IReadOnlyList<PickFileResult>` | Empty list |
-| `PickFolderAsync` | `FolderPickerOptions` | `PickFolderResult?` | `null` |
-| `PickMultipleFoldersAsync` | `FolderPickerOptions` | `IReadOnlyList<PickFolderResult>` | Empty list |
-| `PickSaveFileAsync` | `SaveFilePickerOptions` | `PickFileResult?` | `null` |
-
-Each result exposes the chosen `Path`. Open the file with `System.IO`, or with
-`StorageFile.GetFileFromPathAsync` when you need a `StorageFile`.
-
-All three option records share a suggested start location, commit-button text,
-a dialog `Title`, a `SettingsIdentifier` that Windows uses to remember dialog state,
-`SuggestedFolder` (always open there), and `SuggestedStartFolder` (open there until
-Windows remembers a location). Both folder properties take absolute paths. Open
-and folder options add an optional `ViewMode`. File options add:
-
-- `FileTypeFilter`: extensions such as `".txt"`. Null or empty shows all files.
-- `FileTypeChoices`: an ordered list of `FileTypeChoice(label, extensions)` groups.
-  When non-empty, it replaces `FileTypeFilter`.
-- `InitialFileTypeIndex`: the entry selected first. Null lets Windows choose.
-
-Save options require at least one `FileTypeChoice`. The list order is the order
-Windows shows, and the first entry is the default unless `InitialFileTypeIndex`
-says otherwise. Labels must be unique and non-blank, and every choice needs at
-least one extension. Save options also take a suggested file name,
-`DefaultFileExtension`, and `ShowOverwritePrompt` (default `true`). The save
-method only selects a target path; the caller must create and write the file.
-
-Both `Windows.Storage.Pickers` and `Microsoft.Windows.Storage.Pickers` define
-`PickerLocationId` and `PickerViewMode`, so import only the
-`Microsoft.Windows.Storage.Pickers` namespace in files that build picker options.
-
-```csharp
-// Pickers are not hooks: call them directly from UI-thread event handlers.
-return VStack(
-    Button("Open one...", async () =>
-    {
-        var file = await PickFileAsync(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
-        if (file is null) return; // User cancelled.
-        var text = await File.ReadAllTextAsync(file.Path);
-    }),
-    Button("Open files...", async () =>
-    {
-        var files = await PickMultipleFilesAsync(new FilePickerOptions
-        {
-            Title = "Choose notes",
-            FileTypeChoices = [new("Notes", [".txt", ".md"]), new("JSON", [".json"])],
-        });
-        if (files.Count == 0) return; // User cancelled.
-    }),
-    Button("Select folders...", async () =>
-    {
-        var folders = await PickMultipleFoldersAsync(new FolderPickerOptions());
-        if (folders.Count == 0) return;
-    }),
-    Button("Save as...", async () =>
-    {
-        var target = await PickSaveFileAsync(new SaveFilePickerOptions(
-            [new("Text", [".txt"]), new("Markdown", [".md"])],
-            SuggestedFileName: "report"));
-        if (target is null) return;
-        // Selecting a target is not a save: write the content yourself.
-        await File.WriteAllTextAsync(target.Path, "report body");
-    }));
-```
-
-Caveats:
-
-- These methods are not hooks: they reserve no hook slot and open a dialog when
-  called. Call them from UI-thread event handlers, not during `Render()` or in
-  `Task.Run`. Their `Pick*` names keep the hook-rules analyzer quiet in handlers.
-- The owner is the window whose host rendered the component (including nested and
-  virtualized-row components), not whichever window is active when the handler
-  runs. That is the `ReactorWindow`, the `Window` a `ReactorHost` was constructed
-  over, or for `ReactorHostControl` the window the control is loaded in when the
-  method is called (a reparented control follows its new window). Once the
-  component unmounts (including when its root is replaced or its
-  `ReactorHostControl` is disposed) or its window closes, the call throws
-  `InvalidOperationException`. It also throws while a `ReactorHostControl` is
-  unloaded (not in any window).
-- Option validation (missing or duplicate file-type choices) throws `ArgumentException`
-  before any dialog opens. Windows validates extension syntax and folder paths.
-- Picker errors propagate to the caller; cancellation is not an error.
-- Framework tests use an internal picker-service seam instead of opening modal dialogs.
-
 ## WPF / UWP migration map
 
 Coming from a pre-054 Reactor app instead? See
@@ -1009,9 +693,9 @@ fields that were removed and what replaced them.
 | WPF manual `Top` / `Left` | `Position`, `SetPosition`, `UseWindowPosition` | DIPs, with mixed-DPI caveats. |
 | WPF taskbar visibility | `ShowInTaskbar` | Split from `ShowInSwitcher`. |
 | Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
-| `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
-| WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. |
-| UWP/WinUI picker HWND setup | `PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`, `PickMultipleFoldersAsync`, `PickSaveFileAsync` | Owner window is wired automatically; results are paths. |
+| `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. See [Taskbar integration](desktop-integration.md#taskbar-integration). |
+| WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. See [Jump list](desktop-integration.md#jump-list). |
+| UWP/WinUI picker HWND setup | `PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`, `PickMultipleFoldersAsync`, `PickSaveFileAsync` | Owner window is wired automatically; results are paths. See [File and folder pickers](desktop-integration.md#file-and-folder-pickers). |
 
 ## Finding and enumerating windows
 
@@ -1111,6 +795,7 @@ transparency or arbitrary region corners, see [Advanced Windowing](windowing-adv
 
 ## Next Steps
 
+- **[Desktop integration](desktop-integration.md)** — tray icons, taskbar, jump lists, launch activation, and pickers
 - **[Advanced Windowing](windowing-advanced.md)** — unsupported / interop-heavy window recipes
 - **[Migration: Windowing evolution](migration/054-windowing-evolution.md)** — the spec 054 breaking changes and their replacements
 - **[Docking Windows](docking.md)** — dock panes, floating document tear-outs, persistence

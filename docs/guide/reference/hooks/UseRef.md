@@ -1,15 +1,25 @@
 # UseRef
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseRef``1(``0)`
-
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
-
-## Summary
-
 Returns a mutable ref object that persists across renders.
 
-## Featured in
+```csharp
+public Ref<T> UseRef<T>(T initialValue = default)
+```
 
-- [Hooks](../../hooks.md)
+Declared on [`RenderContext`](../components/RenderContext.md).
 
+**Learn more:** [Hooks](../../hooks.md)
+
+## Parameters
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `initialValue` | `T` | `default` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected Ref<T> UseRef<T>(T initialValue = default)
+```

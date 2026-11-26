@@ -13,6 +13,12 @@ goal: |
 tier: comprehensive
 ---
 
+# Advanced Patterns
+
+Escape hatches for the few jobs the declarative model doesn't fit: error
+boundaries, memoized subtrees, element refs, direct property writes,
+view-model bridges, and custom hooks.
+
 Advanced is the layer where Microsoft.UI.Reactor (Reactor)'s declarative ceiling meets the
 imperative WinUI runtime underneath. Most of the framework is shaped to
 make the declarative path the right path — render is a function of
@@ -28,8 +34,6 @@ record-initializer cell construction — are the escape hatches.
 Reach for them when the declarative shape is genuinely wrong for the
 job; reach back for the declarative shape the moment the escape
 hatch's scope is fulfilled.
-
-# Advanced Patterns
 
 ## Escape-hatch reference
 

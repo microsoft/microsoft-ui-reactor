@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<XamlDevelopersShowcase>("Reactor for XAML Developers");
+ReactorApp.Run<XamlDevelopersShowcase>("Coming from XAML");
 
 enum TutorialRoute
 {
@@ -18,10 +18,13 @@ class XamlDevelopersShowcase : Component
     {
         return ScrollView(
             VStack(24,
-                Heading("Reactor for XAML Developers"),
+                Heading("Coming from XAML"),
                 Caption("Small showcase app used by the docs pipeline."),
                 Component<TutorialFormPage>(),
                 Component<GridTranslationPage>(),
+                Component<DataTemplateExample>(),
+                Component<ThemeResourceExample>(),
+                Component<VisualStatesExample>(),
                 Component<TutorialNavigationPage>(),
                 Component<EventsFluentExample>()
             ).Padding(24)
