@@ -11,6 +11,105 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 internal static class InteractionStatesTests
 {
+    internal sealed class FlyoutKeepsUpdatedNormalBorderBrush(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var previous = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            var normal = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var hover = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var target = Border(TextBlock("target")).BorderBrush(previous);
+            var initial = Flyout(target.InteractionStates(s => s.PointerOver(opacity: 0.9f)), TextBlock("flyout"))
+                .InteractionStates(s => s.PointerOver(borderBrush: hover));
+            var next = initial with { Target = target.BorderBrush(normal) };
+            var border = (Microsoft.UI.Xaml.Controls.Border)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("FlyoutHoverBorder_PreviousNormalBrush", ReferenceEquals(border.BorderBrush, previous));
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                H.Check("FlyoutHoverBorder_OuterBrush", ReferenceEquals(border.BorderBrush, hover));
+
+                var replacement = reconciler.Update(initial, next, border, static () => { });
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
+                H.Check("FlyoutHoverBorder_ExitKeepsLatestNormalBrush",
+                    replacement is null && ReferenceEquals(border.BorderBrush, normal),
+                    $"border={(border.BorderBrush as SolidColorBrush)?.Color}");
+            }
+            finally { reconciler.UnmountChild(border); }
+
+            var outerNormal = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var latestOuterNormal = new SolidColorBrush(Microsoft.UI.Colors.Purple);
+            initial = ElementExtensions.BorderBrush(initial, outerNormal);
+            next = ElementExtensions.BorderBrush(next, latestOuterNormal);
+            border = (Microsoft.UI.Xaml.Controls.Border)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("FlyoutHoverBorder_OuterNormalApplied", ReferenceEquals(border.BorderBrush, outerNormal));
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                H.Check("FlyoutHoverBorder_OuterHoverApplied", ReferenceEquals(border.BorderBrush, hover));
+                reconciler.Update(initial, next, border, static () => { });
+                H.Check("FlyoutHoverBorder_OuterUpdateWins", ReferenceEquals(border.BorderBrush, latestOuterNormal));
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
+                H.Check("FlyoutHoverBorder_ExitKeepsOuterUpdate", ReferenceEquals(border.BorderBrush, latestOuterNormal));
+            }
+            finally { reconciler.UnmountChild(border); }
+
+            var standalone = target.InteractionStates(s => s.PointerOver(borderBrush: hover));
+            border = (Microsoft.UI.Xaml.Controls.Border)reconciler.Mount(standalone, static () => { })!;
+            try
+            {
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                H.Check("StandaloneHoverBorder_OverrideApplied", ReferenceEquals(border.BorderBrush, hover));
+                border.BorderBrush = normal;
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
+                H.Check("StandaloneHoverBorder_ExitRestoresCapturedBrush", ReferenceEquals(border.BorderBrush, previous));
+            }
+            finally { reconciler.UnmountChild(border); }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class FlyoutClearsIndependentChildStates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var normal = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var innerHover = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var outerHover = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var child = TextBlock("independent child").Foreground(normal);
+            var initial = Flyout(
+                    Border(child.InteractionStates(s => s.PointerOver(foreground: innerHover))), TextBlock("flyout"))
+                .InteractionStates(s => s.PointerOver(borderBrush: outerHover));
+            var next = initial with { Target = Border(child) };
+            var border = (Microsoft.UI.Xaml.Controls.Border)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                var text = (Microsoft.UI.Xaml.Controls.TextBlock)border.Child;
+                InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("FlyoutChildStates_BothControlsHovered",
+                    ReferenceEquals(border.BorderBrush, outerHover) && ReferenceEquals(text.Foreground, innerHover));
+
+                var replacement = reconciler.Update(initial, next, border, static () => { });
+                H.Check("FlyoutChildStates_SameChildRestoresNormal",
+                    replacement is null && ReferenceEquals(border.Child, text) && ReferenceEquals(text.Foreground, normal),
+                    $"foreground={(text.Foreground as SolidColorBrush)?.Color}");
+                H.Check("FlyoutChildStates_OuterStillHovered", ReferenceEquals(border.BorderBrush, outerHover));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("FlyoutChildStates_DroppedHoverDoesNotReapply", ReferenceEquals(text.Foreground, normal),
+                    $"foreground={(text.Foreground as SolidColorBrush)?.Color}");
+            }
+            finally { reconciler.UnmountChild(border); }
+
+            return Task.CompletedTask;
+        }
+    }
+
     internal class StateMachineTransitions(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

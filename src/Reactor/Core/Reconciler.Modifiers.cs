@@ -258,7 +258,8 @@ public sealed partial class Reconciler
     // inline overlays are recorded (issue #965).
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
         bool keepRemovedBackground = false, bool ownsControl = false,
-        ForegroundModifier.UpdateAction foregroundUpdate = ForegroundModifier.UpdateAction.None)
+        ForegroundModifier.UpdateAction foregroundUpdate = ForegroundModifier.UpdateAction.None,
+        bool preserveInteractionForeground = false)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -279,7 +280,7 @@ public sealed partial class Reconciler
         ApplyToolTipAndFlyoutModifiers(fe, oldM, m, requestRerender);
         ApplyIsEnabledModifier(fe, oldM, m);
         ApplyBorderModifiers(fe, oldM, m, ownsControl);
-        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate);
+        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate, preserveInteractionForeground);
         ApplyAutomationAndFocusModifiers(fe, oldM, m);
 
         // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
@@ -600,7 +601,9 @@ public sealed partial class Reconciler
         if (!ReferenceEquals(m.BorderBrush, oldM?.BorderBrush)
             && _reconcilingElement?.InteractionStates is not null
             && GetCompositionState(fe)?.InteractionTracker is { } borderTracker
-            && borderTracker.BorderBrushOverrideApplied)
+            && borderTracker.BorderBrushOverrideApplied
+            && (!borderTracker.PreserveUpdatedBorderBrush
+                || InteractionStateApplier.OwnsInteractionBorderBrush(fe, borderTracker.ActiveBorderBrush)))
         {
             // Keep the active interaction brush while updating what hover-out restores.
             borderTracker.NormalBorderBrush = m.BorderBrush;
@@ -674,7 +677,7 @@ public sealed partial class Reconciler
 
     /// <summary>Background and Foreground.</summary>
     private static void ApplyBackgroundAndForegroundModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool keepRemovedBackground,
-        ForegroundModifier.UpdateAction foregroundUpdate)
+        ForegroundModifier.UpdateAction foregroundUpdate, bool preserveInteractionForeground)
     {
         // Background (Panel, Control, or Border)
         if (m.Background is not null && !ReferenceEquals(m.Background, oldM?.Background))
@@ -690,7 +693,7 @@ public sealed partial class Reconciler
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
         }
 
-        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate);
+        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate, preserveInteractionForeground);
     }
 
     /// <summary>AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.</summary>

@@ -293,6 +293,9 @@ Conventions for contributors:
   overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and
   `REACTOR_MOD_003` now accepts the supported `.Foreground(...)` calls (issue #1674).
 
+- A Flyout target restores its normal foreground on pointer exit when the target
+  removes its own interaction states while the Flyout remains hovered (#1728).
+
 - Changing `.Opacity()` preserves playback progress when the current keyframe entry
   animates opacity and its trigger stays the same. Removing the looping entry or
   finishing a one-shot applies the latest declared opacity (#1651, #1660).

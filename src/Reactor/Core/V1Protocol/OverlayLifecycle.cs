@@ -547,6 +547,8 @@ internal static class OverlayLifecycle
         {
             var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
             if (replacement is not null) updated = replacement;
+            // A skipped target leaves the release pending. Finish it before applying Flyout setters.
+            else reconciler.ReleaseDeferredFlyoutForeground(targetControl);
         }
         else
         {
