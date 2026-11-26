@@ -251,6 +251,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- **A pooled control no longer keeps the previous renter's `.RequestedTheme(...)` (issue #1717).**
+  The pool never cleared `RequestedTheme` when a control returned to it, and a mount doesn't clear
+  modifiers the new element doesn't declare. So a control that had rendered with
+  `.RequestedTheme(ElementTheme.Dark)` and was then reused by an element without that modifier kept
+  rendering its whole subtree in the dark theme. The pool now clears it, like every other modifier
+  value.
+
 - **Changing only `.XYFocusKeyboardNavigation(...)` now updates the control (spec 067 §14).** The
   reconciler's skip check never compared this modifier, so an element whose only change was its
   XY focus keyboard navigation mode skipped the update and kept the old mode.
