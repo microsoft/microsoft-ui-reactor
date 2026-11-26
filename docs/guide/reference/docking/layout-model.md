@@ -768,7 +768,7 @@ public bool CanDockAsToolWindow  // get, init
 
 ## `Document<TState>`
 
-A document with typed per-pane state. The `TState` is serialized through `WindowPersistedScope` (spec 033/036) and included in the layout JSON round-trip so app state survives save→quit→restart.
+A document with typed per-pane state. The `TState` is included in the layout JSON that [`DockLayoutSerializer.Save`](persistence.md#save) writes, so app state survives a restart when the app stores that JSON and loads it back.
 
 ```csharp
 public sealed record Document<TState> : Document

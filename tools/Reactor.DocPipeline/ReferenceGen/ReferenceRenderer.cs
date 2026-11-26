@@ -562,12 +562,12 @@ internal sealed class ReferenceRenderer
                 w.Add(sb.ToString());
                 // The table keeps one line per property, so remarks (a callback's
                 // threading contract, for example) follow it.
-                foreach (var p in props)
+                var withRemarks = props
+                    .Select(p => (p.Name, Md: Eff(p.DocId).Remarks is { } remarks ? w.Md.Block(remarks) : string.Empty))
+                    .Where(x => x.Md.Length > 0);
+                foreach (var (name, md) in withRemarks)
                 {
-                    if (Eff(p.DocId).Remarks is not { } remarks) continue;
-                    var md = w.Md.Block(remarks);
-                    if (md.Length == 0) continue;
-                    w.Add($"**{DocMarkdown.CodeSpan(p.Name)}**");
+                    w.Add($"**{DocMarkdown.CodeSpan(name)}**");
                     w.Add(md);
                 }
             }
