@@ -288,6 +288,9 @@ Conventions for contributors:
 
 ### Fixed
 
+- Flyout targets keep their hover foreground when a render rebuilds an
+  equivalent brush while updating the target's normal foreground (#1727).
+
 - `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
   support common `.Foreground(brush)` modifiers and interaction-state foreground
   overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and

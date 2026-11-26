@@ -347,6 +347,209 @@ internal static class ThemeRefStyleFixtures
         }
     }
 
+    internal sealed class FlyoutKeepsRebuiltHoverForeground(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var red = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            var content = TextBlock("flyout");
+            FlyoutElement Render(Brush foreground, double hoverOpacity = 0.5) => Flyout(TextBlock("target").Foreground(foreground), content)
+                .InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green) { Opacity = hoverOpacity }));
+
+            var initial = Render(black);
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("FlyoutRebuiltHover_InitialForeground", ReferenceEquals(text.Foreground, black));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("FlyoutRebuiltHover_Entered",
+                    ColorOf(text.Foreground) == Microsoft.UI.Colors.Green && text.Foreground.Opacity == 0.5);
+
+                var rebuilt = Render(black);
+                var replacement = reconciler.Update(initial, rebuilt, text, static () => { });
+                H.Check("FlyoutRebuiltHover_EquivalentRenderStaysGreen",
+                    replacement is null && ColorOf(text.Foreground) == Microsoft.UI.Colors.Green && text.Foreground.Opacity == 0.5);
+
+                var changed = Render(blue);
+                replacement = reconciler.Update(rebuilt, changed, text, static () => { });
+                H.Check("FlyoutRebuiltHover_ChangedTargetStaysGreen",
+                    replacement is null && ColorOf(text.Foreground) == Microsoft.UI.Colors.Green && text.Foreground.Opacity == 0.5,
+                    $"foreground={ColorOf(text.Foreground)}, opacity={text.Foreground.Opacity}");
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("FlyoutRebuiltHover_ExitRestoresNewForeground", ReferenceEquals(text.Foreground, blue));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                text.Foreground = red;
+                var externalWrite = Render(blue) with { FlyoutContent = TextBlock("updated flyout") };
+                replacement = reconciler.Update(changed, externalWrite, text, static () => { });
+                H.Check("FlyoutRebuiltHover_ExternalWriteSurvivesUpdate",
+                    replacement is null && ReferenceEquals(text.Foreground, red));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("FlyoutRebuiltHover_ExternalWriteSurvivesExit", ReferenceEquals(text.Foreground, red));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("FlyoutRebuiltHover_BeforeOpacityChange",
+                    ColorOf(text.Foreground) == Microsoft.UI.Colors.Green && text.Foreground.Opacity == 0.5);
+                var changedOpacity = Render(black, hoverOpacity: 0.75);
+                replacement = reconciler.Update(externalWrite, changedOpacity, text, static () => { });
+                H.Check("FlyoutRebuiltHover_ChangedOpacityDoesNotReplayOldBrush",
+                    replacement is null && ReferenceEquals(text.Foreground, black)
+                    && ColorOf(text.Foreground) == Microsoft.UI.Colors.Black && text.Foreground.Opacity == 1,
+                    $"foreground={ColorOf(text.Foreground)}, opacity={text.Foreground.Opacity}");
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("FlyoutRebuiltHover_ChangedOpacityExitKeepsNormal", ReferenceEquals(text.Foreground, black));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("FlyoutRebuiltHover_ReentryUsesChangedOpacity",
+                    ColorOf(text.Foreground) == Microsoft.UI.Colors.Green && text.Foreground.Opacity == 0.75);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("FlyoutRebuiltHover_ReentryExitRestoresNormal", ReferenceEquals(text.Foreground, black));
+            }
+            finally { reconciler.UnmountChild(text); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class MemoKeepsHoverForegroundDuringFlyoutResourceRefresh(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var purple = new SolidColorBrush(Microsoft.UI.Colors.Purple);
+            int factoryCalls = 0;
+            var root = Memo("stable", () =>
+            {
+                factoryCalls++;
+                return Flyout(TextBlock("target").Foreground(black), TextBlock("flyout"))
+                    .InteractionStates(s => s.PointerOver(foreground: green));
+            }).Foreground(black).InteractionStates(s => s.PointerOver(foreground: purple));
+            var text = (WinUI.TextBlock)reconciler.Mount(root, static () => { })!;
+            try
+            {
+                H.Check("MemoFlyoutHover_InitialNormalApplied", ReferenceEquals(text.Foreground, black));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("MemoFlyoutHover_OuterBrushApplied", ReferenceEquals(text.Foreground, purple));
+
+                int callsBeforeRefresh = factoryCalls;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(root, root, text, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                H.Check("MemoFlyoutHover_ResourceRefreshRebuiltFlyout", factoryCalls > callsBeforeRefresh);
+                H.Check("MemoFlyoutHover_OuterBrushSurvivesRefresh", ReferenceEquals(text.Foreground, purple),
+                    $"foreground={ColorOf(text.Foreground)}");
+
+                var next = root.Foreground(blue)
+                    .InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Purple)));
+                callsBeforeRefresh = factoryCalls;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(root, next, text, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                H.Check("MemoFlyoutHover_NormalUpdateRebuiltFlyout", factoryCalls > callsBeforeRefresh);
+                H.Check("MemoFlyoutHover_OuterBrushSurvivesNormalWrite", ReferenceEquals(text.Foreground, purple),
+                    $"foreground={ColorOf(text.Foreground)}");
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("MemoFlyoutHover_ExitRestoresNormal", ReferenceEquals(text.Foreground, blue));
+            }
+            finally { reconciler.UnmountChild(text); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class MemoForegroundUpdateKeepsEquivalentFlyoutHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            CheckForegroundUpdate(changesHover: false);
+            CheckForegroundUpdate(changesHover: true);
+            return Task.CompletedTask;
+        }
+
+        private void CheckForegroundUpdate(bool changesHover)
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            int factoryCalls = 0;
+            var initial = Memo("stable", () =>
+            {
+                factoryCalls++;
+                return Flyout(TextBlock("target"), TextBlock("flyout"))
+                    .InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green)));
+            }).Foreground(black);
+            var next = initial.Foreground(blue);
+            if (changesHover)
+            {
+                initial = initial.InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green)));
+                next = next.InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Purple)));
+            }
+
+            string name = changesHover ? "MemoChangedHover" : "MemoRebuiltHover";
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check(name + "_InitialNormalApplied", ReferenceEquals(text.Foreground, black));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                var hover = text.Foreground;
+                H.Check(name + "_HoverApplied", ColorOf(hover) == Microsoft.UI.Colors.Green);
+
+                int callsBeforeRefresh = factoryCalls;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(initial, next, text, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                H.Check(name + "_FactoryRebuilt", factoryCalls > callsBeforeRefresh);
+                H.Check(name + "_ForegroundAfterOuterWrite",
+                    ReferenceEquals(text.Foreground, changesHover ? blue : hover), $"foreground={ColorOf(text.Foreground)}");
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExitRestoresOuterNormal", ReferenceEquals(text.Foreground, blue));
+            }
+            finally { reconciler.UnmountChild(text); }
+        }
+    }
+
+    internal sealed class NestedFlyoutDoesNotRestoreWithdrawnHoverForeground(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var innerHover = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var outerHover = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var target = TextBlock("target").Foreground(black);
+            var inner = Flyout(target, TextBlock("inner")).InteractionStates(s => s.PointerOver(foreground: innerHover));
+            var initial = Flyout(inner, TextBlock("outer")).InteractionStates(s => s.PointerOver(foreground: outerHover));
+            var next = (initial with { Target = inner with { Target = target.Foreground(blue) } })
+                .InteractionStates(s => s.PointerOver(opacity: 0.8f));
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("NestedFlyoutWithdrawal_OuterBrushApplied", ReferenceEquals(text.Foreground, outerHover));
+
+                var replacement = reconciler.Update(initial, next, text, static () => { });
+                H.Check("NestedFlyoutWithdrawal_UpdatedNormalRemainsVisible",
+                    replacement is null && ReferenceEquals(text.Foreground, blue), $"foreground={ColorOf(text.Foreground)}");
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("NestedFlyoutWithdrawal_ExitKeepsUpdatedNormal", ReferenceEquals(text.Foreground, blue));
+            }
+            finally { reconciler.UnmountChild(text); }
+            return Task.CompletedTask;
+        }
+    }
+
     internal sealed class FlyoutKeepsHoverForegroundWhenTargetDropsInteractionStates(Harness h) : SelfTestFixtureBase(h)
     {
         public override Task RunAsync()

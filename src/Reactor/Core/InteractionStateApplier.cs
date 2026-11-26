@@ -63,6 +63,34 @@ internal static class InteractionStateApplier
 
     internal enum InteractionState { Normal, PointerOver, Pressed, Focused }
 
+    internal readonly record struct ForegroundOverride(InteractionStateTracker Tracker, Brush Brush);
+
+    internal static ForegroundOverride? CaptureForegroundOverride(UIElement uie)
+    {
+        if (uie is not FrameworkElement element
+            || InteractionTrackerOf(element) is not { ForegroundOverrideApplied: true, ActiveForeground: { } brush } tracker
+            || ForegroundModifier.GetProperty(element) is not { } property
+            || !ReferenceEquals(element.ReadLocalValue(property), brush))
+            return null;
+
+        return new(tracker, brush);
+    }
+
+    internal static void ReapplyForegroundOverride(UIElement uie, ForegroundOverride previous)
+    {
+        var tracker = previous.Tracker;
+        if (uie is not FrameworkElement element
+            || !ReferenceEquals(InteractionTrackerOf(element), tracker)
+            || !ReferenceEquals(tracker.ActiveForeground, previous.Brush)
+            || ForegroundModifier.GetProperty(element) is not { } property
+            || ReferenceEquals(element.ReadLocalValue(property), previous.Brush)
+            || !BrushHelper.BrushesEqual(previous.Brush, ValuesForState(tracker.Config, tracker.CurrentState)?.Foreground))
+            return;
+
+        ApplyInteractionBrush(element, property, previous.Brush,
+            ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
+    }
+
     internal static void RestoreInteractionForeground(FrameworkElement element)
     {
         if (InteractionTrackerOf(element) is { } tracker
@@ -190,14 +218,7 @@ internal static class InteractionStateApplier
         var config = tracker.Config;
         var curve = config.Curve ?? Curve.Ease(200, Easing.Standard);
 
-        // Resolve effective state values (Pressed inherits from PointerOver)
-        var values = newState switch
-        {
-            InteractionState.PointerOver => config.PointerOver,
-            InteractionState.Pressed => MergePressed(config.PointerOver, config.Pressed),
-            InteractionState.Focused => config.Focused,
-            _ => null, // Normal
-        };
+        var values = ValuesForState(config, newState);
 
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
@@ -353,6 +374,15 @@ internal static class InteractionStateApplier
         else
             fe.ClearValue(dp);
     }
+
+    private static InteractionStateValues? ValuesForState(InteractionStatesConfig config, InteractionState state)
+        => state switch
+        {
+            InteractionState.PointerOver => config.PointerOver,
+            InteractionState.Pressed => MergePressed(config.PointerOver, config.Pressed),
+            InteractionState.Focused => config.Focused,
+            _ => null,
+        };
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {
