@@ -133,26 +133,13 @@ internal static class TemplateParser
     {
         var newline = body.Contains("\r\n") ? "\r\n" : "\n";
         var lines = body.Split('\n');
-        string? fence = null;
+        var fence = new MarkdownFence();
         var offset = 0;
         foreach (var raw in lines)
         {
-            var line = raw.TrimEnd('\r');
-            var trimmed = line.TrimStart();
-            if (fence is null)
+            if (!fence.InCode(raw) && SectionHeading.IsMatch(raw.TrimEnd('\r')))
             {
-                if (trimmed.StartsWith("```") || trimmed.StartsWith("~~~"))
-                {
-                    fence = trimmed[..3];
-                }
-                else if (SectionHeading.IsMatch(line))
-                {
-                    return body[..offset] + block + newline + newline + body[offset..];
-                }
-            }
-            else if (trimmed.StartsWith(fence))
-            {
-                fence = null;
+                return body[..offset] + block + newline + newline + body[offset..];
             }
             offset += raw.Length + 1;
         }

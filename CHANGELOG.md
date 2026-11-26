@@ -50,10 +50,15 @@ Conventions for contributors:
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
 
-- The Toolkit compatibility harness can capture and measure SettingsCard header
-  and description fit at an already-active OS text scale above 100%. Other
-  controls retain explicit unimplemented outcomes; no desktop settings are
-  changed, and runtime acceptance still requires an approved host (issue #1602).
+- The Toolkit compatibility harness can measure SettingsCard header/description
+  fit and explicit initial plain-text targets in eleven additional header, item
+  and panel controls at an already-active OS text scale above 100%. It checks
+  OS-profile stability and separates high-contrast capture completion from the
+  still-blocked actual-host appearance review. Unsupported shapes remain blocked;
+  no desktop settings are changed, and runtime acceptance still requires an
+  approved host. Panel fixture slots accommodate measured label sizes, and the
+  document theme check permits equal Light/Dark brushes under stable OS high
+  contrast without weakening text containment (issue #1602).
 
 - **`REACTOR_ANIM_004` catches facade transforms written through `.Set` on an element that uses
   the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
@@ -67,6 +72,11 @@ Conventions for contributors:
   own message and no fix.
 
 ### Changed
+
+- ReactorGallery now looks closer to WinUI Gallery. Category labels are sentence case
+  ("Date & time"), every card has an image, the nav uses WinUI Gallery's category glyphs, and
+  page titles use the regular title weight. Category keys, deep-link slugs and the search index
+  are unchanged.
 
 - **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
   visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
@@ -190,7 +200,7 @@ Conventions for contributors:
   moves to [Blume](https://www.npmjs.com/package/blume), built from the new `docs/_website`
   project. The pages are still generated from `docs/_pipeline/templates` into `docs/guide`.
   Old page URLs redirect to their new location and every heading keeps its anchor, so
-  existing links keep working. Versions published before the move stay as they were, and
+  existing links keep working, including links to a section of a page that moved. Versions published before the move stay as they were, and
   their version selector still lists newer versions. `docs/_website/scripts/publish.mjs`
   replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
   the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
@@ -198,9 +208,11 @@ Conventions for contributors:
 - **Guide pages now open with their title and a one-sentence summary.** Each page in
   `docs/guide` starts with its `#` title, then a short summary that the site shows under the
   title, then the longer overview. Before, many pages put the overview above the title, and
-  17 pages opened with the WinUI reference note; that note now sits just before the first
+  16 pages opened with the WinUI reference note; that note now sits just before the first
   section. Lint rule `TIER_008` now counts the overview between the title and the first `##`
-  heading. The site build also rewrites links whose text wraps onto a second line.
+  heading. The site build also rewrites links whose text wraps onto a second line, and it
+  fails a page whose opening paragraph can't be shown as its summary (it has a link or runs
+  over 420 characters).
 
 - **The docs site has a new home page, a Showcase page and a clearer structure.** The home
   page opens with a banner for the latest Reactor post on the Windows developer blog, links to
@@ -214,7 +226,8 @@ Conventions for contributors:
   Interop and migration. Old page URLs still redirect, and the site now uses the Reactor icon.
   The site header and social cards show the WinUI logo next to the Reactor name.
   Each Showcase app has a screenshot, and a "Submit your app" link opens a new Showcase
-  issue form. The cards use soft color gradients drawn in CSS, so they need no image files.
+  issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
+  the app's own repository. The cards use soft color gradients drawn in CSS, so they need no image files.
 
 ### Deprecated
 
@@ -238,6 +251,54 @@ Conventions for contributors:
 
 ### Fixed
 
+- `.LayoutAnimation()` uses linear easing for position and optional size changes in
+  non-spring mode (#1652).
+
+- **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
+  layers mount no control of their own, so the ref points at the control their child mounted, and
+  unmount only cleared refs declared on that control's own element and its decorators. The ref kept
+  pointing at the control after it left the tree, and after an unrelated element rented it from the
+  pool. Unmount now clears every ref the reconciler pointed at the control, whichever layer declared
+  it.
+
+- **An exit `.Transition()` declared on a keyed `Memo(key, …)` now plays when the Memo is removed or
+  its key changes (issues #1663 and #1665).** The control used to leave the tree at once, while the
+  same exit declared on the element itself, or on the element a `ModifiedElement` wraps, kept it
+  until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
+  honoured too.
+
+- An enter fade (`.Transition(Transition.Fade)`, and the default enter under
+  `Animations.Animate(...)`) on an element with its own opacity (a `.Opacity(x)` modifier or a
+  style setter) now fades in, and ends at that opacity instead of 1.
+  XAML writes the element's opacity to the visual when it first renders it, which stopped the fade,
+  so `Border(...).Opacity(0.4).Transition(Transition.Fade)` snapped to 0.4. A pooled control that
+  gets no such write faded to 1 and stayed there. Reactor now restarts the fade once after that
+  first frame, keeping the element hidden until then, unless a modifier or `.Set(...)` changed the
+  opacity in between (spec 066 §3, issue #1680).
+
+- An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
+  `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
+  XAML writes that value to the visual when it first renders it, which stopped the animation, so
+  `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
+  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
+  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+
+- Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
+  corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
+  and drop another row, because WinUI's `ItemsRepeater` doesn't update its element
+  indices for a move and Reactor looked rows up by index. Reactor now tracks realized
+  rows by key. A focused row that moved or was removed while scrolled out of view no
+  longer comes back showing the wrong item. Focus moves to a nearby row instead, so the
+  repeater recycles the stale control. WinUI's own indices are still stale after a move,
+  so `ItemsView` click and selection right after a reorder, and app code that calls
+  `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
+  microsoft/microsoft-ui-xaml#12659).
+
+- Markdown selection skips offscreen glyph queries during drag growth for single-run
+  printable-ASCII left-to-right paragraphs with positive axis-aligned 2D transforms.
+  Right-to-left Runs and other layouts retain the reference geometry path; offscreen
+  text remains selected for copy, UI Automation and scrolling (PR #1698).
+
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
   composition visual moved a facade `Translation` to the visual and enabled translation there, after
@@ -248,6 +309,15 @@ Conventions for contributors:
   Reactor now enables translation only for a declared `.Translation()`, `translation:` keyframe or
   `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
   write `fe.Translation` on an element that declares one of those.
+
+- **A pooled control no longer hands its previous renter's local values to the next renter
+  (spec 066 §7, issue #1662).** A `TextBlock` or control mounted where one with `.Foreground(...)`
+  was removed kept the old brush, and so did a `RichTextBlock` a custom handler rented itself. A
+  `Button`, `TextBox` or `ToggleSwitch` kept
+  a previous `.FontSize(...)`, `.FontFamily(...)`, `.FontWeight(...)`, `.TabIndex(...)` or
+  `.SoundMode(...)`, any element kept `.XYFocusKeyboardNavigation(...)` and `.TabNavigation(...)`,
+  and a `.Set(c => c.Clip = …)` clipped the next renter, in both pool lanes. The pool now clears
+  them all on return, so a renter shows its own values or the defaults.
 
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh

@@ -292,4 +292,21 @@ describe("sync", () => {
     assert.deepEqual(result.errors, []);
     assert.match(result.warnings.join(), /gone\.md/);
   });
+
+  test("a page without a usable summary fails strict mode but only warns when lenient", () => {
+    const pages = {
+      "linked.md": "# Linked\n\nRead [hooks](ok.md) first.\n",
+      "long.md": `# Long\n\n${"word ".repeat(100)}\n`,
+      "ok.md": "# Ok\n\nA plain summary.\n",
+      "reference/x.md": "# X\n\n| table |\n",
+    };
+    const nav = { groups: [{ dir: "g", title: "G", pages: [{ file: "linked.md" }, { file: "long.md" }, { file: "ok.md" }] }, { dir: "reference", title: "R", glob: "reference/*.md" }] };
+    const strict = makeRepo("summary-strict", pages, nav);
+    const errors = sync({ lenient: false, ref: "main", guide: strict.guide, out: strict.website }).errors;
+    assert.deepEqual(errors.map((e) => e.split(":")[0]), ["docs/guide/linked.md", "docs/guide/long.md"]);
+    const lenient = makeRepo("summary-lenient", pages, nav);
+    const result = sync({ lenient: true, ref: "main", guide: lenient.guide, out: lenient.website });
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.warnings.filter((w) => /page summary/.test(w)).length, 2);
+  });
 });

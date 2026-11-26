@@ -241,7 +241,7 @@ public sealed partial class ReactorWindow : IDisposable
     /// keeps the <c>TitleBarIconDefault</c> record — which is keyed on it — reachable and
     /// consistent, so the push and the record can never end up on different wrappers for
     /// one native element. That duplicate-RCW hazard is documented in
-    /// <c>Reconciler.cs</c>'s <c>ReactorAttached.StateProperty</c> notes, where it caused a
+    /// <c>Reconciler.ReactorState.cs</c>'s <c>ReactorAttached.StateProperty</c> notes, where it caused a
     /// real event-subscription bug.
     /// <para>Released on unmount by <see cref="ClearTitleBarControl"/>, and unconditionally
     /// in <see cref="Dispose"/> — the close path does not unmount the root tree, so

@@ -55,6 +55,17 @@ public class WinUiRefFrontMatterTests
     }
 
     [Fact]
+    public void A_longer_fence_is_not_closed_by_a_shorter_inner_fence()
+    {
+        var body = "# Page\n\nIntro.\n\n````markdown\n```csharp\nvar x = 1;\n```\n## inside the example\n````\n\n## Usage\n";
+
+        var result = TemplateParser.InsertBeforeFirstSection(body, "CALLOUT").Replace("\r\n", "\n");
+
+        Assert.Contains("````\n\nCALLOUT\n\n## Usage", result);
+        Assert.DoesNotContain("CALLOUT\n\n## inside the example", result);
+    }
+
+    [Fact]
     public void Title_cases_hyphenated_path_segments()
     {
         var content = """

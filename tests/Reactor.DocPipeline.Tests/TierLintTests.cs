@@ -163,6 +163,22 @@ public class TierLintTests
     }
 
     [Fact]
+    public void Mental_model_lead_does_not_count_code_inside_a_longer_fence()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\nShort intro.\n\n````markdown\n```csharp\n{code}\n```\n````\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
+    public void A_fence_line_with_trailing_text_does_not_close_the_block()
+    {
+        var code = string.Join(' ', Enumerable.Repeat("token", 80));
+        var body = $"# Title\n\n```csharp\n```not a close\n{code}\n```\n\n## First section\n";
+        Assert.False(TierLint.HasMentalModelLead(body));
+    }
+
+    [Fact]
     public void Comprehensive_missing_caveat_emits_009()
     {
         var body = ComprehensiveBodyTemplate();

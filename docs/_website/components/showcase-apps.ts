@@ -1,14 +1,12 @@
 import type { BloomVariant } from "./bloom-palettes";
 
-export interface ShowcaseApp {
+interface ShowcaseAppBase {
   id: string;
   name: string;
   /** One sentence: what the app is and what it shows about Reactor. */
   summary: string;
   /** A short label for what kind of app it is. */
   kind: string;
-  /** Folder in the repository. */
-  path: string;
   /** Lucide icon name. */
   icon: string;
   bloom: BloomVariant;
@@ -18,7 +16,12 @@ export interface ShowcaseApp {
   screenshot?: { src: string; width: number; height: number };
 }
 
+/** Where the source lives: a folder in this repository, or an app's own public repository. */
+export type ShowcaseApp = ShowcaseAppBase & ({ path: string; url?: never } | { url: string; path?: never });
+
 export const SOURCE_ROOT = "https://github.com/microsoft/microsoft-ui-reactor/tree/main/";
+
+export const sourceUrl = (app: ShowcaseApp) => app.url ?? `${SOURCE_ROOT}${app.path}`;
 
 export const SUBMIT_URL =
   "https://github.com/microsoft/microsoft-ui-reactor/issues/new?template=showcase.yml";

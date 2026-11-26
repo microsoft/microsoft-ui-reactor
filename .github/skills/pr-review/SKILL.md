@@ -188,7 +188,10 @@ the dimension as `✗ skipped + reason` — do not fill it in yourself.
 **#8 model.** #8 always runs. It should use an enabled model from a
 **different family** than the primaries, following the shared
 [cross-family rules](../README.md#cross-family-checks) (e.g. a GPT candidate
-after Claude primaries). The primaries inherit the configured default, so pick
+after Claude primaries; those rules say when to use Gemini). A slow
+cross-check model delays phase B; the
+[model-selection policy](../README.md#task-fit-candidates) records measured
+cost and wall time. The primaries inherit the configured default, so pick
 a family different from that default (or from your own model, if the default
 is unknown) and verify it from host-reported provenance afterwards. Set `model`
 when the host lets you choose sub-agent models. If the host requires an

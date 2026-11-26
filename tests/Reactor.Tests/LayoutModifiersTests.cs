@@ -215,17 +215,25 @@ public class LayoutModifiersTests
         Assert.Equal(firstWriteBytes, Measure(() => fresh.Width(120)));
     }
 
+    // While other threads allocate, as they do in the parallel suite, a single pass sometimes
+    // reads high. Issue #1704 reproduced this with background allocating threads, and no
+    // pass ever read low. So take the minimum of a few passes. An extra allocation in the
+    // code under test shows in every pass and still fails the check.
     private static long Measure(Func<TestElement> build)
     {
         var sink = new TestElement[256];
         for (var i = 0; i < sink.Length; i++)
             sink[i] = build();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < sink.Length; i++)
-            sink[i] = build();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var min = long.MaxValue;
+        for (var pass = 0; pass < 5; pass++)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < sink.Length; i++)
+                sink[i] = build();
+            min = Math.Min(min, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
         GC.KeepAlive(sink);
-        return allocated;
+        return min;
     }
 
     private sealed record TestElement(string Label) : Element;

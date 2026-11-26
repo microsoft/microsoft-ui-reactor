@@ -104,18 +104,22 @@ to wire up, no dispatcher threading to worry about.
 
 ## Documentation
 
-The docset is organized as ten sections, working from "first app on screen" to
-"how the runtime is built". XAML developers should read sections 1, 8, and 9
-first; everyone else can follow the order.
+The docs follow the site's tabs, working from "first app on screen" to "how
+the runtime is built". XAML developers should start with Coming from XAML and
+Reactor vs XAML; everyone else can follow the order.
 
-### 1. Get Started
+### Get started
 
-- **[Getting Started](getting-started.md)** — Create your first app, manage state, build a todo list
+- **[Quickstart](getting-started.md)** — Create your first app, manage state, build a todo list
 - **[Thinking in Reactor](thinking-in-reactor.md)** — Mental-model essay: UI as a function of state
 - **[Reactor for XAML Developers](xaml-developers.md)** — Migration cookbook: XAML, bindings, MVVM, navigation
 - **[Reactor vs XAML](reactor-vs-xaml.md)** — Architectural essay: DependencyProperty → modifier, Binding → closure
+- **[Cheat Sheet](cheat-sheet.md)** — Single-page reference card
+- **[Rules of Reactor](rules-of-reactor.md)** — Hook rules, render purity, anti-patterns
 
-### 2. Learn the framework
+### Guides
+
+**Core concepts**
 
 - **[Components](components.md)** — Component classes, props, function components, composition
 - **[Hooks](hooks.md)** — [UseState](reference/hooks/UseState.md), [UseReducer](reference/hooks/UseReducer.md), [UseEffect](reference/hooks/UseEffect.md), [UseMemo](reference/hooks/UseMemo.md), [UseRef](reference/hooks/UseRef.md), [UseCallback](reference/hooks/UseCallback.md)
@@ -124,15 +128,46 @@ first; everyone else can follow the order.
 - **[Commanding](commanding.md)** — Commands, keyboard shortcuts, async actions
 - **[Advanced Patterns](advanced.md)** — ErrorBoundary, Memo, observable binding, performance tuning
 
-### 3. UI surface
+**Layout and styling**
 
 - **[Layout](layout.md)** — VStack, HStack, Grid, ScrollView, Border, responsive patterns
 - **[Flex Layout](flex-layout.md)** — Flexible box layout for adaptive UIs
 - **[Styling and Theming](styling.md)** — Colors, typography, dark/light themes, custom styles
+- **[Theming Tokens](theming-tokens.md)** — Full token catalog with swatches
 - **[Animation](animation.md)** — Transitions, keyframes, interaction states, choreography
 - **[Input and Gestures](input-and-gestures.md)** — Pointer events, taps, gestures, access keys
 
-### 4. Controls catalog
+**Building apps**
+
+- **[Navigation](navigation.md)** — NavigationView, TabView, multi-page apps, routing
+- **[Windows](windows.md)** — Top-level windows, tray icons, jump lists, `OpenWindow`, shutdown policy
+- **[Advanced Windowing](windowing-advanced.md)** — Layered overlays, window regions, and other interop-heavy recipes
+- **[Docking Windows](docking.md)** — Rearrangeable dock panes: splits, tabs, side pins, floating tear-outs, persistence
+- **[Async Resources](async-resources.md)** — `UseResource`, `UseInfiniteResource`, `UseMutation`, `Pending`
+- **[Persistence](persistence.md)** — [UsePersisted](reference/hooks/UsePersisted.md), scopes, migration
+
+**Ship your app**
+
+- **[Accessibility](accessibility.md)** — Screen readers, keyboard navigation, focus trapping, runtime scanning
+- **[Localization](localization.md)** — Multi-language support, resource strings, RTL layouts
+- **[Testing](testing.md)** — Headless renderer, structural assertions, async test patterns
+- **[Performance](performance.md)** — ETW, EventDispatch, flame graphs
+- **[Packaging](packaging.md)** — MSIX, single-file, ARM64, AOT considerations
+
+**Developer tools**
+
+- **[Dev Tooling](dev-tooling.md)** — `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu
+- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2026 (18.x)
+- **[Diagnostics](diagnostics.md)** — Framework warnings, ETW events, and how to read them
+
+**Interop and migration**
+
+- **[WinForms Interop](winforms-interop.md)** — Host Reactor components inside WinForms apps via XAML Islands
+- **[WPF Interop](wpf-interop.md)** — Host Reactor components inside WPF apps
+- **[Optional&lt;T&gt; controlled props](migration/050-optional-t.md)** — Migrating to `Optional<T>` controlled props
+- **[Windowing evolution](migration/054-windowing-evolution.md)** — Migrating to the current windowing API
+
+### Controls
 
 - **[Controls](controls.md)** — Thumbnail-indexed catalog of every control
 - **[Forms and Input](forms.md)** — Text fields, checkboxes, sliders, validation, data entry
@@ -144,63 +179,11 @@ first; everyone else can follow the order.
 - **[Charting](charting.md)** — Line, bar, area, pie charts with the ReactorCharting library
 - **[Win2D Canvas](win2d-canvas.md)** — Immediate-mode drawing surfaces from the optional `Microsoft.UI.Reactor.Advanced` package (manual, animated, virtual)
 
-### 5. App architecture
-
-- **[Navigation](navigation.md)** — NavigationView, TabView, multi-page apps, routing
-- **[Windows](windows.md)** — Top-level windows, tray icons, jump lists, `OpenWindow`, shutdown policy
-- **[Advanced Windowing](windowing-advanced.md)** — Layered overlays, window regions, and other interop-heavy recipes
-- **[Docking Windows](docking.md)** — Rearrangeable dock panes: splits, tabs, side pins, floating tear-outs, persistence
-- **[Async Resources](async-resources.md)** — `UseResource`, `UseInfiniteResource`, `UseMutation`, `Pending`
-- **[Persistence](persistence.md)** — [UsePersisted](reference/hooks/UsePersisted.md), scopes, migration
-- **[Localization](localization.md)** — Multi-language support, resource strings, RTL layouts
-- **[Accessibility](accessibility.md)** — Screen readers, keyboard navigation, focus trapping, runtime scanning
-
-### 6. Patterns & recipes
+### Recipes
 
 - **[Recipes](recipes/index.md)** — Gallery of end-to-end patterns (login, master-detail, paginated list, command palette, …)
-- **[Cheat Sheet](cheat-sheet.md)** — Single-page reference card
-- **[Rules of Reactor](rules-of-reactor.md)** — Hook rules, render purity, anti-patterns
-- **[Theming Tokens](theming-tokens.md)** — Full token catalog with swatches
 
-### 7. Tooling & process
-
-- **[Dev Tooling](dev-tooling.md)** — `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu
-- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2026 (18.x)
-- **[Testing](testing.md)** — Headless renderer, structural assertions, async test patterns
-- **[Performance](performance.md)** — ETW, EventDispatch, flame graphs
-- **[Packaging](packaging.md)** — MSIX, single-file, ARM64, AOT considerations
-
-### 8. Interop & integration
-
-- **[WinForms Interop](winforms-interop.md)** — Host Reactor components inside WinForms apps via XAML Islands
-- **[WPF Interop](wpf-interop.md)** — Host Reactor components inside WPF apps
-
-(XAML migration lives in [Section 1](#1-get-started) — XAML developers are a primary entry path.)
-
-### 9. Under the hood
-
-The runtime explained — for readers who want to know *why* it works the way it
-does, not just how to use it.
-
-- **[Architecture Overview](architecture-overview.md)** — Declarative shell → element records → reconciler → WinUI tree
-- **[Reactivity Model](reactivity-model.md)** — setState → re-render; why hooks not INotifyPropertyChanged
-- **[Reactor vs XAML](reactor-vs-xaml.md)** — (also in §1) the architectural essay
-- **[Hooks Internals](hooks-internals.md)** — Hook slot table, dispatcher, closure capture
-- **[Reconciliation](reconciliation.md)** — Element-record diff, identity, the three phases
-- **[Control Reconciler Protocol](control-reconciler-protocol.md)** — The per-control handler protocol: `IElementHandler`, descriptors, children strategies, pooling
-- **[Extending Reactor Controls](extending-reactor-controls.md)** — Cookbook: add a native control end-to-end with a descriptor
-- **[Element Pool](element-pool.md)** — Allocation reduction under scroll-heavy lists
-- **[Effects Scheduling](effects-scheduling.md)** — When effects run; dep semantics; cleanup ordering
-- **[Threading and Dispatch](threading-and-dispatch.md)** — UI-thread invariants, trampoline, batched renders
-- **[Source Mapping](source-mapping.md)** — How stack traces and devtools attribute work back to user source
-- **[Modifier System](modifier-system.md)** — How `.FontSize(24).Bold()` actually works
-- **[Analyzer Architecture](analyzer-architecture.md)** — Roslyn analyzers shipped with Reactor; authoring your own
-- **[DevTools Internals](devtools-internals.md)** — Dev menu, reconcile-highlight overlay, MCP protocol
-- **[Animation Pipeline](animation-pipeline.md)** — Composition API end-to-end; 4 animation systems
-- **[Focus and Input Internals](focus-and-input-internals.md)** — `UseFocus` dispatcher, `FocusTrap` container, pointer event flow
-- **[Perf Instrumentation](perf-instrumentation.md)** — ETW sources, frame-aligned sampling
-
-### 10. API Reference
+### API reference
 
 Auto-generated from XML doc comments in `src/Reactor*/`. Each member gets a
 uniform Summary / Parameters / Returns / Discussion / Examples / See Also page.
@@ -210,6 +193,28 @@ uniform Summary / Parameters / Returns / Discussion / Examples / See Also page.
 - **Modifiers** — every chainable modifier (coming soon)
 - **Elements** — every Element record type (coming soon)
 - **System** — App, Window, Navigation, Context, Command (coming soon)
+
+### How it works
+
+The runtime explained — for readers who want to know *why* it works the way it
+does, not just how to use it.
+
+- **[Architecture Overview](architecture-overview.md)** — Declarative shell → element records → reconciler → WinUI tree
+- **[Reactivity Model](reactivity-model.md)** — setState → re-render; why hooks not INotifyPropertyChanged
+- **[Hooks Internals](hooks-internals.md)** — Hook slot table, dispatcher, closure capture
+- **[Reconciliation](reconciliation.md)** — Element-record diff, identity, the three phases
+- **[Effects Scheduling](effects-scheduling.md)** — When effects run; dep semantics; cleanup ordering
+- **[Threading and Dispatch](threading-and-dispatch.md)** — UI-thread invariants, trampoline, batched renders
+- **[Element Pool](element-pool.md)** — Allocation reduction under scroll-heavy lists
+- **[Control Reconciler Protocol](control-reconciler-protocol.md)** — The per-control handler protocol: `IElementHandler`, descriptors, children strategies, pooling
+- **[Extending Reactor Controls](extending-reactor-controls.md)** — Cookbook: add a native control end-to-end with a descriptor
+- **[Modifier System](modifier-system.md)** — How `.FontSize(24).Bold()` actually works
+- **[Animation Pipeline](animation-pipeline.md)** — Composition API end-to-end; 4 animation systems
+- **[Focus and Input Internals](focus-and-input-internals.md)** — `UseFocus` dispatcher, `FocusTrap` container, pointer event flow
+- **[Source Mapping](source-mapping.md)** — How stack traces and devtools attribute work back to user source
+- **[Analyzer Architecture](analyzer-architecture.md)** — Roslyn analyzers shipped with Reactor; authoring your own
+- **[DevTools Internals](devtools-internals.md)** — Dev menu, reconcile-highlight overlay, MCP protocol
+- **[Perf Instrumentation](perf-instrumentation.md)** — ETW sources, frame-aligned sampling
 
 ## Minimal Project Setup
 

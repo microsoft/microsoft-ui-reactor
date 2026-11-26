@@ -60,6 +60,9 @@ public class ModifierUnsetClearValueTests
         // Real counts when these were set: set arms 37 / 12, unset arms 36 / 12. Read them out
         // of the assertion message (raise the floor to 99999 and run) rather than re-deriving
         // with a text scan — the scan walks syntax nodes, so a line-scoped regex undercounts.
+        //
+        // The ApplyModifiers entry spans ApplyModifiers and its per-family helpers
+        // (ScannedMethodBodies), so its floors count arms across the whole family.
         ("ApplyModifiers", "m", "oldM", 32, 31),
         ("ApplyAccessibilityModifiers", "a", "oldA", 10, 10),
     ];
@@ -456,7 +459,7 @@ public class ModifierUnsetClearValueTests
             "them — no type-gated clear, and no ungated `fe.ClearValue(…)` either — so the value " +
             "stays pinned on the control forever once the modifier is dropped from the chain " +
             $"(issue #986): [{string.Join(", ", unreleased)}]. Restore the unset arm. If you " +
-            "reached this after resolving a Reconciler.cs merge conflict, the resolution dropped " +
+            "reached this after resolving a Reconciler.Modifiers.cs merge conflict, the resolution dropped " +
             "the whole arm — reapply it rather than deleting the write.");
 
         Assert.True(
@@ -466,7 +469,7 @@ public class ModifierUnsetClearValueTests
             "stays pinned on that control type forever (issue #986): " +
             $"[{string.Join(", ", offenders)}]. Add the matching " +
             "`else if (fe is WinUI.<Type> v) v.ClearValue(WinUI.<Type>.<Prop>Property);` " +
-            "branch to the unset arm. If you reached this after resolving a Reconciler.cs " +
+            "branch to the unset arm. If you reached this after resolving a Reconciler.Modifiers.cs " +
             "merge conflict, the conflict resolution dropped the clear branch — reapply it " +
             "rather than deleting the write.");
     }
@@ -541,17 +544,13 @@ public class ModifierUnsetClearValueTests
             .Select(entry => entry.Method)
             .ToHashSet(StringComparer.Ordinal);
 
-        var methods = ReconcilerRoot.Value
-            .DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .Where(method => scanned.Contains(method.Identifier.Text))
-            .ToList();
+        var methods = scanned.SelectMany(ScannedMethodBodies).ToList();
 
         Assert.True(
             methods.Count > 0,
             $"None of the scanned methods ({string.Join(", ", scanned)}) were found in " +
-            "Reconciler.cs, so the receiver-blind clear scan would report every property as " +
-            "never released.");
+            "the Reconciler partial files, so the receiver-blind clear scan would report every " +
+            "property as never released.");
 
         return methods
             .SelectMany(method => ReadClearedPropertyNames(method, variable: null))
@@ -750,6 +749,22 @@ public class ModifierUnsetClearValueTests
         // TextBlock is a Padding receiver in ModifierTable's control gate. It predates #985
         // (it arrived with #950) but lived past the switch where no scanner reached it.
         "TextBlock.Padding",
+        // Issue #1662 — the rest of what ApplyModifiers writes to a poolable receiver and clears
+        // only on a set → unset transition. RichTextBlock's Foreground is its element property,
+        // cleared on unset by its descriptor, and pooled so a raw rent gets a fresh control too.
+        "Control.Foreground",
+        "Control.FontFamily",
+        "Control.FontSize",
+        "Control.FontWeight",
+        "Control.TabIndex",
+        "Control.ElementSoundMode",
+        "TextBlock.Foreground",
+        "RichTextBlock.Foreground",
+        "UIElement.XYFocusKeyboardNavigation",
+        "UIElement.TabFocusNavigation",
+        // No modifier writes Clip, so it breaks this list's modifier rule: only a .Set writes it,
+        // and no mount writes it back (#1662).
+        "UIElement.Clip",
     ];
 
     [Fact]
@@ -1218,26 +1233,111 @@ public class ModifierUnsetClearValueTests
             .Select(reset => (reset.Owner ?? reset.Receiver) + "." + reset.Property)
             .ToHashSet(StringComparer.Ordinal);
 
-    /// <summary>Reconciler.cs, parsed once per test run rather than once per helper call.</summary>
-    private static readonly Lazy<SyntaxNode> ReconcilerRoot = new(() =>
+    /// <summary>
+    /// The method bodies a <see cref="ScannedMethods"/> entry stands for. <c>ApplyModifiers</c>
+    /// is an ordered sequence of per-family helper calls, so its entry covers the whole family
+    /// (<see cref="ReconcilerSource.ApplyModifiersFamily"/>) and its floors count arms across
+    /// every helper; any other name is the method itself.
+    /// </summary>
+    private static List<MethodDeclarationSyntax> ScannedMethodBodies(string methodName) =>
+        methodName == ReconcilerSource.ApplyModifiersName
+            ? ReconcilerSource.ApplyModifiersFamily()
+            : ReconcilerSource.Methods(methodName);
+
+    /// <summary>
+    /// Methods the <c>ApplyModifiers</c> family hands the modifier bags to that are deliberately
+    /// <em>not</em> scanned as part of it, with the reason each one is outside these gates.
+    /// </summary>
+    /// <remarks>
+    /// Being listed here is not a claim that the method writes no dependency property. The
+    /// input handlers do (<c>ManipulationMode</c>, <c>IsTapEnabled</c>, <c>CanDrag</c>,
+    /// <c>AllowDrop</c>), and they reset by assigning the inert default rather than through
+    /// <c>ClearValue</c>. Reference edges write theirs through ref-driven callbacks. None of
+    /// them were part of the #952/#986 scan, and this list records that
+    /// rather than changing it. Bringing one under the gates means adding it to
+    /// <see cref="ScannedMethods"/> with its own floors and exceptions.
+    /// </remarks>
+    private static readonly Dictionary<string, string> DelegatedBagConsumers =
+        new(StringComparer.Ordinal)
+        {
+            ["ApplyEventHandlers"] =
+                "Declarative event handlers. Subscribes and unsubscribes trampolines, and toggles " +
+                "IsTapEnabled for .OnTapped, resetting it by assignment. Not a styled common modifier, " +
+                "and outside the #952 scan since before ApplyModifiers was split.",
+            ["ApplyGestureHandlers"] =
+                "Gesture recognizers (.OnPan/.OnPinch/.OnRotate). Wires manipulation handlers and " +
+                "writes ManipulationMode, resetting it to None by assignment. Outside the #952 scan " +
+                "since before ApplyModifiers was split.",
+            ["ApplyDragDropHandlers"] =
+                "Drag-and-drop. Wires drag/drop handlers and writes CanDrag/AllowDrop, resetting them " +
+                "to false by assignment. Outside the #952 scan since before ApplyModifiers was split.",
+            ["ApplyModifierReferenceEdges"] =
+                "Reference edges (.LabeledBy(ref), .DescribedBy/.FlowsTo/.FlowsFrom refs, " +
+                ".XYFocus*(ref), .ToolTipPlacementTarget(ref)). Writes those properties through " +
+                "per-slot apply callbacks that re-run whenever the referenced ElementRef changes, " +
+                "and resets them by applying a null target (emptying the DescribedBy/FlowsTo/FlowsFrom " +
+                "lists, ClearValue for PlacementTarget) when the ref is dropped or the control is torn down. " +
+                "That wiring/reset contract lives in Reconciler.ReferenceEdges.cs, not in set/unset arms " +
+                "these gates can read.",
+        };
+
+    /// <summary>
+    /// Every method the <c>ApplyModifiers</c> family hands the modifier bags to is either
+    /// scanned as a family helper or recorded in <see cref="DelegatedBagConsumers"/> with a
+    /// reason.
+    /// </summary>
+    /// <remarks>
+    /// The family is discovered by convention (<see cref="ReconcilerSource.IsModifierFamilyHelper"/>),
+    /// so a helper that breaks it — named <c>ApplyFooSettings</c>, taking the bags as
+    /// <c>prev</c>/<c>next</c>, or moved out of the <c>Reconciler.*.cs</c> files — would drop out of
+    /// every gate in this file and in <c>ModifierTableIntegrityTests</c> without a sound. This
+    /// tripwire is driven by call sites (<see cref="ReconcilerSource.ApplyModifiersBagHandoffs"/>),
+    /// not declarations, so it names such a helper instead.
+    /// </remarks>
+    [Fact]
+    public void ApplyModifiers_Delegates_Only_To_Scanned_Or_Recorded_Helpers()
     {
-        var root = RepoRootFinder.FindRepoRoot();
-        Assert.NotNull(root);
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Reconciler.cs");
-        Assert.True(File.Exists(file), $"Reconciler.cs not found at {file}");
-        return CSharpSyntaxTree.ParseText(File.ReadAllText(file)).GetRoot();
-    });
+        var family = ReconcilerSource.ApplyModifiersFamily()
+            .Select(method => method.Identifier.Text)
+            .Where(name => name != ReconcilerSource.ApplyModifiersName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Non-vacuity: ApplyModifiers is split into 13 family helpers today. A discovery rule
+        // that stopped matching would leave only ApplyModifiers' own (arm-free) body to scan,
+        // so the per-method arm floors would fail too, but naming the cause here is cheaper.
+        Assert.True(
+            family.Count >= 10,
+            $"Only {family.Count} ApplyModifiers family helper(s) were discovered " +
+            $"([{string.Join(", ", family.OrderBy(n => n, StringComparer.Ordinal))}]); expected at least 10.");
+
+        var handoffs = ReconcilerSource.ApplyModifiersBagHandoffs();
+
+        // Positive controls: the handoff reader sees both a delegated subsystem and a family
+        // helper, so an empty `unscanned` below is a measurement rather than a reader that
+        // matches nothing.
+        Assert.Contains("ApplyEventHandlers", handoffs);
+        Assert.Contains(family.First(), handoffs);
+
+        var unscanned = handoffs
+            .Where(name => !family.Contains(name) && !DelegatedBagConsumers.ContainsKey(name))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            unscanned.Count == 0,
+            "The ApplyModifiers family hands the modifier bags to methods that are neither scanned " +
+            $"as family helpers nor recorded in DelegatedBagConsumers: [{string.Join(", ", unscanned)}]. " +
+            "Name a helper that writes common modifiers `Apply<Family>Modifier(s)`, take the bags as " +
+            "`ElementModifiers? oldM, ElementModifiers m`, and declare it in a Reconciler.*.cs partial " +
+            "so the source gates scan it, or record why it is outside them.");
+    }
 
     /// <summary>Every <c>if</c> statement in the named reconciler method(s).</summary>
     private static List<IfStatementSyntax> ReadIfStatements(string methodName)
     {
-        var methods = ReconcilerRoot.Value
-            .DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .Where(method => method.Identifier.Text == methodName)
-            .ToList();
+        var methods = ScannedMethodBodies(methodName);
 
-        Assert.True(methods.Count > 0, $"No {methodName} method found in Reconciler.cs");
+        Assert.True(methods.Count > 0, $"No {methodName} method found in the Reconciler partial files");
 
         return methods
             .SelectMany(method => method.DescendantNodes().OfType<IfStatementSyntax>())

@@ -88,7 +88,7 @@ internal readonly record struct CleanElementReset(
 /// could not masquerade as the region boundary, and brace counting to delimit the body. Parsing
 /// with <see cref="CSharpSyntaxTree"/> deletes all three problems — trivia is trivia, literals are
 /// literals, and the body is a node — and it is what this assembly already does for the same class
-/// of problem (<c>ModifierUnsetClearValueTests.ReconcilerRoot</c>, <c>ModifierTableIntegrityTests</c>).
+/// of problem (<c>ReconcilerSource</c>, <c>ModifierTableIntegrityTests</c>).
 /// It also removes categories of silent mis-parse the regex version had to special-case by
 /// keyword: <c>if (fe.Style is not null)</c> is a <c>UnaryPattern</c>, not a declaration, so it
 /// cannot be read as a type binding, and <c>a &gt;= b</c> can never be read as an assignment.
@@ -486,6 +486,7 @@ internal static class CleanElementScan
                 ["StackPanel"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.StackPanel)),
                 ["Grid"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Grid)),
                 ["TextBlock"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.TextBlock)),
+                ["RichTextBlock"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.RichTextBlock)),
                 ["Viewbox"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Viewbox)),
                 ["TextBox"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.TextBox)),
                 ["ToggleSwitch"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.ToggleSwitch)),

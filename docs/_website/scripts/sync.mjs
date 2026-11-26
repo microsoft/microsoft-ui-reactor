@@ -522,6 +522,12 @@ export function sync({ lenient, ref, guide, out }) {
     const target = path.join(docs, ...dest.split("/"));
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, page);
+    if (!file.startsWith("reference/") && !/^description: /m.test(page.slice(0, page.indexOf("\n---", 3)))) {
+      const message =
+        `docs/guide/${file}: the paragraph under the # title is not a usable page summary, so the site shows none. ` +
+        `Make it plain prose without links, at most ${MAX_DESCRIPTION} characters.`;
+      (lenient ? warnings : errors).push(message);
+    }
     for (const miss of context.unresolved.splice(0)) {
       const message = `docs/guide/${file}: link ${miss.target} ${miss.reason}.`;
       (miss.inGuide && !lenient ? errors : warnings).push(message);

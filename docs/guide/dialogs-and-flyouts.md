@@ -1,7 +1,8 @@
 
 # Dialogs and Flyouts
 
-Four primitives sit on this page. Pick by shape, not by aesthetic:
+ContentDialog, MenuFlyout, CommandBarFlyout and Popup: when to reach for
+each one, and how to drive them from component state.
 
 Dialog and flyout surfaces interrupt the user. That makes them the most
 costly UI primitive in the app's attention budget — every modal dialog
@@ -18,6 +19,8 @@ toolbar, or `Popup` for the bespoke overlay that none of the above
 covers. Pair every dialog with a corresponding entry in
 [commanding.md](commanding.md) — the same `Command` should usually back
 the trigger (button or menu) and the dialog's primary action.
+
+Four primitives sit on this page. Pick by shape, not by aesthetic:
 
 | Control | Shape | Dismiss | Use when |
 |---|---|---|---|
