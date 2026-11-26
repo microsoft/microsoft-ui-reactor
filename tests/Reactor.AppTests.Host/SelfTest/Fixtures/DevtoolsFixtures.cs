@@ -34,11 +34,18 @@ internal static class DevtoolsFixtures
     /// </summary>
     internal sealed class McpHarness : IDisposable
     {
+        /// <summary>
+        /// A stuck request fails its own fixture (<c>_CRASH</c>) well inside the runner's
+        /// 30 s fixture timeout, whose <c>_TIMEOUT</c> would abort the rest of the shard.
+        /// </summary>
+        internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
+
         public DevtoolsMcpServer Server { get; }
         public WindowRegistry Windows { get; }
         public NodeRegistry Nodes { get; }
         private readonly HttpClient _client;
         private readonly string _currentComponent;
+        private readonly StageClock _stages;
 
         public McpHarness(
             Window window,
@@ -48,7 +55,9 @@ internal static class DevtoolsFixtures
             DevtoolsLogger? logger = null,
             Func<string, bool>? switchComponent = null)
         {
+            _stages = StageClock.ForHarness();
             Server = new DevtoolsMcpServer(window.DispatcherQueue, window, logger: logger);
+            _stages.Mark("server constructed");
             Windows = new WindowRegistry(Server.BuildTag);
             Nodes = new NodeRegistry();
             Windows.Attach(window, isMain: true);
@@ -68,9 +77,11 @@ internal static class DevtoolsFixtures
             DevtoolsUiaTools.RegisterUiaTools(Server, Nodes, Windows);
             DevtoolsStateTool.Register(Server, rootComponent);
             DevtoolsFireTool.Register(Server, rootComponent);
+            _stages.Mark("tools registered");
 
             Server.Start();
-            _client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{Server.Port}/") };
+            _stages.Mark("server started");
+            _client = CreateLoopbackClient(Server.Port);
         }
 
         public async Task<JsonElement> CallAsync(string method, CallArgs? args = null)
@@ -83,8 +94,11 @@ internal static class DevtoolsFixtures
             };
             req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Server.AuthToken);
+            _stages.Mark($"{method} sending");
             using var resp = await _client.SendAsync(req);
+            _stages.Mark($"{method} response headers");
             var text = await resp.Content.ReadAsStringAsync();
+            _stages.Mark($"{method} response body");
             using var doc = JsonDocument.Parse(text);
             // Clone so the element survives disposing the document.
             return doc.RootElement.Clone();
@@ -94,6 +108,105 @@ internal static class DevtoolsFixtures
         {
             try { _client.Dispose(); } catch { }
             try { Server.Dispose(); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// The fixtures' client for a devtools server on <c>127.0.0.1</c>: no system proxy
+    /// (so no WinHTTP auto-proxy lookup in the request path) and a timeout of
+    /// <see cref="McpHarness.RequestTimeout"/>. Issue #1718.
+    /// </summary>
+    internal static HttpClient CreateLoopbackClient(int port)
+    {
+        var client = LoopbackHttpClient.Create(McpHarness.RequestTimeout);
+        client.BaseAddress = new Uri($"http://127.0.0.1:{port}/");
+        return client;
+    }
+
+    /// <summary>
+    /// Per-stage timings for the MCP fixtures, as TAP comments (issue #1718). The first
+    /// harness in a process prints every stage as it is reached, so a stall shows where it
+    /// is even if the fixture then times out. Later harnesses print only a stage that took
+    /// at least <see cref="SlowStageMs"/>. Elapsed times are in the line itself because the
+    /// packaged wrapper replays TAP without per-line timestamps.
+    /// </summary>
+    internal sealed class StageClock
+    {
+        private const long SlowStageMs = 1000;
+        private static (global::System.Diagnostics.Stopwatch Clock, long MountedMs)? s_pendingFixture;
+        private static int s_harnessCount;
+
+        private readonly global::System.Diagnostics.Stopwatch _clock;
+        private readonly bool _verbose;
+        private long _lastMs;
+
+        private StageClock(global::System.Diagnostics.Stopwatch clock, bool verbose)
+        {
+            _clock = clock;
+            _verbose = verbose;
+        }
+
+        /// <summary>Called by <see cref="MountRoot"/>, the first step of every MCP fixture.</summary>
+        internal static void FixtureMounting(global::System.Diagnostics.Stopwatch clock, long mountedMs) => s_pendingFixture = (clock, mountedMs);
+
+        internal static StageClock ForHarness()
+        {
+            var verbose = Interlocked.Increment(ref s_harnessCount) == 1;
+            var pending = s_pendingFixture;
+            s_pendingFixture = null;
+            var stages = new StageClock(pending?.Clock ?? global::System.Diagnostics.Stopwatch.StartNew(), verbose);
+            if (verbose)
+            {
+                Console.WriteLine($"# Devtools stage: first MCP harness in process, system proxy {DescribeSystemProxy()}");
+            }
+            if (pending is { } p)
+            {
+                stages.Report("host mounted", p.MountedMs);
+                stages.Mark("rendered");
+            }
+            else
+            {
+                stages.Mark("harness created");
+            }
+            return stages;
+        }
+
+        internal void Mark(string stage) => Report(stage, _clock.ElapsedMilliseconds);
+
+        private void Report(string stage, long nowMs)
+        {
+            var deltaMs = nowMs - _lastMs;
+            _lastMs = nowMs;
+            if (!_verbose && deltaMs < SlowStageMs) return;
+            Console.WriteLine($"# Devtools stage: {stage} +{deltaMs}ms (t={nowMs}ms)");
+            Console.Out.Flush();
+        }
+
+        /// <summary>
+        /// The per-user settings .NET's system proxy reads: an <c>autoDetect</c> or
+        /// <c>pac</c> of on makes every request call <c>WinHttpGetProxyForUrl</c>, loopback
+        /// included. Read from the registry, not <c>HttpClient.DefaultProxy</c>, whose first
+        /// access can itself block.
+        /// </summary>
+        private static string DescribeSystemProxy()
+        {
+            try
+            {
+                using var key = global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Internet Settings");
+                using var connections = key?.OpenSubKey("Connections");
+                // Byte 8 of DefaultConnectionSettings holds the PROXY_TYPE_* flags; 0x08 is AUTO_DETECT.
+                var autoDetect = connections?.GetValue("DefaultConnectionSettings") is byte[] { Length: > 8 } settings
+                    ? ((settings[8] & 0x08) != 0 ? "on" : "off")
+                    : "unset";
+                var pac = string.IsNullOrEmpty(key?.GetValue("AutoConfigURL") as string) ? "off" : "on";
+                var manual = key?.GetValue("ProxyEnable") is int enabled && enabled != 0 ? "on" : "off";
+                return $"autoDetect={autoDetect} pac={pac} manual={manual}";
+            }
+            catch (Exception ex)
+            {
+                return $"unknown ({ex.GetType().Name})";
+            }
         }
     }
 
@@ -138,9 +251,11 @@ internal static class DevtoolsFixtures
 
     private static DevtoolsFixtureRoot MountRoot(Harness h)
     {
+        var clock = global::System.Diagnostics.Stopwatch.StartNew();
         var host = h.CreateHost();
         var root = new DevtoolsFixtureRoot();
         host.Mount(root);
+        StageClock.FixtureMounting(clock, clock.ElapsedMilliseconds);
         return root;
     }
 
@@ -1622,7 +1737,7 @@ internal static class DevtoolsFixtures
                     new McpEmptyObject(),
                     new McpClientInfo("reactor-selftest", "1.0")));
             var body = JsonSerializer.Serialize(envelope, DevtoolsFixtureJsonContext.Default.McpInitializeEnvelope);
-            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{mcp.Server.Port}/") };
+            using var client = CreateLoopbackClient(mcp.Server.Port);
             using var req = new HttpRequestMessage(HttpMethod.Post, "mcp")
             { Content = new StringContent(body, Encoding.UTF8, "application/json") };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", mcp.Server.AuthToken);
@@ -1670,7 +1785,7 @@ internal static class DevtoolsFixtures
                 active.Token == server.AuthToken &&
                 active.Port == server.Port);
 
-            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}/") };
+            using var client = CreateLoopbackClient(server.Port);
 
             using var optionsReq = new HttpRequestMessage(HttpMethod.Options, "mcp");
             using var options = await client.SendAsync(optionsReq);

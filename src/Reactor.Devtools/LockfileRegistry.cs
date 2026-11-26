@@ -249,7 +249,7 @@ internal static class LockfileRegistry
         if (string.IsNullOrEmpty(endpoint)) return false;
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(500) };
+            using var http = LoopbackHttpClient.Create(TimeSpan.FromMilliseconds(500));
             var resp = http.GetAsync(endpoint).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode) return false;
             var body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();

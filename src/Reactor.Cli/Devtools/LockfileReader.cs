@@ -196,7 +196,7 @@ internal static class LockfileReader
         if (string.IsNullOrEmpty(endpoint)) return false;
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(500) };
+            using var http = LoopbackHttpClient.Create(TimeSpan.FromMilliseconds(500));
             using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
             if (!string.IsNullOrEmpty(token))
             {
