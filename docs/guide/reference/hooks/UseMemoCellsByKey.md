@@ -3,7 +3,7 @@
 Memoize cell construction keyed by `keySelector`. Cells are reused when both the item's key and value match the previous render. Keys that recur with mutated content rebuild that cell only. Reordered keys reuse cells (the reconciler's keyed- children path keeps the underlying control without unmount/remount).
 
 ```csharp
-public static Element[] UseMemoCellsByKey<T, TKey>(this RenderContext ctx, IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, params object[] dependencies)
+public static Element[] UseMemoCellsByKey<T, TKey>(this RenderContext ctx, IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, params object[] dependencies) where T : notnull where TKey : notnull
 ```
 
 An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseMemoCellsExtensions`.
@@ -28,5 +28,5 @@ Spec 034 §C.
 Class components can call the same hook directly. These overloads forward to the ones above:
 
 ```csharp
-public static Element[] UseMemoCellsByKey<T, TKey>(this Component component, IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, params object[] dependencies)
+public static Element[] UseMemoCellsByKey<T, TKey>(this Component component, IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, params object[] dependencies) where T : notnull where TKey : notnull
 ```

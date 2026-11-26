@@ -3,7 +3,7 @@
 Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content to call [`NavigationHandle.GoBack`](../navigation/NavigationHandle.md#goback). Unsubscribes on unmount.
 
 ```csharp
-public void UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window)
+public void UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) where TRoute : notnull
 ```
 
 Declared on [`RenderContext`](../components/RenderContext.md).
@@ -22,5 +22,5 @@ Declared on [`RenderContext`](../components/RenderContext.md).
 Class components can call the same hook directly. These overloads forward to the ones above:
 
 ```csharp
-protected void UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window)
+protected void UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) where TRoute : notnull
 ```

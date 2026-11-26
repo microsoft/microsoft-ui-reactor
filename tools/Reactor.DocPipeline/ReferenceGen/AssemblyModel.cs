@@ -908,14 +908,15 @@ internal sealed class MetadataModelReader
             bases.Add(TRefFormat.CSharp(iref, TypeAnnotations.None));
         }
         if (bases.Count > 0) sb.Append(" : ").Append(string.Join(", ", bases));
-        sb.Append(Constraints(def.GetGenericParameters().Skip(type.DeclaringType?.TypeParameters.Count ?? 0), ctx));
+        sb.Append(Constraints(def.GetGenericParameters().Skip(type.DeclaringType?.TypeParameters.Count ?? 0), ctx,
+            NullableContext(def.GetCustomAttributes(), h) ?? 0));
         return sb.ToString();
     }
 
     private bool IsReadOnlyStruct(TypeDefinition def) =>
         def.GetCustomAttributes().Any(ca => AttributeName(_md.GetCustomAttribute(ca)) == "System.Runtime.CompilerServices.IsReadOnlyAttribute");
 
-    private string Constraints(IEnumerable<GenericParameterHandle> parameters, GenericNames ctx)
+    private string Constraints(IEnumerable<GenericParameterHandle> parameters, GenericNames ctx, byte context)
     {
         var sb = new StringBuilder();
         foreach (var gh in parameters)
@@ -924,9 +925,16 @@ internal sealed class MetadataModelReader
             var items = new List<string>();
             var attrs = gp.Attributes & GenericParameterAttributes.SpecialConstraintMask;
             bool isStruct = (attrs & GenericParameterAttributes.NotNullableValueTypeConstraint) != 0;
-            if ((attrs & GenericParameterAttributes.ReferenceTypeConstraint) != 0) items.Add("class");
+            bool isClass = (attrs & GenericParameterAttributes.ReferenceTypeConstraint) != 0;
+            if (isClass) items.Add("class");
             if (isStruct) items.Add("struct");
-            foreach (var ch in gp.GetConstraints())
+            var constraintHandles = gp.GetConstraints();
+            // Roslyn writes `notnull` as a not-annotated (1) flag on a type parameter
+            // that has no other constraint. With `class` or a constraint type the same
+            // flag only describes that constraint, so it isn't `notnull` there.
+            if (!isClass && !isStruct && constraintHandles.Count == 0 && TypeParameterNullability(gp, context) == 1)
+                items.Add("notnull");
+            foreach (var ch in constraintHandles)
             {
                 var c = _md.GetGenericParameterConstraint(ch);
                 var cref = DecodeHandle(c.Type, ctx);
@@ -938,6 +946,18 @@ internal sealed class MetadataModelReader
                 sb.Append(" where ").Append(_md.GetString(gp.Name)).Append(" : ").Append(string.Join(", ", items));
         }
         return sb.ToString();
+    }
+
+    /// <summary>The nullable flag of a type parameter: its own <c>[Nullable]</c>, else
+    /// the context of the method or type that declares it.</summary>
+    private byte TypeParameterNullability(GenericParameter gp, byte context)
+    {
+        if (FindAttribute(gp.GetCustomAttributes(), "System.Runtime.CompilerServices.NullableAttribute") is { } ca)
+        {
+            var blob = _md.GetBlobReader(ca.Value);
+            if (blob.Length == 5 && blob.ReadUInt16() == 1) return blob.ReadByte();
+        }
+        return context;
     }
 
     private List<string> ConstraintDocIds(GenericParameterHandle gh, GenericNames ctx)
@@ -1008,7 +1028,7 @@ internal sealed class MetadataModelReader
         var typeParamText = methodTypeParams.Count > 0 ? "<" + string.Join(", ", methodTypeParams) + ">" : string.Empty;
         var paramList = string.Join(", ", ps.Select(FormatParam));
         var shortParams = string.Join(", ", ps.Select(p => p.Type));
-        var constraints = Constraints(m.GetGenericParameters(), ctx);
+        var constraints = Constraints(m.GetGenericParameters(), ctx, context);
         string signature, shortSig, displayName;
         ApiMemberKind kind;
         if (asDelegate)
@@ -1016,7 +1036,7 @@ internal sealed class MetadataModelReader
             kind = ApiMemberKind.Method;
             var ownTypeParams = type.TypeParameters.Skip(type.DeclaringType?.TypeParameters.Count ?? 0).ToList();
             var tp = ownTypeParams.Count > 0 ? "<" + string.Join(", ", ownTypeParams) + ">" : string.Empty;
-            signature = "public delegate " + returnText + " " + type.Name + tp + "(" + paramList + ")" + Constraints(def.GetGenericParameters(), typeCtx);
+            signature = "public delegate " + returnText + " " + type.Name + tp + "(" + paramList + ")" + Constraints(def.GetGenericParameters(), typeCtx, typeContext ?? 0);
             shortSig = type.Name;
             displayName = type.Name;
         }

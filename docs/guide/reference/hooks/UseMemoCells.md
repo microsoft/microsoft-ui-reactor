@@ -3,7 +3,7 @@
 Memoize cell construction for `items`. On the first render the builder runs for every index; on subsequent renders, an item that compares [`Object.Equals`](https://learn.microsoft.com/dotnet/api/system.object.equals) against the previous render's value at the same index reuses the previous element. Any change to `dependencies` invalidates the entire cache and rebuilds every cell.
 
 ```csharp
-public static Element[] UseMemoCells<T>(this RenderContext ctx, IReadOnlyList<T> items, Func<T, int, Element> builder, params object[] dependencies)
+public static Element[] UseMemoCells<T>(this RenderContext ctx, IReadOnlyList<T> items, Func<T, int, Element> builder, params object[] dependencies) where T : notnull
 ```
 
 An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseMemoCellsExtensions`.
@@ -43,5 +43,5 @@ var children = ctx.UseMemoCells(
 Class components can call the same hook directly. These overloads forward to the ones above:
 
 ```csharp
-public static Element[] UseMemoCells<T>(this Component component, IReadOnlyList<T> items, Func<T, int, Element> builder, params object[] dependencies)
+public static Element[] UseMemoCells<T>(this Component component, IReadOnlyList<T> items, Func<T, int, Element> builder, params object[] dependencies) where T : notnull
 ```

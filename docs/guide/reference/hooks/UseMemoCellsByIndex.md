@@ -5,7 +5,7 @@ Memoize cell construction when the data source already knows which indices chang
 On the steady-state path (unchanged count) the returned array reuses the previous render's element instance for every index NOT named in `changedIndices`, and publishes a positional structural-skip hint (Spec 034 §C) keyed by reference on that array so the reconciler can update only the changed cells and skip the reference-equal remainder. The returned array is therefore the hook's retained memoized state AND the key of that hint: treat it as immutable and declare every change through a subsequent render's `changedIndices` (React-style immutability — see AGENTS.md "Never mutate"). Mutating an unchanged slot in place both corrupts the memo's view of the previous render and can cause the reconciler to skip the mutated cell.
 
 ```csharp
-public static Element[] UseMemoCellsByIndex<T>(this RenderContext ctx, IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, params object[] dependencies)
+public static Element[] UseMemoCellsByIndex<T>(this RenderContext ctx, IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, params object[] dependencies) where T : notnull
 ```
 
 An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseMemoCellsExtensions`.
@@ -30,5 +30,5 @@ Spec 034 §C. A cell is "theme-sensitive" when it carries ThemeBindings or a The
 Class components can call the same hook directly. These overloads forward to the ones above:
 
 ```csharp
-public static Element[] UseMemoCellsByIndex<T>(this Component component, IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, params object[] dependencies)
+public static Element[] UseMemoCellsByIndex<T>(this Component component, IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, params object[] dependencies) where T : notnull
 ```

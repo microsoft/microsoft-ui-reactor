@@ -3,7 +3,7 @@
 A snapshot of a [`NavigationHandle<TRoute>`](NavigationHandle.md)'s full state: the back stack, the currently active route, and the forward stack. Obtained from [`NavigationHandle.GetState`](NavigationHandle.md#getstate) and restored via [`NavigationHandle.SetState`](NavigationHandle.md#setstate).
 
 ```csharp
-public sealed record NavigationState<TRoute>(IReadOnlyList<TRoute> BackStack, TRoute Current, IReadOnlyList<TRoute> ForwardStack)
+public sealed record NavigationState<TRoute>(IReadOnlyList<TRoute> BackStack, TRoute Current, IReadOnlyList<TRoute> ForwardStack) where TRoute : notnull
 ```
 
 Namespace: `Microsoft.UI.Reactor.Navigation`.
