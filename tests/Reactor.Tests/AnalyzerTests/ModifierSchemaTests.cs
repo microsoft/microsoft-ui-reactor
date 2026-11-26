@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.UI.Reactor.Analyzers.Modifiers;
 using Microsoft.UI.Reactor.Core;
@@ -112,12 +114,29 @@ public class ModifierSchemaTests
             .Concat(ReconcilerSource.Methods("ApplyAccessibilityModifiers"))
             .Concat(foreground);
 
+        // `m` is the ElementModifiers bag, `a` the accessibility bag (ApplyAccessibilityModifiers).
         static string? Field(ExpressionSyntax e) =>
-            e is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "m" } } access ? access.Name.Identifier.Text : null;
+            e is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "m" or "a" } } access ? access.Name.Identifier.Text : null;
+        static string? OldField(ExpressionSyntax e) => e switch
+        {
+            ConditionalAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "oldM" or "oldA" }, WhenNotNull: MemberBindingExpressionSyntax binding }
+                => binding.Name.Identifier.Text,
+            MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "oldM" or "oldA" } } access => access.Name.Identifier.Text,
+            _ => null,
+        };
 
         var byReference = new HashSet<string>(StringComparer.Ordinal);
+        var byValue = new HashSet<string>(StringComparer.Ordinal);
         foreach (var method in methods)
         {
+            // Value guards: `m.X != oldM?.X`, or a resolved local (`resolvedMargin != oldM?.Margin`).
+            foreach (var compare in method.DescendantNodes().OfType<BinaryExpressionSyntax>()
+                         .Where(b => b.IsKind(SyntaxKind.NotEqualsExpression)))
+            {
+                var (old, current) = OldField(compare.Right) is { } r ? (r, compare.Left) : (OldField(compare.Left), compare.Right);
+                if (old is not null && (Field(current) == old || current is IdentifierNameSyntax)) byValue.Add(old);
+            }
+
             var locals = method.DescendantNodes().OfType<VariableDeclaratorSyntax>()
                 .Where(v => v.Initializer is not null && Field(v.Initializer.Value) is not null)
                 .ToDictionary(v => v.Identifier.Text, v => Field(v.Initializer!.Value)!, StringComparer.Ordinal);
@@ -132,14 +151,22 @@ public class ModifierSchemaTests
         }
         Assert.Contains("Background", byReference);   // positive controls: direct, and through a local
         Assert.Contains("Foreground", byReference);
+        Assert.Contains("Width", byValue);            // positive controls: both bags, and a resolved local
+        Assert.Contains("HelpText", byValue);
+        Assert.Contains("Margin", byValue);
 
         // Arms that always reconcile (flyouts, rich tooltip) have no change guard, and behaviour /
         // reference-edge slots are not property arms.
         var guarded = ModifierSchema.Slots.Where(s =>
             s.Shape is not (ApplyShape.Behavior or ApplyShape.ReferenceEdge) && s.Skip != SkipEquality.BlocksSkipWhenSet);
         foreach (var slot in guarded)
+        {
             Assert.True((slot.Write == WriteEquality.Reference) == byReference.Contains(slot.Name),
                 $"{slot.Name}: schema Write is {slot.Write}, but the apply arm {(byReference.Contains(slot.Name) ? "uses" : "does not use")} ReferenceEquals.");
+            if (slot.Write == WriteEquality.Value)
+                Assert.True(byValue.Contains(slot.Name),
+                    $"{slot.Name}: schema Write is Value, but no apply arm compares it with its old value, so equal-value updates would write again.");
+        }
     }
 
     [Fact]
