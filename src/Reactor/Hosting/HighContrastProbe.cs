@@ -98,7 +98,10 @@ internal sealed class HighContrastProbe : IDisposable
             if (dictionary is not null)
             {
                 try { resources?.MergedDictionaries.Remove(dictionary); }
-                catch (global::System.Runtime.InteropServices.COMException) { }
+                catch (global::System.Runtime.InteropServices.COMException removeEx)
+                {
+                    Core.Diagnostics.DiagnosticLog.SwallowedError(Core.Diagnostics.LogCategory.Hosting, "HighContrastProbe.TryAttach rollback", removeEx);
+                }
             }
             Core.Diagnostics.DiagnosticLog.SwallowedError(Core.Diagnostics.LogCategory.Hosting, "HighContrastProbe.TryAttach", ex);
             return null;
@@ -163,6 +166,9 @@ internal sealed class HighContrastProbe : IDisposable
         _disposed = true;
         _brush.UnregisterPropertyChangedCallback(SolidColorBrush.ColorProperty, _token);
         try { _owner.Resources?.MergedDictionaries.Remove(_dictionary); }
-        catch (global::System.Runtime.InteropServices.COMException) { }
+        catch (global::System.Runtime.InteropServices.COMException ex)
+        {
+            Core.Diagnostics.DiagnosticLog.SwallowedError(Core.Diagnostics.LogCategory.Hosting, "HighContrastProbe.Dispose", ex);
+        }
     }
 }
