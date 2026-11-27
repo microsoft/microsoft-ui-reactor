@@ -185,6 +185,26 @@ public class ModifierApplyOrderTests
             .ToDictionary(method => method.Identifier.Text, StringComparer.Ordinal);
 
         Assert.Equal(["Padding", "PaddingInlineStart", "PaddingInlineEnd", "OnMountAction"], ReadOrder(methods["ApplyModifiers"], "m", methods));
+
+        // A second call to the write helper from the resolver is a doubled write, not a shared read.
+        var doubled = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText("""
+            class R
+            {
+                void ApplyModifiers(object fe, object oldM, object m) { ApplyPaddingModifiers(fe, oldM, m); }
+                void ApplyPaddingModifiers(object fe, object oldM, object m)
+                {
+                    ApplyResolvedPaddingModifier(fe, oldM, m, m.Padding);
+                    ApplyResolvedPaddingModifier(fe, oldM, m, m.Padding);
+                }
+                void ApplyResolvedPaddingModifier(object fe, object oldM, object m, object resolved)
+                {
+                    if (resolved != null && m.Padding != oldM) { }
+                }
+            }
+            """, cancellationToken: TestContext.Current.CancellationToken);
+        var doubledMethods = doubled.GetRoot(TestContext.Current.CancellationToken).DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .ToDictionary(method => method.Identifier.Text, StringComparer.Ordinal);
+        Assert.Equal(["Padding", "↻ApplyResolvedPaddingModifier"], ReadOrder(doubledMethods["ApplyModifiers"], "m", doubledMethods));
     }
 
     internal static List<string> ReadApplyOrder()
@@ -219,11 +239,14 @@ public class ModifierApplyOrderTests
     // calls in turn (an arm reads its field several times, and a resolver hands its result to a
     // generated write helper that reads the same fields, spec 067 layer 4). Every call ApplyModifiers
     // makes and every handoff is recorded each time it happens, so a second call to a helper or
-    // handler wiring, for example after the lifecycle callbacks, changes the list.
+    // handler wiring, for example after the lifecycle callbacks, changes the list. A helper that
+    // calls the same family helper twice adds a `↻Name` entry, so a doubled nested write shows too.
     private static void Walk(MethodDeclarationSyntax method, string bag, IReadOnlyDictionary<string, MethodDeclarationSyntax> family,
         List<string> order, HashSet<string>? callerSeen = null)
     {
         var seen = callerSeen ?? new HashSet<string>(StringComparer.Ordinal);
+        var isEntry = method.Identifier.Text == ReconcilerSource.ApplyModifiersName;
+        var nestedCalls = new HashSet<string>(StringComparer.Ordinal);
         SyntaxNode body = (SyntaxNode?)method.Body ?? method.ExpressionBody!;
         bool ShouldDescend(SyntaxNode node) => !DeclaresParameter(node, bag);
 
@@ -248,7 +271,10 @@ public class ModifierApplyOrderTests
                     break;
                 case InvocationExpressionSyntax invocation when ReconcilerSource.InvokedName(invocation) is { } name:
                     if (family.TryGetValue(name, out var helper))
-                        Walk(helper, bag, family, order, method.Identifier.Text == ReconcilerSource.ApplyModifiersName ? null : seen);
+                    {
+                        if (!isEntry && !nestedCalls.Add(name)) order.Add("↻" + name);
+                        Walk(helper, bag, family, order, isEntry ? null : seen);
+                    }
                     else if ((ReconcilerSource.IsBagHandoff(invocation)
                               || invocation.ArgumentList.Arguments.Any(a => a.Expression is IdentifierNameSyntax id && derived.Contains(id.Identifier.Text))))
                         order.Add("→" + MarkerName(invocation, name));

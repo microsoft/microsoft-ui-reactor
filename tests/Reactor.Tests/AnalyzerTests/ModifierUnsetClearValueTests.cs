@@ -233,13 +233,15 @@ public class ModifierUnsetClearValueTests
     /// Scoped to <em>diff-guarded</em> set arms — conditions that name both <c>bag.X</c> and
     /// <c>oldBag.X</c>. That is the shape of "write this property when present, compared
     /// against the previous render", and it is precisely the shape that owes a reset. It
-    /// deliberately does not try to read the three arms that compute a local first
-    /// (<c>Margin</c>, <c>Padding</c>, <c>BorderThickness</c> overlay their BiDi-aware inline
-    /// variants into <c>resolvedX</c>): their conditions never name <c>m.X</c>, and
-    /// <c>Padding</c>'s reset is guarded by <c>wantsPadding</c>/<c>hadPadding</c> rather than
-    /// by the bag at all, so matching them loosely enough to see the set arm would report a
-    /// missing reset that is right there. Those three are covered behaviourally by
-    /// <c>ModifierEvent_InlineDropRestoresPhysical</c> instead.
+    /// deliberately does not try to read the arms that compute a local first (<c>Margin</c> and
+    /// <c>BorderThickness</c> overlay their BiDi-aware inline variants into <c>resolvedX</c>):
+    /// their conditions never name <c>m.X</c>, so matching them loosely enough to see the set arm
+    /// would report a missing reset that is right there. Those two are covered behaviourally by
+    /// <c>ModifierEvent_InlineDropRestoresPhysical</c> instead. <c>Padding</c>'s write and release
+    /// are generated into <c>ApplyResolvedPaddingModifier</c> (spec 067 layer 4): its write names
+    /// <c>m.PaddingInlineStart</c>/<c>End</c> against <c>oldM</c> and its release names the bag,
+    /// so the inline slots are read here. The physical <c>Padding</c> set arm still compares
+    /// <c>resolved</c>, not <c>m.Padding</c>, so it stays behavioural too.
     /// </remarks>
     [Fact]
     public void Every_Diff_Guarded_Modifier_Has_An_Unset_Arm()
@@ -1483,9 +1485,9 @@ public class ModifierUnsetClearValueTests
             if (AbsentNow(text, bag, name) && PresentBefore(text, oldBag, name)) return name;
         }
 
-        // Padding and BorderThickness are computed into a local first (to overlay the
-        // BiDi-aware inline variants), so the absent-now half reads `!resolvedPadding.HasValue`
-        // rather than `!m.Padding.HasValue`. Match on the oldM half and the local's shape.
+        // Margin and BorderThickness are computed into a local first (to overlay the
+        // BiDi-aware inline variants), so the absent-now half reads `!resolvedMargin.HasValue`
+        // rather than `!m.Margin.HasValue`. Match on the oldM half and the local's shape.
         var resolved = Regex.Match(text, @"!\s*(resolved\w+)\.HasValue");
         if (resolved.Success)
         {

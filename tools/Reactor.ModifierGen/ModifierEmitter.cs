@@ -241,11 +241,15 @@ internal static class ModifierEmitter
     // Spec 067 layer 4: a row E family's receiver-bound parts, from its physical slot's Apply
     // receivers. The write fires when the resolved value differs from the previous physical value,
     // an inline slot changed, or the previous overlay wrote something else (overlayStale). The
-    // release fires when no slot of the family is set and one was before; that is the same as the
-    // resolved value being null, but it reads the bag so a resolver fallback can't keep it alive.
+    // release fires when no slot of the family is set and one was before. Both are the
+    // hand-written conditions over the bag, but the release is the write's else branch, so a
+    // resolver must hand back null for a family the bag no longer sets (issue #1749).
     private static void EmitComposite(StringBuilder sb, GeneratedComposite composite)
     {
         var family = ModifierSchema.Slots.Where(s => s.CompositeFamily == composite.Family).Select(s => s.Name).ToList();
+        if (family.Count == 0)
+            throw new InvalidOperationException($"Composite {composite.Family}: no schema slot declares CompositeFamily \"{composite.Family}\". Known families: "
+                + string.Join(", ", ModifierSchema.Slots.Select(s => s.CompositeFamily).OfType<string>().Distinct()) + ".");
         string[] declared = [composite.Physical, .. composite.Inline];
         if (!family.SequenceEqual(declared, StringComparer.Ordinal))
             throw new InvalidOperationException($"Composite {composite.Family}: declare the physical slot, then its inline slots, as the schema orders them: [{string.Join(", ", family)}].");
@@ -267,8 +271,7 @@ internal static class ModifierEmitter
         foreach (var x in composite.Inline) sb.Append(" || m.").Append(x).Append(" != oldM?.").Append(x);
         sb.Append(" || overlayStale))\n");
         AppendChain(sb, "        ", chain, composite.ChainNames, (r, v) => $"{v}.{r.Property} = resolved.Value");
-        sb.Append("        // Released through ClearValue, never a zero local, so the styled value shows again (#952). The\n");
-        sb.Append("        // bag decides, not resolved: a resolver can fall back to the previous value for its overlay base.\n");
+        sb.Append("        // Released through ClearValue, never a zero local, so the styled value shows again (#952).\n");
         sb.Append("        else if (").Append(string.Join(" && ", declared.Select(x => $"!m.{x}.HasValue")))
             .Append("\n            && (").Append(string.Join(" || ", declared.Select(x => $"oldM?.{x}.HasValue == true"))).Append("))\n");
         AppendChain(sb, "        ", chain, composite.ChainNames, (r, v) => Clear(r, r.Type, v));

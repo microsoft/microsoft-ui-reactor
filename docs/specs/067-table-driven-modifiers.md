@@ -950,7 +950,10 @@ in `ModifierEmitter.GeneratedComposites` and gets an `ApplyResolved<X>Modifier` 
 resolver calls with the resolved value and whether the previous overlay wrote something else, and
 a `Read<X>` reader. The write fires when the resolved value differs from the previous physical
 value, an inline slot changed, or the overlay is stale; the release fires when no slot of the
-family is set and one was. Those are the hand-written conditions, rewritten over the bag.
+family is set and one was, and the write didn't fire. Those are the hand-written conditions,
+rewritten over the bag. Because the release is the write's else branch, a resolver must not hand
+back a value for a family the bag no longer sets; the Padding resolver does when an inline edge is
+dropped with the physical padding, a bug fixed separately (issue #1749).
 `ModifierApplyOrderTests` dedupes a nested helper's reads against its caller's, so the generated
 helper doesn't repeat the resolver's fields in the frozen order. 4a generates `Padding`. `Margin`
 has the single `FrameworkElement` receiver, so it has no receiver list to move.

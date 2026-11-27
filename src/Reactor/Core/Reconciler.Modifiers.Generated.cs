@@ -224,8 +224,7 @@ public sealed partial class Reconciler
             else if (fe is WinUI.RelativePanel padRelative) padRelative.Padding = resolved.Value;
             else if (fe is WinUI.TextBlock padTb) padTb.Padding = resolved.Value;
         }
-        // Released through ClearValue, never a zero local, so the styled value shows again (#952). The
-        // bag decides, not resolved: a resolver can fall back to the previous value for its overlay base.
+        // Released through ClearValue, never a zero local, so the styled value shows again (#952).
         else if (!m.Padding.HasValue && !m.PaddingInlineStart.HasValue && !m.PaddingInlineEnd.HasValue
             && (oldM?.Padding.HasValue == true || oldM?.PaddingInlineStart.HasValue == true || oldM?.PaddingInlineEnd.HasValue == true))
         {

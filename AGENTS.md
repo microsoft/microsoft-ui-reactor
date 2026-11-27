@@ -347,7 +347,7 @@ point of return: stop and ship.
   gates scan it; since spec 067 layer 3e every row A–D arm is generated into
   `Reconciler.Modifiers.Generated.cs` instead: put the slot inside the `First`..`Last` range of a
   `ModifierEmitter.GeneratedHelpers` entry, or add an entry and its call, and a converted field
-  gets its `ModifierConverters` method; only hand-coded and composite arms stay hand-written), and the fluent extension. Pair a `.HasValue` write
+  gets its `ModifierConverters` method; hand-coded arms and the composite families' BiDi resolvers stay hand-written, and a composite family in `ModifierEmitter.GeneratedComposites` gets its receiver write, release and reader generated, so a new receiver needs a `ChainNames` entry there), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
   Declare the field in `ModifierSchema.Slots` (`src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`)
   at its apply position, with its bucket, receivers, skip-gate comparison and analyzer gates.
