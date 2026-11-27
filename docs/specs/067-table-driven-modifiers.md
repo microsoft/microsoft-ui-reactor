@@ -596,7 +596,7 @@ remaining-owner semantics would be a behaviour change.
 The `ThemeRef` overloads of `Background`, `Foreground` and `BorderBrush` go through
 `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568-580`), not `ApplyModifiers`, and
 their reach differs: `Foreground` reaches `RichTextBlock` on the theme path but not on the plain
-brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305`). In the
+brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`). Since #1687 the plain write and the `ThemeRef` path share `ForegroundModifier.GetProperty` and reach the same receivers, so no slot has a separate theme gate today; `ModifierTable.ThemeGate` still derives one from `Theme`-role receivers if they ever differ. In the
 schema that is a receiver row with the `Theme` role but not the `Apply` role, so it never widens
 the plain write, and layer 2 generates `GetDependencyPropertyName`'s modifier rows from the
 `Theme`-role rows. The pool reach is a third, separate set (`RichTextBlock.Foreground` is cleared
@@ -673,7 +673,7 @@ m.Layout)` skips the whole layout block), passing the already computed skip-gate
   §10.1), which already suppresses trim warnings, and in the generator tool, which never ships.
 - The analyzer only gains a data file. No `netstandard2.0` restriction is touched: no
   `FrozenDictionary`, no newer BCL APIs. The analyzer already compiles collection expressions
-  (`ModifierTable.cs:304-305`), so the shared file can use the same syntax.
+  (`ModifierTable.cs:304-305` at `4df0f6feb`), so the shared file can use the same syntax. Layer 1's `ModifierSchema.cs` uses plain array initializers.
 - Headless tests cannot touch WinUI objects, and reading `FrameworkElement.MarginProperty`
   activates a WinUI factory. The schema therefore names DPs as strings, never as
   `DependencyProperty` values, so it is constructible in every consumer. Only the generated code
@@ -844,6 +844,15 @@ guard, #1719 fixed §14, and the contract tests are `ModifierFieldContractTests`
 merge, two-way skip equality, NaN per bucket), `ModifierApplyOrderTests` (frozen arm order for
 `ApplyModifiers` and `ApplyAccessibilityModifiers`, plus the §5 constraints) and the
 `ModifierFieldContract_BrushAndFont` selftest for the fields that can't run headless.
+
+Layer 1 is split in two PRs. The first adds `ModifierSchema` (`src/Reactor.Analyzers/Modifiers/`),
+moves the analyzer's common-modifier gates, `GateOnlyInReconciler` and poolable mirror onto it
+(`ModifierTableParitySnapshotTests` pins every `ModifierInfo` from before the move), points
+`ModifierFieldContractTests` and the `ControlGate` drift test at it, and adds
+`ModifierSchemaTests` (receivers and DPs exist and match `ApplyModifiers` and the `ThemeRef`
+path, slot order matches the frozen apply order, composition flags, fluent names).
+`ModifierGateSource` reads gate arguments from both files. The second adds
+`tools/Reactor.ModifierGen`, the typed probe table and the §10.2 matrix selftest.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
