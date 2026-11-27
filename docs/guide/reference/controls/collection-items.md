@@ -106,7 +106,7 @@ Namespace: `Microsoft.UI.Reactor.Core`.
 ## `TreeViewNodeData`
 
 ```csharp
-public record TreeViewNodeData(string Content, TreeViewNodeData[]? Children = null) : IBindableCustomPropertyImplementation
+public record TreeViewNodeData(string Content, TreeViewNodeData[]? Children = null)
 ```
 
 Namespace: `Microsoft.UI.Reactor.Core`.
