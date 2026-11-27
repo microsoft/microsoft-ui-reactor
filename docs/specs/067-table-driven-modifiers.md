@@ -902,13 +902,21 @@ itself and its call sequence stay hand-written (this replaces §4.3's plan to ge
 sites). A helper names its slots as an explicit `First`..`Last` range of `ModifierSchema.Slots`,
 because families are labels that cross helpers (`IsEnabled` and `ElementSoundMode` are both
 control state but live in different helpers). 3a generates `ApplySizeAndAlignmentModifiers`
-(sizing, alignment and the content alignments, which share that helper today). The emitter writes
-today's shapes only: an ungated value-typed set/unset pair, and a declared `SharedGate` run of slots
-gated on one receiver type inside one `if (fe is T x)` block. Attached, reference-typed, converted,
-chained and inline-gated arms (`IsEnabled`'s `… && fe is Control c` form) throw until the family that
-needs them adds the shape. The generated method is token-identical to the hand-written one it
-replaced. For generated helpers the source gates read generated code, so the independent oracle is
-the frozen §10.2 matrix.
+(sizing, alignment and the content alignments, which share that helper today). 3a emitted only an
+ungated value-typed set/unset pair and a declared `SharedGate` run of slots gated on one receiver
+type inside one `if (fe is T x)` block, and the generated method was token-identical to the
+hand-written one it replaced. For generated helpers the source gates read generated code, so the
+independent oracle is the frozen §10.2 matrix. 3b generates `ApplyAutomationAndFocusModifiers`,
+which adds three declared shapes: attached setters (`AutomationProperties.SetName`,
+`TitleBar.SetIsDragRegion`), value-compared `string` arms, and `InlineGates` (`ElementSoundMode`,
+`TabIndex`: `… && fe is WinUI.Control x`, with the reset re-testing the type under its own variable,
+issue #986). `IsEnabled`'s inline-gated form is expressible the same way and is generated in 3d.
+Converted slots, receiver chains and reference-compared (`WriteEquality.Reference`) fields still
+throw until the family that needs them adds the shape. Every arm is laid out on two lines with a
+blank line between arms, so 3b re-lays out 3a's one-line arms (whitespace only). 3b's output is
+token-identical to the removed method once comments are ignored; the emitter writes one fixed #986
+comment above each inline-gated arm in place of the hand-written prose. `InlineGates` declares the
+pattern-variable names, instead of deriving them, to keep that token identity as a review aid.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run

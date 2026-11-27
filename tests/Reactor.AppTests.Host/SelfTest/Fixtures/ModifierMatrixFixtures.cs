@@ -21,7 +21,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// set, change, unset releases the local value, a style-provided value shows again after unset, what
 /// <c>CleanElement</c> leaves on the carrier in the pool, and that a bare renter of the same instance
 /// does not get the previous value. <c>ModifierMatrix_Negatives</c> checks gated slots on
-/// a control that declares the DP but is not a receiver.
+/// a control that declares the DP but is not a receiver, both on mount and when the modifier is
+/// dropped from a carrier that holds its own value.
 /// </summary>
 /// <remarks>
 /// The typed probes come from the schema (<c>ModifierProbes.Generated.cs</c>), the expectations do
@@ -188,17 +189,36 @@ internal static class ModifierMatrixFixtures
                     !ModifierProbes.All.Any(p => p.Slot == n.Slot && p.ReceiverType.IsAssignableFrom(CarrierType(n.Carrier))));
 
                 FrameworkElement? mounted = null;
+                Action<int>? setPhase = null;
                 // Width rides along as the positive control: it reaches every FrameworkElement, so a
                 // carrier that ignored modifiers entirely could not pass the negative vacuously.
-                var mods = probe.With(new ElementModifiers { Width = 123, OnMountAction = fe => mounted = fe }, SampleValues(n.Slot).V1);
+                var v1 = SampleValues(n.Slot).V1;
+                var mods = probe.With(new ElementModifiers { Width = 123, OnMountAction = fe => mounted = fe }, v1);
+                var dropped = new ElementModifiers { Width = 124, OnMountAction = fe => mounted = fe };
                 using var host = H.CreateHost();
-                host.Mount(_ => VStack(Carrier(n.Carrier) with { Modifiers = mods }));
+                host.Mount(ctx =>
+                {
+                    var (phase, set) = ctx.UseState(0);
+                    setPhase = set;
+                    return VStack(Carrier(n.Carrier) with { Modifiers = phase == 0 ? mods : dropped });
+                });
                 await Harness.Render();
                 H.Check(id + "_Mounted", mounted is not null && CarrierType(n.Carrier).IsInstanceOfType(mounted));
                 H.Check(id + "_ModifiersReachCarrier", Equals(mounted?.ReadLocalValue(FrameworkElement.WidthProperty), 123.0),
                     Describe(mounted?.ReadLocalValue(FrameworkElement.WidthProperty)));
                 H.Check(id + "_NoLocalValue", mounted?.ReadLocalValue(dp) == DependencyProperty.UnsetValue,
                     Describe(mounted?.ReadLocalValue(dp)));
+                if (mounted is null) continue;
+
+                // Dropping the modifier must not release a value the carrier holds on its own: the
+                // reset arm is gated on the receiver type too (issue #986).
+                var own = ToDp(probe, v1);
+                mounted.SetValue(dp, own);
+                setPhase!(1);
+                await Harness.Render();
+                H.Check(id + "_DropReachesCarrier", Equals(mounted.ReadLocalValue(FrameworkElement.WidthProperty), 124.0),
+                    Describe(mounted.ReadLocalValue(FrameworkElement.WidthProperty)));
+                H.Check(id + "_DropKeepsOwnValue", Same(mounted.ReadLocalValue(dp), own), Describe(mounted.ReadLocalValue(dp)));
             }
         }
 
