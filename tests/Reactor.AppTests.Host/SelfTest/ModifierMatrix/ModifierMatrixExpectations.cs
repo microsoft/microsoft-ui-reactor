@@ -9,7 +9,7 @@ internal enum MatrixPool
     ClearValue,
     /// <summary>A default is written back as a local value (<c>TextBlock.FontSize = 14</c>).</summary>
     WriteDefault,
-    /// <summary>The previous renter's value survives. A known gap pinned on purpose (#1717), not endorsed.</summary>
+    /// <summary>The previous renter's value survives. A gap to pin on purpose, never endorse; none today (RequestedTheme was one until #1717).</summary>
     NotReset,
 }
 
@@ -39,7 +39,7 @@ internal static class ModifierMatrixExpectations
     internal static readonly MatrixCase[] Cases =
     [
         // ── Layout: FrameworkElement receivers, carried by a TextBlock ──
-        new("Layout", "RequestedTheme", "FrameworkElement", "TextBlock", "FrameworkElement.RequestedThemeProperty", MatrixPool.NotReset),
+        new("Layout", "RequestedTheme", "FrameworkElement", "TextBlock", "FrameworkElement.RequestedThemeProperty", MatrixPool.ClearValue),
         new("Layout", "Width", "FrameworkElement", "TextBlock", "FrameworkElement.WidthProperty", MatrixPool.ClearValue),
         new("Layout", "Height", "FrameworkElement", "TextBlock", "FrameworkElement.HeightProperty", MatrixPool.ClearValue),
         new("Layout", "MinWidth", "FrameworkElement", "TextBlock", "FrameworkElement.MinWidthProperty", MatrixPool.ClearValue),
