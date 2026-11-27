@@ -177,8 +177,12 @@ previous component's captured closure into the next mount.
 
 **The pool is opt-in by type.** Adding a custom control to the pool
 means adding it to `ElementPool.PoolableTypes` *and* extending
-`CleanElement` with a switch arm that resets every property the
-control might have carried. Skipping the second step leaks state.
+`CleanElement` with a switch arm that resets the control's own content
+and state. The common modifiers' properties are reset by helpers
+generated from the modifier schema, so a receiver type the schema
+declares `NotReset` because it was never pooled needs its declaration
+changed and `tools/Reactor.ModifierGen` re-run. Skipping either step
+leaks state.
 
 **Compositor features pool too.** A list item with `.Animate()`,
 `.Transition()` or `.LayoutAnimation()` returns to the visual lane and

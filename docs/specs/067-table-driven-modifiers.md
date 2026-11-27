@@ -981,12 +981,40 @@ non-Button pooled types today. A headless fact pins that gap until issue #1753 a
 the hand-written `CleanElement`. That change gives the slot a receiver and its expectations row, so
 layer 5b generates the reset with no behaviour change.
 
+Layer 5b generates the reset. `ModifierEmitter.EmitElementPool` writes one helper per
+`ModifierEmitter.PoolResetPhases` entry into `ElementPool.Generated.cs`, and `ElementPool` is now
+`partial`. Every declared receiver that isn't `NotReset` must be placed in exactly one phase, so the
+generator fails on a new receiver until it is placed. A run of resets on one receiver type shares an
+`if (fe is T poolT)` block, a `FrameworkElement` receiver is reset on the element through the DP's
+declaring type, and a DP several slots write (a physical slot and its BiDi edges) is reset once.
+`CleanElement` calls each helper where its resets used to be hand-written: `ResetLayoutModifiers`
+before the visual reset, `ResetThemeAndFlyoutModifiers` after the `FlowDirection` clear,
+`ResetStateModifiers` after the themed `Style` clear, and three small helpers inside the TextBlock
+and RichTextBlock arms. Each phase keeps the hand-written order too. The review cross-check pointed
+out why that matters: a reset can make the control write another DP through a property-changed
+callback (the case `ForegroundAppliedAfterBackgroundCallback` pins for the apply path), so clearing
+`Foreground` before the old Style is removed, or `IsEnabled` before `Background`, could leave the
+callback's write on the next renter. `Pool_Resets_Keep_The_Hand_Written_Order` checks the scanned
+order against `PoolResetExpectations`, which lists the resets in the hand-written order, plus
+anchors against the hand-written steps between the phases. What stays hand-written resets things
+no common modifier writes: `Tag`, the facades and `RenderTransform`, `FlowDirection`, `Clip`, the
+themed `Style`, the `FlexPanel` attached properties, the transitions, and each type's content and
+state. `CleanElementScan` splices each helper's body in right after its call, and fails unless
+`CleanElement` calls each helper exactly once as a statement, so every `CleanElementScan` consumer
+keeps running unchanged. `Every_Declared_Pool_Reset_Matches_CleanElement` now requires exactly one
+reset per declared (receiver, DP), so a hand-written duplicate of a generated reset fails. The
+TextBlock `FontSize` reset stays `= 14`, not a clear. A `TextBlockElement` renter clears it at mount
+anyway (#522), but another TextBlock renter whose mount doesn't clear it would otherwise inherit an
+ancestor's size, so changing it is a behaviour change for another PR. Generating `PoolableTypes`
+from the schema list, which deletes `Analyzer_Poolable_Type_Mirror_Matches_ElementPool`, is a
+separate step, and the full `AGENTS.md` field-note rewrite and the guide note below land with it.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short
 "common modifiers" note at the same time, edited in its `docs/_pipeline/templates` source. 3e
 updates the field note's apply-arm part only (rows A–D are generated; place the slot in a
-`GeneratedHelpers` range). The full rewrite and the guide note wait for layer 5, because the pool
+`GeneratedHelpers` range). The full rewrite and the guide note wait for the end of layer 5, because the pool
 reset in `CleanElement` is still hand-written until then and the short recipe would leave it out.
 
 **Stop points.** Layers 0 and 1 are worth landing even if nothing after them does: layer 0 closes

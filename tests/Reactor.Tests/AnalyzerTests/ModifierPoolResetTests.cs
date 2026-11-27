@@ -68,8 +68,10 @@ public class ModifierPoolResetTests
                 .ToList();
             var ok = receiver.Pool switch
             {
-                PoolReset.ClearValue => resets.Any(r => r.Shape == ResetShape.ClearValue),
-                PoolReset.WriteDefault => resets.Any(r => r.Shape == ResetShape.Assignment && r.Value == receiver.PoolDefault),
+                // Exactly one: a second, hand-written reset of a generated one could undo it (a clear after
+                // the FontSize write-back).
+                PoolReset.ClearValue => resets is [{ Shape: ResetShape.ClearValue }],
+                PoolReset.WriteDefault => resets is [{ Shape: ResetShape.Assignment }] && resets[0].Value == receiver.PoolDefault,
                 PoolReset.NotReset => resets.Count == 0,
                 _ => false,
             };
@@ -80,6 +82,44 @@ public class ModifierPoolResetTests
         }
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }
+
+    [Fact]
+    public void Pool_Resets_Keep_The_Hand_Written_Order()
+    {
+        // PoolResetExpectations lists the resets in the order the hand-written CleanElement made them.
+        // A reset can make the control write another DP (a property-changed callback, see
+        // ForegroundAppliedAfterBackgroundCallback), so the generated helpers keep that order, and each
+        // still runs between the same hand-written steps.
+        var expected = PoolResetExpectations.Resets.Select(r => r.Reset).ToList();
+        var scanned = CleanElementScan.Resets.Select(ScanKey).ToList();
+        Assert.Equal(expected, scanned.Where(expected.Contains).Distinct().ToList());
+
+        var anchors = new (string Before, string After)[]
+        {
+            ("FrameworkElement.Visibility", "FrameworkElement.RenderTransform"),
+            ("FrameworkElement.FlowDirection", "FrameworkElement.RequestedTheme"),
+            ("FrameworkElement.ContextFlyout", "FrameworkElement.Clip"),
+            ("FrameworkElement.Style", "FrameworkElement.AutomationProperties.Name"),
+            ("FrameworkElement.AccessKey", "FrameworkElement.FlexPanel.Grow"),
+            ("TextBlock.Text", "TextBlock.FontSize"),
+            ("TextBlock.FontWeight", "TextBlock.FontStyle"),
+            ("TextBlock.IsTextSelectionEnabled", "TextBlock.FontFamily"),
+            ("RichTextBlock.Blocks", "RichTextBlock.Foreground"),
+        };
+        foreach (var (before, after) in anchors)
+        {
+            var b = scanned.IndexOf(before);
+            var a = scanned.IndexOf(after);
+            Assert.True(b >= 0 && a >= 0 && b < a,
+                $"CleanElement must reset {before} (at {b}) before {after} (at {a}), as the hand-written method did.");
+        }
+    }
+
+    // A scanned reset in PoolResetExpectations' key form.
+    private static string ScanKey(CleanElementReset reset) =>
+        reset.Receiver + "."
+        + (reset.Owner is { } owner && owner != reset.Receiver && owner is not ("FrameworkElement" or "UIElement") ? owner + "." : "")
+        + reset.Property;
 
     [Fact]
     public void Not_Reset_Means_Never_Pooled_And_A_Reset_Reaches_A_Pooled_Type()

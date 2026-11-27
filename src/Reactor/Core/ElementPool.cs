@@ -17,7 +17,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// facade transforms and the XAML implicit transitions, so only an element that takes the
 /// visual itself and has no setters rents from it.
 /// </remarks>
-public sealed class ElementPool : IDisposable
+public sealed partial class ElementPool : IDisposable
 {
     /// <summary>
     /// Records that the element's composition visual was handed out. The marker lives on the
@@ -293,22 +293,16 @@ public sealed class ElementPool : IDisposable
         // overrides only for an element that declares some, so without this a renter that
         // declares none would inherit them. Keys set outside Reactor are left alone.
         ThemeBindingApplier.RemoveManagedResourceKeys(fe);
-        // Reset via ClearValue, not by assigning the DP default: a local value outranks
-        // every Style setter, so writing e.g. HorizontalAlignment.Stretch would hand the
-        // next renter a control that can never show its default style's alignment
-        // (issue #952). ClearValue is what makes a recycled control indistinguishable
-        // from a freshly-constructed one, which is the pool's whole contract.
-        fe.ClearValue(FrameworkElement.MarginProperty);
-        fe.ClearValue(FrameworkElement.WidthProperty);
-        fe.ClearValue(FrameworkElement.HeightProperty);
-        fe.ClearValue(FrameworkElement.MinWidthProperty);
-        fe.ClearValue(FrameworkElement.MinHeightProperty);
-        fe.ClearValue(FrameworkElement.MaxWidthProperty);
-        fe.ClearValue(FrameworkElement.MaxHeightProperty);
-        fe.ClearValue(FrameworkElement.HorizontalAlignmentProperty);
-        fe.ClearValue(FrameworkElement.VerticalAlignmentProperty);
-        fe.ClearValue(UIElement.OpacityProperty);
-        fe.ClearValue(UIElement.VisibilityProperty);
+        // Spec 067 layer 5: every DP a common modifier writes on a pooled type is reset by the
+        // Reset*Modifiers helpers generated into ElementPool.Generated.cs from each receiver's pool
+        // declaration in the modifier schema. ApplyModifiers releases a modifier only on a set → unset
+        // transition, and Mount runs it with no old modifiers, so without them a renter that declares
+        // none would keep the previous renter's local value, which outranks every Style setter.
+        // The resets are ClearValue, not writes of the DP default, so the next renter sees its default
+        // style again (#952). IsTabStop is reset on the element, not under a Control narrowing, since
+        // ApplyModifiers writes it ungated (`fe.IsTabStop = …`, #162, #985). Each helper is called where
+        // its resets used to be hand-written, so their order against the steps here is unchanged.
+        ResetLayoutModifiers(fe);
         // Spec 066 §7.3: a control whose visual was taken goes to the visual lane, reset to a
         // fresh control's pixels. Its Rotation, Scale, CenterPoint, RotationAxis and
         // TransformMatrix facades refuse every write, even identity, so they are skipped below.
@@ -342,14 +336,7 @@ public sealed class ElementPool : IDisposable
         // the clear throws and Return drops the control.
         fe.ClearValue(FrameworkElement.RenderTransformProperty);
         fe.ClearValue(FrameworkElement.FlowDirectionProperty);
-        // Issue #1717: .RequestedTheme(...) writes this, and ApplyModifiers clears it only on a
-        // set → unset transition. Mount runs ApplyModifiers(fe, null, m), so a renter that
-        // declares no RequestedTheme would otherwise render its subtree in the previous renter's
-        // theme.
-        fe.ClearValue(FrameworkElement.RequestedThemeProperty);
-        // A context flyout is a live object graph owned by the previous renter's component.
-        // Without this, right-clicking a recycled control shows the *previous* element's menu.
-        fe.ClearValue(UIElement.ContextFlyoutProperty);
+        ResetThemeAndFlyoutModifiers(fe);
         // Issue #1662: only user code writes Clip, and no renter's mount writes it back, so a
         // .Set(c => c.Clip = …) would otherwise clip the next renter too, in either lane.
         fe.ClearValue(UIElement.ClipProperty);
@@ -367,173 +354,7 @@ public sealed class ElementPool : IDisposable
         ThemeBindingApplier.ClearThemeBindings(fe);
         if (fe.Style is not null)
             fe.ClearValue(FrameworkElement.StyleProperty);
-
-        // Clear accessibility / automation properties so pooled controls don't
-        // carry stale UIA state (Name, LabeledBy, LiveSetting, etc.) into reuse.
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.AutomationIdProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HelpTextProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FullDescriptionProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LandmarkTypeProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.AccessibilityViewProperty);
-        // Issue #162: chart label/tick subtree-hiding (and any other code path) sets
-        // IsHitTestVisible / IsTabStop imperatively on poolable controls. The pool already
-        // resets AccessibilityView above; it must also reset these two so a control hidden
-        // inside a custom label can't return to the pool non-tabbable / non-hit-testable and
-        // silently poison the next unrelated renter that doesn't re-set them.
-        //
-        // Both are cleared on `fe`, not under an `is Control` narrowing. WinUI 3 declares
-        // IsTabStop on UIElement and ApplyModifiers writes it ungated (`fe.IsTabStop = …`),
-        // so `.IsTabStop(false)` reaches every element — including the poolable non-Controls
-        // TextBlock, RichTextBlock, Grid, StackPanel, Border, Canvas, Viewbox and Image.
-        // Clearing it only for Control left every one of those able to carry a stale tab stop
-        // into its next renter, which is the #985 shape; the narrower Control.IsTabStopProperty
-        // also names the same underlying DP, so this is a widening, not a retarget.
-        fe.ClearValue(UIElement.IsHitTestVisibleProperty);
-        fe.ClearValue(UIElement.IsTabStopProperty);
-        // Issue #1662: .XYFocusKeyboardNavigation(...) and .TabNavigation(...) write these on any
-        // element, and ApplyModifiers clears them only on a set → unset transition.
-        fe.ClearValue(UIElement.XYFocusKeyboardNavigationProperty);
-        fe.ClearValue(UIElement.TabFocusNavigationProperty);
-
-        // Issue #985: six common modifiers are written by ApplyModifiers onto receivers
-        // this method never reset, so a pooled control handed its previous renter's local
-        // Padding / CornerRadius / BorderThickness / BorderBrush / Background / IsEnabled
-        // to the next one — and a local value outranks every Style setter (same precedence
-        // trap as #952, but caused by a *missing* reset rather than a wrong-shaped one).
-        //
-        // These live here, in the FE-common region, rather than in the type-specific arms
-        // below because that is where they belong: the chain mirrors ApplyModifiers' own
-        // receiver dispatch, so one clear covers every receiver the modifier can be written
-        // to. It is no longer a workaround. Until issue #1193 the consistency invariants
-        // stopped scanning at the type dispatch, so a clear placed after it was invisible to
-        // them and ModifierTable could keep claiming the property was not pool-reset — which
-        // is why #985 and #950 moved clears up here in the first place. CleanElementScan now
-        // reads the whole method and attributes each reset to its receiver, so placement is
-        // free again and a type-specific property can be cleared in its own arm.
-        //
-        // The chain mirrors ApplyModifiers' receiver types for the receivers that are actually
-        // pooled (Reconciler.cs): Padding → Control | Border | Grid | StackPanel | TextBlock,
-        // CornerRadius / BorderBrush / BorderThickness → Control | Border | Grid | StackPanel,
-        // Background → Panel | Control | Border, IsEnabled → Control.
-        // Both content-alignment properties also belong to Control (#1013). Issue #1662 adds the
-        // rest of what ApplyModifiers writes to these receivers: Foreground → Control | TextBlock,
-        // and FontFamily / FontSize / FontWeight / TabIndex / ElementSoundMode → Control (the
-        // TextBlock fonts are reset in its case arm below). ApplyModifiers writes none of them when
-        // neither the old nor the new modifiers set them, so a renter that declares none kept the
-        // previous renter's values.
-        // These border-box modifier gates also admit RelativePanel, which gets no clear
-        // here because RelativePanel is not in PoolableTypes — it is never returned to the
-        // pool, so there is no local value for a later renter to inherit. Canvas is the
-        // opposite case and is covered: it is poolable, and the only gate that admits it is
-        // Background, which the Panel arm clears for every Panel.
-        //
-        // Two claims live here and only the first is structural. Dispatch: Control, Border,
-        // Panel and TextBlock are pairwise disjoint, so `else if` selects exactly one arm —
-        // true regardless of what the gates say. Coverage is not: each arm clears a
-        // per-property allow-list, and the Panel arm clears Background for every Panel but
-        // Padding and CornerRadius only for Grid and StackPanel, because Panel itself
-        // declares neither. Any other poolable Panel subclass added to one of those gates
-        // lands in this arm and gets no clear — the disjointness sentence stays true while
-        // the guarantee it implies quietly narrows. Widening a gate obliges you to widen the
-        // arm, and that is not hypothetical: #1003 widened Padding/CornerRadius to the
-        // concrete panels and this arm had to grow with it in the same merge.
-        // Two tests in ModifierUnsetClearValueTests now make that reminder mechanical rather
-        // than a matter of vigilance, and each was measured firing alone: widening a
-        // poolResetGate the pool does not honour trips
-        // Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection, and widening controlGate
-        // and poolResetGate together without growing this arm trips
-        // Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement. Both range over
-        // gate ∩ PoolableTypes — the reachable subset of #1017, which remains open for the
-        // non-poolable receivers a gate may also admit.
-        if (fe is Control resetControl)
-        {
-            resetControl.ClearValue(Control.PaddingProperty);
-            resetControl.ClearValue(Control.CornerRadiusProperty);
-            resetControl.ClearValue(Control.BorderThicknessProperty);
-            resetControl.ClearValue(Control.BorderBrushProperty);
-            resetControl.ClearValue(Control.BackgroundProperty);
-            resetControl.ClearValue(Control.IsEnabledProperty);
-            resetControl.ClearValue(Control.HorizontalContentAlignmentProperty);
-            resetControl.ClearValue(Control.VerticalContentAlignmentProperty);
-            resetControl.ClearValue(Control.ForegroundProperty);
-            resetControl.ClearValue(Control.FontFamilyProperty);
-            resetControl.ClearValue(Control.FontSizeProperty);
-            resetControl.ClearValue(Control.FontWeightProperty);
-            resetControl.ClearValue(Control.TabIndexProperty);
-            resetControl.ClearValue(Control.ElementSoundModeProperty);
-        }
-        else if (fe is WinUI.Border resetBorder)
-        {
-            resetBorder.ClearValue(WinUI.Border.PaddingProperty);
-            resetBorder.ClearValue(WinUI.Border.CornerRadiusProperty);
-            resetBorder.ClearValue(WinUI.Border.BorderThicknessProperty);
-            resetBorder.ClearValue(WinUI.Border.BorderBrushProperty);
-            resetBorder.ClearValue(WinUI.Border.BackgroundProperty);
-        }
-        else if (fe is WinUI.Panel resetPanel)
-        {
-            // Panel itself declares only Background; Padding and CornerRadius are declared by
-            // the concrete panel types, so they nest under this arm instead of forming a
-            // second receiver chain lower down. Both forms run and both sit above the type
-            // dispatch, but one chain keeps the receiver gating in a single place and avoids
-            // declaring resetStack twice in two scopes that must be kept in agreement.
-            resetPanel.ClearValue(WinUI.Panel.BackgroundProperty);
-            if (resetPanel is WinUI.Grid resetGrid)
-            {
-                resetGrid.ClearValue(WinUI.Grid.PaddingProperty);
-                resetGrid.ClearValue(WinUI.Grid.CornerRadiusProperty);
-                resetGrid.ClearValue(WinUI.Grid.BorderThicknessProperty);
-                resetGrid.ClearValue(WinUI.Grid.BorderBrushProperty);
-            }
-            else if (resetPanel is WinUI.StackPanel resetStack)
-            {
-                resetStack.ClearValue(WinUI.StackPanel.PaddingProperty);
-                resetStack.ClearValue(WinUI.StackPanel.CornerRadiusProperty);
-                resetStack.ClearValue(WinUI.StackPanel.BorderThicknessProperty);
-                resetStack.ClearValue(WinUI.StackPanel.BorderBrushProperty);
-            }
-        }
-        else if (fe is TextBlock resetText)
-        {
-            // TextBlock's padding reset predates #985 (it arrived with #950) but lived in
-            // the case arm below, where no scanner could reach it — so ModifierTable's claim
-            // that Padding is pool-reset on TextBlock was the one receiver in the gate that
-            // nothing verified. Deleting the line used to break no test. Now it does, and
-            // since #1193 it would be verified in the case arm too.
-            resetText.ClearValue(TextBlock.PaddingProperty);
-            resetText.ClearValue(TextBlock.ForegroundProperty);
-        }
-
-        // spec 059: clear the TitleBar.IsDragRegion attached prop so a pooled
-        // control marked .IsDragRegion(...) can't poison the next renter.
-        fe.ClearValue(WinUI.TitleBar.IsDragRegionProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.IsRequiredForFormProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LiveSettingProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.PositionInSetProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.SizeOfSetProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LevelProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.ItemStatusProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LabeledByProperty);
-        // Spec 057 CR-002: also clear the relationship-list automation properties so a
-        // pooled control doesn't carry stale DescribedBy/FlowsTo/FlowsFrom targets, and
-        // drop any XYFocus navigation references for the same reason.
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.DescribedByProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FlowsToProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FlowsFromProperty);
-        fe.ClearValue(FrameworkElement.XYFocusUpProperty);
-        fe.ClearValue(FrameworkElement.XYFocusDownProperty);
-        fe.ClearValue(FrameworkElement.XYFocusLeftProperty);
-        fe.ClearValue(FrameworkElement.XYFocusRightProperty);
-        // Same reasoning for the ToolTipService attached properties: the in-place
-        // Update path clears them on a set → unset transition, but a full unmount
-        // does not, so a pooled control would carry a stale tooltip (and its
-        // placement / placement target) into the next unrelated renter.
-        fe.ClearValue(WinUI.ToolTipService.ToolTipProperty);
-        fe.ClearValue(WinUI.ToolTipService.PlacementProperty);
-        fe.ClearValue(WinUI.ToolTipService.PlacementTargetProperty);
-        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HeadingLevelProperty);
-        fe.ClearValue(UIElement.AccessKeyProperty);
+        ResetStateModifiers(fe);
 
         // Clear flex attached properties so pooled controls don't carry stale
         // Grow/Shrink/Basis values into their next parent FlexPanel.
@@ -575,8 +396,7 @@ public sealed class ElementPool : IDisposable
                 break;
             case WinUI.Border border:
                 border.Child = null;
-                // Border's five modifier-backed DPs are cleared in the FE-common block
-                // above (issue #985) so the consistency scan can see them.
+                // Border's modifier-backed DPs are reset by ResetStateModifiers above.
                 break;
             case WinUI.ScrollViewer sv:
                 sv.Content = null;
@@ -589,38 +409,20 @@ public sealed class ElementPool : IDisposable
                 break;
             case TextBlock tb:
                 tb.Text = "";
-                // Deliberately NOT ClearValue, unlike the arms above: TextBlock.FontSize
-                // participates in property inheritance, so clearing it lets a recycled
-                // TextBlock pick up an ancestor's font size instead of the WinUI default
-                // and silently re-flow text. Whether the pool should adopt inheritance
-                // here is a real question, but it is a rendering change independent of
-                // issue #952 (FontSize's ApplyModifiers unset arm already clears), so it
-                // is left for its own change.
-                //
-                // These nine were invisible to the pool/analyzer consistency invariants until
-                // issue #1193 widened CleanElementScan past this dispatch — they are declared on
-                // TextBlock alone, so unlike Padding below they could not be relocated into the
-                // FE-common chain to be seen. Each now has a ModifierTable row, and the scan
-                // attributes them to TextBlock rather than to FrameworkElement, which is what
-                // keeps the same write on a RichTextBlock from inheriting a claim about an arm
-                // that only clears Blocks.
-                tb.FontSize = 14; // WinUI default
-                tb.ClearValue(TextBlock.FontWeightProperty);
+                // FontSize gets the WinUI default written back rather than cleared: it inherits, so a
+                // clear would let a recycled TextBlock pick up an ancestor's size and re-flow its text.
+                ResetTextBlockSizeAndWeight(fe);
                 tb.ClearValue(TextBlock.FontStyleProperty);
                 tb.ClearValue(TextBlock.TextWrappingProperty);
                 tb.ClearValue(TextBlock.TextAlignmentProperty);
                 tb.ClearValue(TextBlock.TextTrimmingProperty);
                 tb.ClearValue(TextBlock.IsTextSelectionEnabledProperty);
-                tb.ClearValue(TextBlock.FontFamilyProperty);
-                // Padding moved to the FE-common chain above (issue #985) so the pool ⇄
-                // analyzer consistency scan can see it — ModifierTable's Padding row names
-                // TextBlock in its control gate, and a clear the scan cannot reach is a
-                // claim nothing verifies.
+                ResetTextBlockFontFamily(fe);
                 break;
             case WinUI.RichTextBlock rtb:
                 Reconciler.CancelInlineUiExtentPin(rtb);
                 rtb.Blocks.Clear();
-                rtb.ClearValue(WinUI.RichTextBlock.ForegroundProperty);
+                ResetRichTextBlockForeground(fe);
                 break;
             case WinUI.ProgressBar pb:
                 pb.IsIndeterminate = false;

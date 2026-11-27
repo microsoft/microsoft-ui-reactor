@@ -17,6 +17,7 @@ internal static class ModifierEmitter
     internal const string AppliedModifierMapPath = "src/Reactor/Core/Diagnostics/AppliedModifierMap.Generated.cs";
     internal const string ThemeBindingsPath = "src/Reactor/Core/ThemeBindingApplier.Generated.cs";
     internal const string ReconcilerModifiersPath = "src/Reactor/Core/Reconciler.Modifiers.Generated.cs";
+    internal const string ElementPoolPath = "src/Reactor/Core/ElementPool.Generated.cs";
 
     /// <summary>Every generated file.</summary>
     internal static IReadOnlyList<(string RelativePath, string Content)> EmitAll() =>
@@ -26,6 +27,7 @@ internal static class ModifierEmitter
         (AppliedModifierMapPath, EmitAppliedModifierMap()),
         (ThemeBindingsPath, EmitThemeBindings()),
         (ReconcilerModifiersPath, EmitReconcilerModifiers()),
+        (ElementPoolPath, EmitElementPool()),
     ];
 
     /// <summary>One <c>ApplyModifiers</c> family helper layer 3 generates whole.</summary>
@@ -433,6 +435,159 @@ internal static class ModifierEmitter
         return sb.ToString();
     }
 
+    /// <summary>
+    /// One generated pool-reset helper (spec 067 §11 layer 5). <c>CleanElement</c> calls each where
+    /// the resets it holds were hand-written, so they keep their place relative to the hand-written
+    /// steps around them (the visual reset, the themed Style clear, the type arms).
+    /// </summary>
+    /// <param name="Name">The helper's name.</param>
+    /// <param name="Summary">Its doc summary: where <c>CleanElement</c> calls it.</param>
+    /// <param name="Resets">
+    /// The (receiver, DP) resets it makes, in order, keyed as <c>Receiver.[AttachedOwner.]Property</c>
+    /// like <c>PoolResetExpectations</c>. The order is the hand-written one: a reset can make the
+    /// control write another DP (a property-changed callback), so the order is behaviour.
+    /// </param>
+    internal sealed record PoolResetPhase(string Name, string Summary, string[] Resets);
+
+    /// <summary>
+    /// The pool-reset helpers, in call order. Every declared reset that isn't
+    /// <see cref="PoolReset.NotReset"/> must be in exactly one, so a new modifier's receiver is placed
+    /// here; most belong at the end of <c>ResetStateModifiers</c>.
+    /// </summary>
+    internal static readonly PoolResetPhase[] PoolResetPhases =
+    [
+        new("ResetLayoutModifiers", "Size, alignment, Opacity and Visibility. Called before the visual reset.",
+        [
+            "FrameworkElement.Margin", "FrameworkElement.Width", "FrameworkElement.Height", "FrameworkElement.MinWidth",
+            "FrameworkElement.MinHeight", "FrameworkElement.MaxWidth", "FrameworkElement.MaxHeight",
+            "FrameworkElement.HorizontalAlignment", "FrameworkElement.VerticalAlignment", "FrameworkElement.Opacity",
+            "FrameworkElement.Visibility",
+        ]),
+        new("ResetThemeAndFlyoutModifiers", "RequestedTheme and ContextFlyout. Called after the RenderTransform and FlowDirection clears.",
+        [
+            "FrameworkElement.RequestedTheme", "FrameworkElement.ContextFlyout",
+        ]),
+        new("ResetStateModifiers", "Automation, focus, tooltip and the per-receiver box, brush, font and state DPs. Called after the themed Style is cleared.",
+        [
+            "FrameworkElement.AutomationProperties.Name", "FrameworkElement.AutomationProperties.AutomationId",
+            "FrameworkElement.AutomationProperties.HelpText", "FrameworkElement.AutomationProperties.FullDescription",
+            "FrameworkElement.AutomationProperties.LandmarkType", "FrameworkElement.AutomationProperties.AccessibilityView",
+            "FrameworkElement.IsHitTestVisible", "FrameworkElement.IsTabStop", "FrameworkElement.XYFocusKeyboardNavigation",
+            "FrameworkElement.TabFocusNavigation",
+            "Control.Padding", "Control.CornerRadius", "Control.BorderThickness", "Control.BorderBrush", "Control.Background",
+            "Control.IsEnabled", "Control.HorizontalContentAlignment", "Control.VerticalContentAlignment", "Control.Foreground",
+            "Control.FontFamily", "Control.FontSize", "Control.FontWeight", "Control.TabIndex", "Control.ElementSoundMode",
+            "Border.Padding", "Border.CornerRadius", "Border.BorderThickness", "Border.BorderBrush", "Border.Background",
+            "Panel.Background",
+            "Grid.Padding", "Grid.CornerRadius", "Grid.BorderThickness", "Grid.BorderBrush",
+            "StackPanel.Padding", "StackPanel.CornerRadius", "StackPanel.BorderThickness", "StackPanel.BorderBrush",
+            "TextBlock.Padding", "TextBlock.Foreground",
+            "FrameworkElement.TitleBar.IsDragRegion", "FrameworkElement.AutomationProperties.IsRequiredForForm",
+            "FrameworkElement.AutomationProperties.LiveSetting", "FrameworkElement.AutomationProperties.PositionInSet",
+            "FrameworkElement.AutomationProperties.SizeOfSet", "FrameworkElement.AutomationProperties.Level",
+            "FrameworkElement.AutomationProperties.ItemStatus", "FrameworkElement.AutomationProperties.LabeledBy",
+            "FrameworkElement.AutomationProperties.DescribedBy", "FrameworkElement.AutomationProperties.FlowsTo",
+            "FrameworkElement.AutomationProperties.FlowsFrom",
+            "FrameworkElement.XYFocusUp", "FrameworkElement.XYFocusDown", "FrameworkElement.XYFocusLeft", "FrameworkElement.XYFocusRight",
+            "FrameworkElement.ToolTipService.ToolTip", "FrameworkElement.ToolTipService.Placement",
+            "FrameworkElement.ToolTipService.PlacementTarget", "FrameworkElement.AutomationProperties.HeadingLevel",
+            "FrameworkElement.AccessKey",
+        ]),
+        new("ResetTextBlockSizeAndWeight", "TextBlock FontSize and FontWeight. Called in CleanElement's TextBlock arm, after the text is cleared.",
+        [
+            "TextBlock.FontSize", "TextBlock.FontWeight",
+        ]),
+        new("ResetTextBlockFontFamily", "TextBlock FontFamily. Called at the end of CleanElement's TextBlock arm.",
+        [
+            "TextBlock.FontFamily",
+        ]),
+        new("ResetRichTextBlockForeground", "RichTextBlock Foreground. Called in CleanElement's RichTextBlock arm, after the blocks are cleared.",
+        [
+            "RichTextBlock.Foreground",
+        ]),
+    ];
+
+    /// <summary>
+    /// Spec 067 §11 layer 5: the <c>ElementPool</c> helpers that reset every (receiver, DP) a modifier
+    /// writes on a pooled type, one per <see cref="PoolResetPhases"/> entry. A
+    /// <c>FrameworkElement</c> receiver is reset on the element itself, through the DP's declaring
+    /// type. A run of resets on another receiver type shares one <c>if (fe is T poolT)</c> block, reset
+    /// through that type, as the hand-written arms were. A <see cref="PoolReset.WriteDefault"/>
+    /// receiver gets its literal back, and a <see cref="PoolReset.NotReset"/> one nothing. Several
+    /// slots writing one DP (a physical slot and its BiDi logical edges) reset it once.
+    /// </summary>
+    internal static string EmitElementPool()
+    {
+        var declared = new Dictionary<string, (ModifierReceiver Receiver, string Owner)>(StringComparer.Ordinal);
+        foreach (var slot in ModifierSchema.Slots)
+        {
+            foreach (var receiver in slot.ReceiversWith(ReceiverRole.Apply))
+            {
+                if (receiver.Pool == PoolReset.NotReset)
+                    continue;
+                var owner = receiver.Type == ModifierSchema.FrameworkElement ? receiver.DpOwner : receiver.Type;
+                declared.TryAdd(PoolKey(receiver), (receiver, owner));
+            }
+        }
+        var placed = PoolResetPhases.SelectMany(phase => phase.Resets).ToList();
+        var duplicated = placed.GroupBy(key => key).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        var unplaced = declared.Keys.Except(placed).ToList();
+        var undeclared = placed.Except(declared.Keys).ToList();
+        if (duplicated.Count > 0 || unplaced.Count > 0 || undeclared.Count > 0)
+            throw new InvalidOperationException(
+                "ModifierEmitter.PoolResetPhases must place every declared pool reset once. "
+                + $"Not placed (add each to a phase, usually the end of ResetStateModifiers): [{string.Join(", ", unplaced)}]; "
+                + $"not a declared reset (remove it, or fix the receiver's .Pool(...) in ModifierSchema): [{string.Join(", ", undeclared)}]; "
+                + $"placed twice: [{string.Join(", ", duplicated)}].");
+
+        var sb = new StringBuilder();
+        sb.Append("// <auto-generated>\n");
+        sb.Append("// Generated by tools/Reactor.ModifierGen from src/Reactor.Analyzers/Modifiers/ModifierSchema.cs.\n");
+        sb.Append("// Do not edit. Regenerate with: dotnet run --project tools/Reactor.ModifierGen\n");
+        sb.Append("// </auto-generated>\n");
+        sb.Append("#nullable enable\n\n");
+        sb.Append("using Microsoft.UI.Xaml;\n");
+        sb.Append("using WinUI = Microsoft.UI.Xaml.Controls;\n\n");
+        sb.Append("namespace Microsoft.UI.Reactor.Core;\n\n");
+        sb.Append("public sealed partial class ElementPool\n{");
+        foreach (var phase in PoolResetPhases)
+        {
+            sb.Append("\n    /// <summary>").Append(phase.Summary).Append("</summary>\n");
+            sb.Append("    private static void ").Append(phase.Name).Append("(FrameworkElement fe)\n    {\n");
+            string? openType = null;
+            foreach (var key in phase.Resets)
+            {
+                var (receiver, owner) = declared[key];
+                if (receiver.Type != openType)
+                {
+                    if (openType is not null && openType != ModifierSchema.FrameworkElement)
+                        sb.Append("        }\n");
+                    if (receiver.Type != ModifierSchema.FrameworkElement)
+                        sb.Append("        if (fe is ").Append(TypeRef(receiver.Type)).Append(" pool").Append(Simple(receiver.Type)).Append(")\n        {\n");
+                    openType = receiver.Type;
+                }
+                var gated = receiver.Type != ModifierSchema.FrameworkElement;
+                var target = gated ? "pool" + Simple(receiver.Type) : "fe";
+                sb.Append(gated ? "            " : "        ").Append(receiver.Pool == PoolReset.WriteDefault
+                    ? $"{target}.{receiver.Property} = {receiver.PoolDefault};"
+                    : Clear(receiver, owner, target) + ";").Append('\n');
+            }
+            if (openType is not null && openType != ModifierSchema.FrameworkElement)
+                sb.Append("        }\n");
+            sb.Append("    }\n");
+        }
+        sb.Append("}\n");
+        return sb.ToString();
+    }
+
+    // The key PoolResetExpectations and ModifierPoolResetTests use: the receiver, then the DP, with an
+    // attached DP's owner in between (FrameworkElement.AutomationProperties.Name).
+    private static string PoolKey(ModifierReceiver receiver)
+    {
+        var owner = Simple(receiver.DpOwner);
+        var attached = owner == receiver.SimpleType || owner is "FrameworkElement" or "UIElement" ? "" : owner + ".";
+        return receiver.SimpleType + "." + attached + receiver.Property;
+    }
     private static StringBuilder Header(string ns)
     {
         var sb = new StringBuilder();

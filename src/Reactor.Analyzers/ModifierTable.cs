@@ -414,9 +414,9 @@ internal static class ModifierTable
             { "IsTabStop",           Common("IsTabStop",           poolReset: true) },
             { "IsEnabled",           Common("IsEnabled",           poolReset: true) },
 
-            // Pool-reset but only on some receivers (issue #985). CleanElement clears these
-            // through a Control | Border | Panel/Grid/StackPanel | TextBlock chain that mirrors
-            // the receivers ApplyModifiers writes them to, so the control gates below still
+            // Pool-reset but only on some receivers (issue #985). The pool clears these on each
+            // receiver ApplyModifiers writes them to, through the Reset*Modifiers helpers generated
+            // from the schema's pool declarations (spec 067 layer 5), so the control gates below still
             // apply: the gate decides whether the modifier reaches the control at all,
             // poolReset decides which rule id reports it.
             //
