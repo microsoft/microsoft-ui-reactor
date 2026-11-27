@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -946,9 +945,8 @@ public class ModifierUnsetClearValueTests
         var poolableNames = poolable.Select(type => type.Name).ToHashSet(StringComparer.Ordinal);
 
         // The next two asserts are the vacuity defence for this test, not preamble to the real
-        // one below: emptying PoolableTypes with ReadPoolableTypes' own empty check deleted
-        // still fails here, so these are the checks that stop a collapsed derivation reading as
-        // green. Neither is redundant with that check, which only improves the message.
+        // one below: an emptied PoolableTypes fails here, so these are the checks that stop a
+        // collapsed derivation reading as green.
         var derivedBySubclass = required
             .Where(pair => !poolableNames.Contains(pair[..pair.IndexOf('.')]))
             .ToList();
@@ -1118,97 +1116,10 @@ public class ModifierUnsetClearValueTests
             info => info.PoolReset && info.PoolResetGate is not null);
     }
 
-    /// <summary>
-    /// The analyzer's poolable-type mirror equals <c>ElementPool.PoolableTypes</c>.
-    /// </summary>
-    /// <remarks>
-    /// <c>Reactor.Analyzers</c> targets <c>netstandard2.0</c> and cannot reference
-    /// <c>src/Reactor</c>, so the poolable set has to be copied. Both drift directions are
-    /// checked because they fail in opposite ways and only one is loud: a name in the mirror
-    /// that the pool does not recycle makes REACTOR_POOL_001 assert "reset on pool return" of a
-    /// receiver that is never pooled — a false Warning, and a build break under
-    /// <c>TreatWarningsAsErrors</c> — while a name the pool recycles and the mirror omits
-    /// downgrades a genuine pooling hazard to Info, where nobody sees it.
-    /// </remarks>
-    [Fact]
-    public void Analyzer_Poolable_Type_Mirror_Matches_ElementPool()
-    {
-        var actual = ReadPoolableTypes().Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-        var mirrored = ModifierTable.PoolableTypeNames.ToHashSet(StringComparer.Ordinal);
-
-        var missing = actual.Except(mirrored, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
-        var extra = mirrored.Except(actual, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
-
-        Assert.True(
-            extra.Count == 0,
-            $"ModifierTable's poolable mirror names [{string.Join(", ", extra)}], which " +
-            "ElementPool.PoolableTypes does not contain. REACTOR_POOL_001 would fire on those " +
-            "receivers claiming the write is unwound on pool return, at Warning severity, for a " +
-            "control that is never pooled. Remove them from the mirror, or add them to " +
-            "ElementPool.PoolableTypes if they really should be recycled.");
-
-        Assert.True(
-            missing.Count == 0,
-            $"ElementPool recycles [{string.Join(", ", missing)}] but ModifierTable's mirror omits " +
-            "them, so a .Set write that really is dropped on pool reuse reports as REACTOR_MOD_002 " +
-            "(Info) instead of REACTOR_POOL_001 (Warning). Add them to the mirror.");
-    }
-
     // ── Source-scanning helpers ─────────────────────────────────────────────
 
-    /// <summary>
-    /// <c>ElementPool.PoolableTypes</c>, read reflectively because it is private.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Throws on every failure path rather than returning an empty set, so a rename or a type
-    /// change fails here, naming the member, instead of surfacing downstream as a claim that
-    /// the gate intersection regressed to name equality — which misdescribes the cause.
-    /// </para>
-    /// <para>
-    /// This is fail-fast diagnosis, not the vacuity defence, and the distinction matters when
-    /// deciding what may be simplified away. Deleting the empty check and emptying the set
-    /// still reddens all three callers, because
-    /// <c>Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement</c> asserts its own
-    /// derivation is non-degenerate before asserting anything about it. Those two checks, not
-    /// this one, are what stop an empty poolable set reading as green.
-    /// </para>
-    /// </remarks>
-    private static IReadOnlyList<Type> ReadPoolableTypes()
-    {
-        const string fieldName = "PoolableTypes";
-
-        var field = typeof(ElementPool).GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static)
-                    ?? typeof(ElementPool).GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
-
-        if (field is null)
-        {
-            throw new InvalidOperationException(
-                $"ElementPool.{fieldName} was not found. It has been renamed or moved — point this " +
-                "test at the new member. The callers' own non-degeneracy asserts would catch the " +
-                "resulting empty set, but they would report it as a collapsed gate intersection, " +
-                "which names the wrong cause and sends the reader to the wrong file.");
-        }
-
-        if (field.GetValue(null) is not IEnumerable<Type> types)
-        {
-            throw new InvalidOperationException(
-                $"ElementPool.{fieldName} is no longer an IEnumerable<Type>, so the poolable " +
-                "receivers can no longer be read and this test cannot check anything.");
-        }
-
-        var poolable = types.ToList();
-
-        if (poolable.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"ElementPool.{fieldName} is empty. Every receiver obligation is derived from it, " +
-                "so the cause is reported here rather than downstream, where the callers' " +
-                "non-degeneracy asserts would describe it as a collapsed gate intersection.");
-        }
-
-        return poolable;
-    }
+    /// <summary><c>ElementPool.PoolableTypes</c>, generated from <c>ModifierSchema.PoolableTypeNames</c> (spec 067 layer 5).</summary>
+    private static IReadOnlyList<Type> ReadPoolableTypes() => ElementPool.PoolableTypes.ToList();
 
     /// <summary>
     /// Every type some poolable type is assignable to — each pooled type's own base chain.

@@ -129,7 +129,7 @@ internal sealed class ModifierInfo
 /// That is not the same as "every attached write reports <c>REACTOR_POOL_001</c>".
 /// <c>CleanElement</c> only runs on a control the pool recycles, so
 /// <c>PoolResetSetAnalyzer</c> also requires the <c>.Set</c> lambda parameter's exact type
-/// to be in <see cref="ModifierTable.PoolableTypeNames"/>; on anything else the same write reports
+/// to be in <see cref="ModifierTable.IsPoolableTypeName"/>; on anything else the same write reports
 /// <c>REACTOR_MOD_002</c>: the modifier still exists, but the pool-return claim does not — the
 /// write lands and is never unwound, so what it costs is the element's structural skip
 /// (<c>Element.SettersEqual</c>), not the value. The instance and attached
@@ -342,13 +342,13 @@ internal static class ModifierTable
     }
 
     /// <summary>
-    /// The exact WinUI control type names <c>ElementPool</c> recycles — a mirror of
-    /// <c>ElementPool.PoolableTypes</c>.
+    /// The exact WinUI control type names <c>ElementPool</c> recycles, the same list
+    /// <c>ElementPool.PoolableTypes</c> is generated from.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The pool tests membership with <c>PoolableTypes.Contains(element.GetType())</c>: an
-    /// exact-type lookup, not an assignability walk. This mirror is matched the same way, and
+    /// exact-type lookup, not an assignability walk. This list is matched the same way, and
     /// that distinction is the whole reason it exists. A control gate names the base type an
     /// <c>ApplyModifiers</c> arm dispatches on, so <c>Control</c> admits every WinUI control and
     /// <c>Panel</c> admits every panel, while the pool recycles these fifteen types and nothing
@@ -366,15 +366,12 @@ internal static class ModifierTable
     /// analyzer sees is the type the pool would key on.
     /// </para>
     /// <para>
-    /// Not hand-maintained: <c>ModifierUnsetClearValueTests</c> reads
-    /// <c>ElementPool.PoolableTypes</c> by reflection and fails if the two sets drift.
+    /// Not hand-maintained: <c>tools/Reactor.ModifierGen</c> generates <c>ElementPool.PoolableTypes</c>
+    /// from the same <c>ModifierSchema.PoolableTypeNames</c> this reads (spec 067 layer 5).
     /// </para>
     /// </remarks>
     private static readonly HashSet<string> PoolableTypeNameSet =
         new HashSet<string>(ModifierSchema.PoolableTypeNames, System.StringComparer.Ordinal);
-
-    /// <summary>The mirrored poolable type names, for the parity test that keeps them honest.</summary>
-    public static IEnumerable<string> PoolableTypeNames => PoolableTypeNameSet;
 
     /// <summary>True when <c>ElementPool</c> recycles exactly this type.</summary>
     public static bool IsPoolableTypeName(string name) => PoolableTypeNameSet.Contains(name);
@@ -423,7 +420,7 @@ internal static class ModifierTable
             // poolReset is per-property but poolability is per-receiver, so POOL_001 needs two
             // independent facts about the receiver and neither implies the other:
             //
-            //   1. the pool recycles it at all      -> PoolableTypeNames, matched on the exact
+            //   1. the pool recycles it at all      -> IsPoolableTypeName, matched on the exact
             //                                          type, exactly as the pool matches it
             //   2. CleanElement clears THIS property -> poolResetGate, matched on the base chain,
             //      once it is recycled                 exactly as CleanElement's `is` arms match

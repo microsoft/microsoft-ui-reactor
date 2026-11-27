@@ -1009,6 +1009,14 @@ ancestor's size, so changing it is a behaviour change for another PR. Generating
 from the schema list, which deletes `Analyzer_Poolable_Type_Mirror_Matches_ElementPool`, is a
 separate step, and the full `AGENTS.md` field-note rewrite and the guide note below land with it.
 
+Layer 5c finishes layer 5. `ModifierEmitter.EmitElementPool` also writes `ElementPool.PoolableTypes`
+from `ModifierSchema.PoolableTypeNames`, the list the analyzer already reads through
+`ModifierTable.PoolableTypeNames`, so the two are one list and
+`Analyzer_Poolable_Type_Mirror_Matches_ElementPool` is deleted. The tests that read the pool's
+types by reflection keep doing so, now from the generated field. The `AGENTS.md` field note is
+rewritten as the schema-first recipe below, and `extending-reactor-controls` gains its "common
+modifiers" tip, in its template and its compiled page.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

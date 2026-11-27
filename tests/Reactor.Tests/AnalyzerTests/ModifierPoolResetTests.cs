@@ -163,6 +163,16 @@ public class ModifierPoolResetTests
     }
 
     [Fact]
+    public void The_Pool_Recycles_Exactly_The_Frozen_Types()
+    {
+        // ElementPool.PoolableTypes is generated from the schema list, so it is checked against the
+        // selftest's frozen PooledTypes rather than against the list it was generated from.
+        Assert.Equal(
+            PoolResetExpectations.PooledTypes.Select(t => "Microsoft.UI.Xaml.Controls." + t.Type).Order(StringComparer.Ordinal),
+            Microsoft.UI.Reactor.Core.ElementPool.PoolableTypes.Select(t => t.FullName!).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Analyzer_Pool_Reset_Gates_Match_The_Declared_Resets()
     {
         // ModifierInfo.PoolResetGate still lists its pooled receivers by hand. Until it is derived

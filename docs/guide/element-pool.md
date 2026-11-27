@@ -39,7 +39,8 @@ the caller falls through to `new TextBlock()` / `new WinUI.Button()`.
 The exclusions are deliberate — the live-previewer can flip
 `Pool.Enabled = false` when recycled controls with stale property
 state would cause visual glitches, and the poolable type set is a
-hardcoded `HashSet<Type>` because pooling a type the cleanup pass
+fixed `HashSet<Type>`, generated from the modifier schema's poolable
+list, because pooling a type the cleanup pass
 doesn't know about would leak property state into the next user.
 
 | Type | Why it's poolable | Notes |
@@ -223,14 +224,14 @@ previous component's captured closure into the next mount.
 
 ## Tips
 
-**The pool is opt-in by type.** Adding a custom control to the pool
-means adding it to `ElementPool.PoolableTypes` *and* extending
-`CleanElement` with a switch arm that resets the control's own content
-and state. The common modifiers' properties are reset by helpers
-generated from the modifier schema, so a receiver type the schema
-declares `NotReset` because it was never pooled needs its declaration
-changed and `tools/Reactor.ModifierGen` re-run. Skipping either step
-leaks state.
+**The pool is opt-in by type.** Pooling another built-in control
+means adding it to `ModifierSchema.PoolableTypeNames`, which
+`tools/Reactor.ModifierGen` turns into `ElementPool.PoolableTypes`, *and*
+extending `CleanElement` with a switch arm that resets the control's own
+content and state. The common modifiers' properties are reset by helpers
+generated from the same schema, so a receiver type it declares `NotReset`
+because it was never pooled needs that declaration changed before you
+regenerate. Skipping any step leaks state.
 
 **Compositor features pool too.** A list item with `.Animate()`,
 `.Transition()` or `.LayoutAnimation()` returns to the visual lane and

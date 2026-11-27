@@ -15,8 +15,8 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// The analyzer tests cover only selected modifiers, and the gate-drift tests skip null gates, so
 /// a gate wrongly declared (or dropped) in the schema could pass both. This snapshot compares
 /// every row in both directions. A deliberate analyzer change updates the snapshot in the same PR.
-/// The poolable-type mirror is pinned to the runtime list by
-/// <c>Analyzer_Poolable_Type_Mirror_Matches_ElementPool</c> instead.
+/// The poolable-type list needs no snapshot: the analyzer and <c>ElementPool.PoolableTypes</c> are
+/// both generated from <c>ModifierSchema.PoolableTypeNames</c> (spec 067 layer 5).
 /// </remarks>
 public class ModifierTableParitySnapshotTests
 {

@@ -11,6 +11,29 @@ namespace Microsoft.UI.Reactor.Core;
 
 public sealed partial class ElementPool
 {
+    /// <summary>
+    /// The exact runtime types <see cref="TryRent(global::System.Type, bool)"/> and <see cref="Return"/> recycle, from
+    /// <c>ModifierSchema.PoolableTypeNames</c>. Membership is exact-type, so a subclass of a listed type is not pooled.
+    /// </summary>
+    internal static readonly global::System.Collections.Generic.HashSet<global::System.Type> PoolableTypes = new()
+    {
+        typeof(WinUI.TextBlock),
+        typeof(WinUI.RichTextBlock),
+        typeof(WinUI.StackPanel),
+        typeof(WinUI.Grid),
+        typeof(WinUI.Border),
+        typeof(WinUI.ScrollViewer),
+        typeof(WinUI.Canvas),
+        typeof(WinUI.Viewbox),
+        typeof(WinUI.ProgressBar),
+        typeof(WinUI.ProgressRing),
+        typeof(WinUI.Image),
+        typeof(WinUI.InfoBadge),
+        typeof(WinUI.Button),
+        typeof(WinUI.TextBox),
+        typeof(WinUI.ToggleSwitch),
+    };
+
     /// <summary>Size, alignment, Opacity and Visibility. Called before the visual reset.</summary>
     private static void ResetLayoutModifiers(FrameworkElement fe)
     {

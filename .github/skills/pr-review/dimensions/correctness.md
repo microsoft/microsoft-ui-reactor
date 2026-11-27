@@ -58,10 +58,9 @@ Yoga/Flex layout math.
     `ControlEventStateBox` trampoline, or a handler that captures the element
     it was wired for instead of reading current state (stale callbacks after
     reuse, or double subscription across rent/return);
-  - a control added to `PoolableTypes` whose state `CleanElement` does not reset,
-    or without updating the `netstandard2.0` analyzer mirror (both are gated by
-    tests — `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement` and
-    `Analyzer_Poolable_Type_Mirror_Matches_ElementPool`);
+  - a control added to `ModifierSchema.PoolableTypeNames` (which generates `PoolableTypes`)
+    whose own state `CleanElement` does not reset (the modifier-backed DPs are generated;
+    `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement` gates those);
   - code that takes an element's composition Visual through
     `ElementCompositionPreview.GetElementVisual` instead of
     `AnimationHelper.GetElementVisual` (which sets `VisualTaken`), so the control

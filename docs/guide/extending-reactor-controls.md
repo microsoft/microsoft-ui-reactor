@@ -903,6 +903,14 @@ the multi-event control patterns (`TextBox`'s `Text` +
 contract — once consumers depend on it, you cannot drop or rename it
 without churn. Add fields as components need them, not preemptively.
 
+**Leave the common modifiers to the framework.** Don't add `Padding`,
+`Foreground`, `IsEnabled` or similar fields to your element record, and
+don't write them in your descriptor. Consumers chain `.Padding(...)`,
+`.Foreground(...)` and the rest on any element, and the reconciler applies,
+diffs and releases them for you. Those modifiers are declared once in
+Reactor's modifier schema, so adding a new one is a change to Reactor
+itself, not to a control.
+
 **Test the round trip with the existing fixture harness.** Add a
 fixture in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` that
 drives your control via an automation peer
