@@ -955,8 +955,10 @@ rewritten over the bag. Because the release is the write's else branch, a resolv
 back a value for a family the bag no longer sets; the Padding resolver did when an inline edge was
 dropped with the physical padding, until #1751 resolved it from the bag like Margin (issue #1749).
 `ModifierApplyOrderTests` dedupes a nested helper's reads against its caller's, so the generated
-helper doesn't repeat the resolver's fields in the frozen order. 4a generates `Padding`. `Margin`
-has the single `FrameworkElement` receiver, so it has no receiver list to move.
+helper doesn't repeat the resolver's fields in the frozen order. 4a generates `Padding` and 4b
+`BorderThickness` (with `BorderInlineStart`, inside `ApplyBorderModifiers`, whose `BorderBrush` arm
+stays hand-coded). `Margin` has the single `FrameworkElement` receiver, so it has no receiver list
+to move, and that finishes layer 4.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run

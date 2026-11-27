@@ -100,6 +100,7 @@ internal static class ModifierEmitter
     internal static readonly GeneratedComposite[] GeneratedComposites =
     [
         new("Padding", "Padding", ["PaddingInlineStart", "PaddingInlineEnd"], ["padCtrl", "padBdr", "padSp", "padGrid", "padRelative", "padTb"]),
+        new("Border", "BorderThickness", ["BorderInlineStart"], ["btCtrl", "btBdr", "btGrid", "btStack", "btRelative"]),
     ];
 
     /// <summary>

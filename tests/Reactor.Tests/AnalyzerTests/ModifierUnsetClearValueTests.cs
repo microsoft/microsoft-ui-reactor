@@ -233,15 +233,15 @@ public class ModifierUnsetClearValueTests
     /// Scoped to <em>diff-guarded</em> set arms — conditions that name both <c>bag.X</c> and
     /// <c>oldBag.X</c>. That is the shape of "write this property when present, compared
     /// against the previous render", and it is precisely the shape that owes a reset. It
-    /// deliberately does not try to read the arms that compute a local first (<c>Margin</c> and
-    /// <c>BorderThickness</c> overlay their BiDi-aware inline variants into <c>resolvedX</c>):
-    /// their conditions never name <c>m.X</c>, so matching them loosely enough to see the set arm
-    /// would report a missing reset that is right there. Those two are covered behaviourally by
-    /// <c>ModifierEvent_InlineDropRestoresPhysical</c> instead. <c>Padding</c>'s write and release
-    /// are generated into <c>ApplyResolvedPaddingModifier</c> (spec 067 layer 4): its write names
-    /// <c>m.PaddingInlineStart</c>/<c>End</c> against <c>oldM</c> and its release names the bag,
-    /// so the inline slots are read here. The physical <c>Padding</c> set arm still compares
-    /// <c>resolved</c>, not <c>m.Padding</c>, so it stays behavioural too.
+    /// deliberately does not try to read the arm that computes a local first (<c>Margin</c>
+    /// overlays its BiDi-aware inline variants into <c>resolvedMargin</c>): its condition never
+    /// names <c>m.Margin</c>, so matching it loosely enough to see the set arm would report a
+    /// missing reset that is right there. It is covered behaviourally by
+    /// <c>ModifierEvent_InlineDropRestoresPhysical</c> instead. <c>Padding</c>'s and
+    /// <c>BorderThickness</c>'s writes and releases are generated into
+    /// <c>ApplyResolved&lt;X&gt;Modifier</c> (spec 067 layer 4): each write names the inline slots
+    /// against <c>oldM</c> and each release names the bag, so the inline slots are read here. The
+    /// physical set arms still compare <c>resolved</c>, not <c>m.X</c>, so they stay behavioural.
     /// </remarks>
     [Fact]
     public void Every_Diff_Guarded_Modifier_Has_An_Unset_Arm()
@@ -1485,7 +1485,7 @@ public class ModifierUnsetClearValueTests
             if (AbsentNow(text, bag, name) && PresentBefore(text, oldBag, name)) return name;
         }
 
-        // Margin and BorderThickness are computed into a local first (to overlay the
+        // Margin is computed into a local first (to overlay the
         // BiDi-aware inline variants), so the absent-now half reads `!resolvedMargin.HasValue`
         // rather than `!m.Margin.HasValue`. Match on the oldM half and the local's shape.
         var resolved = Regex.Match(text, @"!\s*(resolved\w+)\.HasValue");

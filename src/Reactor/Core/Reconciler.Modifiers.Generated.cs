@@ -248,4 +248,38 @@ public sealed partial class Reconciler
         WinUI.TextBlock padTb => padTb.Padding,
         _ => new Thickness(),
     };
+
+    /// <summary>BorderThickness written to its receivers once <c>ApplyBorderModifiers</c> has resolved the BiDi overlay into <paramref name="resolved"/>.</summary>
+    private static void ApplyResolvedBorderThicknessModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Thickness? resolved, bool overlayStale)
+    {
+        if (resolved.HasValue && (resolved != oldM?.BorderThickness || m.BorderInlineStart != oldM?.BorderInlineStart || overlayStale))
+        {
+            if (fe is WinUI.Control btCtrl) btCtrl.BorderThickness = resolved.Value;
+            else if (fe is WinUI.Border btBdr) btBdr.BorderThickness = resolved.Value;
+            else if (fe is WinUI.Grid btGrid) btGrid.BorderThickness = resolved.Value;
+            else if (fe is WinUI.StackPanel btStack) btStack.BorderThickness = resolved.Value;
+            else if (fe is WinUI.RelativePanel btRelative) btRelative.BorderThickness = resolved.Value;
+        }
+        // Released through ClearValue, never a zero local, so the styled value shows again (#952).
+        else if (!m.BorderThickness.HasValue && !m.BorderInlineStart.HasValue
+            && (oldM?.BorderThickness.HasValue == true || oldM?.BorderInlineStart.HasValue == true))
+        {
+            if (fe is WinUI.Control btCtrl) btCtrl.ClearValue(WinUI.Control.BorderThicknessProperty);
+            else if (fe is WinUI.Border btBdr) btBdr.ClearValue(WinUI.Border.BorderThicknessProperty);
+            else if (fe is WinUI.Grid btGrid) btGrid.ClearValue(WinUI.Grid.BorderThicknessProperty);
+            else if (fe is WinUI.StackPanel btStack) btStack.ClearValue(WinUI.StackPanel.BorderThicknessProperty);
+            else if (fe is WinUI.RelativePanel btRelative) btRelative.ClearValue(WinUI.RelativePanel.BorderThicknessProperty);
+        }
+    }
+
+    /// <summary>The BorderThickness the element holds now, the overlay's base when the bag has none.</summary>
+    private static Thickness ReadBorderThickness(FrameworkElement fe) => fe switch
+    {
+        WinUI.Control btCtrl => btCtrl.BorderThickness,
+        WinUI.Border btBdr => btBdr.BorderThickness,
+        WinUI.Grid btGrid => btGrid.BorderThickness,
+        WinUI.StackPanel btStack => btStack.BorderThickness,
+        WinUI.RelativePanel btRelative => btRelative.BorderThickness,
+        _ => new Thickness(),
+    };
 }
