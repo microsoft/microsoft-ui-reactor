@@ -111,9 +111,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private volatile bool _needsRerender;     // only touched on UI thread
     private bool _themeListenerAttached;   // UISettings subscribed (once per control)
     private FrameworkElement? _themeListenerElement;   // current content root listened to
+    // Issue #1506: on this control, which is in the tree whenever its content is; see HighContrastProbe.
+    private HighContrastProbe? _contrastProbe;
 
-    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    // Test-only accessors (InternalsVisibleTo Reactor.AppTests.Host).
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
+    internal HighContrastProbe? ContrastProbeForTest => _contrastProbe;
+    internal int ContrastRefreshCountForTest { get; private set; }
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
     // Snapshot of AnimationAmbient.Current at setter dispatch time
@@ -1416,6 +1420,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         if (_themeListenerAttached) return;
         _themeListenerAttached = true;
 
+        // Issue #1506: ActualThemeChanged does not cover a contrast theme being switched on, and
+        // ColorValuesChanged below arrives before WinUI has applied it; the probe reports it once
+        // WinUI has.
+        _contrastProbe = HighContrastProbe.TryAttach(this, OnContrastThemeApplied);
+
         // Issue #660 (#86): also invalidate on high-contrast / accent / palette
         // changes, which don't raise ActualThemeChanged but can change a resolved
         // brush. ColorValuesChanged fires off the UI thread; ThemeRef cache clear
@@ -1441,6 +1450,17 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     {
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
+    }
+
+    private void OnContrastThemeApplied()
+    {
+        if (_disposed) return;
+        _logger?.LogDebug("Contrast theme switched — refreshing theme resources");
+        ContrastRefreshCountForTest++;
+        // A resource-refresh pass, as Theme.NotifyResourcesChanged does for this host:
+        // memoized subtrees hold resolved brushes too.
+        Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+        ((IThemeResourceListener)this).OnThemeResourcesChanged();
     }
 
     private void ShowErrorFallback(Exception ex, RenderErrorSource source, string? componentName = null)
@@ -1553,6 +1573,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
             _uiSettings = null;
         }
+        _contrastProbe?.Dispose();
+        _contrastProbe = null;
         DetachThemeListener();
 
         // Issue #1291 — see ReactorHost.Dispose.

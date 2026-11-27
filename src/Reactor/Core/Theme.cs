@@ -33,7 +33,10 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// <remarks>
     /// The brush is the one a <c>{ThemeResource}</c> reference gets on an element in that theme,
     /// so either theme can be resolved whatever theme the app uses. WinUI does the lookup, so its
-    /// rules apply, including the <c>Default</c> fallback. For a key WinUI cannot resolve for that
+    /// rules apply, including the <c>Default</c> fallback. While a Windows contrast theme is on,
+    /// WinUI picks the <c>HighContrast</c> dictionary whatever <paramref name="isDark"/> says, as
+    /// it does for a <c>{ThemeResource}</c> reference; each host re-renders once WinUI has applied
+    /// a contrast switch, so a call in a render follows it. For a key WinUI cannot resolve for that
     /// theme (one an app dictionary defines only for some themes), Reactor reads the app's Light,
     /// Dark and Default theme dictionaries, then does a plain lookup, which uses the app's theme:
     /// a key defined only for the app's theme therefore resolves to that brush for the other

@@ -84,6 +84,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private FrameworkElement? _themeListenerElement;
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
+    // Issue #1506: follows the content root with the theme listener; see HighContrastProbe.
+    private HighContrastProbe? _contrastProbe;
+    // Test-only accessors.
+    internal HighContrastProbe? ContrastProbeForTest => _contrastProbe;
+    internal int ContrastRefreshCountForTest { get; private set; }
     private volatile bool _disposed;
 
     // Set at the start of Dispose(), before component cleanups run.
@@ -1542,11 +1547,37 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (control is not FrameworkElement fe)
         {
             _themeListenerElement = null;
+            DetachContrastProbe();
             return;
         }
 
         _themeListenerElement = fe;
         fe.ActualThemeChanged += OnActualThemeChanged;
+
+        // Issue #1506: ActualThemeChanged does not cover a contrast theme being switched on, so
+        // a probe on the same root reports it, once WinUI has applied it.
+        if (!ReferenceEquals(_contrastProbe?.Owner, fe))
+        {
+            DetachContrastProbe();
+            _contrastProbe = HighContrastProbe.TryAttach(fe, OnContrastThemeApplied);
+        }
+    }
+
+    private void DetachContrastProbe()
+    {
+        _contrastProbe?.Dispose();
+        _contrastProbe = null;
+    }
+
+    private void OnContrastThemeApplied()
+    {
+        if (_disposed) return;
+        _logger?.LogDebug("Contrast theme switched — refreshing theme resources");
+        ContrastRefreshCountForTest++;
+        // A resource-refresh pass, as Theme.NotifyResourcesChanged does for this host:
+        // memoized subtrees hold resolved brushes too.
+        Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+        ((IThemeResourceListener)this).OnThemeResourcesChanged();
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -1652,6 +1683,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             if (_themeListenerElement is not null)
                 _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
             _themeListenerElement = null;
+            DetachContrastProbe();
         });
 
         // Accessibility listener cleanup
