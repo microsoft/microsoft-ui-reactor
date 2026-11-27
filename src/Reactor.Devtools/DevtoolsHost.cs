@@ -264,7 +264,8 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                     host.Window.DispatcherQueue.TryEnqueue(() =>
                     {
                         var instance = (Component)Activator.CreateInstance(type)!;
-                        renderErrors?.Arm(switchGeneration);
+                        // A later switch superseded this one; its callback may have run first.
+                        if (renderErrors?.Arm(switchGeneration) == false) return;
                         host.Mount(instance);
                         host.Window.Title = $"Preview — {name}";
                     });

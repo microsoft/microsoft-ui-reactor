@@ -46,13 +46,23 @@ public sealed class PreviewRenderErrorRecorderTests
         recorder.Settle();
         Assert.Equal("ComponentRender in Alert: NullReferenceException: first", recorder.Current);
 
-        // Arming a superseded switch does nothing: the newer one stays pending.
+        // Two switches whose UI callbacks run in reverse order: the newer arms and mounts,
+        // the superseded one is told not to mount, and only the newer one's render settles.
         var third = recorder.Reset();
         var fourth = recorder.Reset();
-        recorder.Arm(third);
+        Assert.True(recorder.Arm(fourth));
+        Assert.False(recorder.Arm(third));
+        Assert.Equal(PreviewRenderErrorRecorder.PendingDescription, recorder.Current);
+        recorder.Settle();
+        Assert.Null(recorder.Current);
+
+        // A superseded callback that runs first is rejected and arms nothing.
+        var fifth = recorder.Reset();
+        var sixth = recorder.Reset();
+        Assert.False(recorder.Arm(fifth));
         recorder.Settle();
         Assert.Equal(PreviewRenderErrorRecorder.PendingDescription, recorder.Current);
-        recorder.Arm(fourth);
+        Assert.True(recorder.Arm(sixth));
         recorder.Settle();
         Assert.Null(recorder.Current);
     }

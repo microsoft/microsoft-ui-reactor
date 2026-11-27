@@ -70,15 +70,18 @@ internal sealed class PreviewRenderErrorRecorder
     }
 
     /// <summary>
-    /// Called on the UI thread immediately before the switch mounts its root. Ignored when a
-    /// later switch has started since.
+    /// Called on the UI thread immediately before the switch mounts its root. Returns
+    /// <c>false</c>, arming nothing, when a later switch has started since: that callback
+    /// must not mount, or the window would show a superseded component while this recorder
+    /// tracks the newer one.
     /// </summary>
-    public void Arm(int generation)
+    public bool Arm(int generation)
     {
         lock (_gate)
         {
-            if (_pending && generation == _generation)
-                _armed = true;
+            if (generation != _generation) return false;
+            if (_pending) _armed = true;
+            return true;
         }
     }
 
