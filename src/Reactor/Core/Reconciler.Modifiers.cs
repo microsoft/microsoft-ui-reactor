@@ -259,7 +259,7 @@ public sealed partial class Reconciler
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
         bool keepRemovedBackground = false, bool ownsControl = false,
         ForegroundModifier.UpdateAction foregroundUpdate = ForegroundModifier.UpdateAction.None,
-        bool preserveInteractionForeground = false)
+        bool preserveInteractionBrushes = false)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -279,8 +279,10 @@ public sealed partial class Reconciler
         ApplyOpacityTransformAndVisibilityModifiers(fe, oldM, m);
         ApplyToolTipAndFlyoutModifiers(fe, oldM, m, requestRerender);
         ApplyIsEnabledModifier(fe, oldM, m);
-        ApplyBorderModifiers(fe, oldM, m, ownsControl);
-        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate, preserveInteractionForeground);
+        ApplyBorderModifiers(fe, oldM, m, ownsControl, preserveInteractionBrushes);
+        // Outer Flyout layers can also write common foreground on the shared target.
+        ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate,
+            preserveInteractionBrushes || _retainsFlyoutInteractionStates);
         ApplyAutomationAndFocusModifiers(fe, oldM, m);
 
         // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
@@ -577,7 +579,7 @@ public sealed partial class Reconciler
     }
 
     /// <summary>CornerRadius, BorderBrush, and BorderThickness with its BiDi-aware inline overlay (BorderInlineStart).</summary>
-    private void ApplyBorderModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool ownsControl)
+    private void ApplyBorderModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool ownsControl, bool preserveInteractionBrushes)
     {
         // CornerRadius (on Control, Border, Grid, StackPanel, and RelativePanel)
         if (m.CornerRadius.HasValue && m.CornerRadius != oldM?.CornerRadius)
@@ -598,18 +600,22 @@ public sealed partial class Reconciler
         }
 
         // BorderBrush / BorderThickness (Control, Border, and concrete panels)
-        if (!ReferenceEquals(m.BorderBrush, oldM?.BorderBrush)
-            && _reconcilingElement?.InteractionStates is not null
-            && GetCompositionState(fe)?.InteractionTracker is { } borderTracker
-            && borderTracker.BorderBrushOverrideApplied
-            && (!borderTracker.PreserveUpdatedBorderBrush
-                || InteractionStateApplier.OwnsInteractionBorderBrush(fe, borderTracker.ActiveBorderBrush)))
+        bool borderBrushChanged = !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush);
+        var borderTracker = borderBrushChanged ? GetCompositionState(fe)?.InteractionTracker : null;
+        bool hasInteractionStates = _reconcilingElement?.InteractionStates is not null || preserveInteractionBrushes;
+        bool keepBorderBrush = false;
+        if (borderTracker is { BorderBrushOverrideApplied: true }
+            && (hasInteractionStates || borderTracker.PreserveUpdatedBorderBrush))
         {
-            // Keep the active interaction brush while updating what hover-out restores.
+            keepBorderBrush = hasInteractionStates
+                && (!(preserveInteractionBrushes || borderTracker.PreserveUpdatedBorderBrush)
+                    || InteractionStateApplier.OwnsInteractionBorderBrush(fe, borderTracker.ActiveBorderBrush));
+            // Even a native write after setters must replace the old restore value: the
+            // new normal brush can be the same object as the active interaction brush.
             borderTracker.NormalBorderBrush = m.BorderBrush;
             borderTracker.NormalBorderBrushHasLocalValue = m.BorderBrush is not null;
         }
-        else if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
+        if (!keepBorderBrush && m.BorderBrush is not null && borderBrushChanged)
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.BorderBrush = m.BorderBrush;
             else if (fe is WinUI.Border bbBdr) bbBdr.BorderBrush = m.BorderBrush;
@@ -617,7 +623,7 @@ public sealed partial class Reconciler
             else if (fe is WinUI.StackPanel bbStack) bbStack.BorderBrush = m.BorderBrush;
             else if (fe is WinUI.RelativePanel bbRelative) bbRelative.BorderBrush = m.BorderBrush;
         }
-        else if (m.BorderBrush is null && oldM?.BorderBrush is not null)
+        else if (!keepBorderBrush && m.BorderBrush is null && oldM?.BorderBrush is not null)
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.ClearValue(WinUI.Control.BorderBrushProperty);
             else if (fe is WinUI.Border bbBdr) bbBdr.ClearValue(WinUI.Border.BorderBrushProperty);
@@ -677,23 +683,27 @@ public sealed partial class Reconciler
 
     /// <summary>Background and Foreground.</summary>
     private static void ApplyBackgroundAndForegroundModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool keepRemovedBackground,
-        ForegroundModifier.UpdateAction foregroundUpdate, bool preserveInteractionForeground)
+        ForegroundModifier.UpdateAction foregroundUpdate, bool preserveInteractionBrushes)
     {
         // Background (Panel, Control, or Border)
         if (m.Background is not null && !ReferenceEquals(m.Background, oldM?.Background))
         {
+            if (preserveInteractionBrushes)
+                InteractionStateApplier.UpdateInteractionBackgroundRestoreValue(fe, m.Background);
             if (fe is WinUI.Panel panel) panel.Background = m.Background;
             else if (fe is WinUI.Control ctrl2) ctrl2.Background = m.Background;
             else if (fe is WinUI.Border bdr) bdr.Background = m.Background;
         }
         else if (m.Background is null && oldM?.Background is not null && !keepRemovedBackground)
         {
+            if (preserveInteractionBrushes)
+                InteractionStateApplier.UpdateInteractionBackgroundRestoreValue(fe, DependencyProperty.UnsetValue);
             if (fe is WinUI.Panel panel) panel.ClearValue(WinUI.Panel.BackgroundProperty);
             else if (fe is WinUI.Control ctrl2) ctrl2.ClearValue(WinUI.Control.BackgroundProperty);
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
         }
 
-        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate, preserveInteractionForeground);
+        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate, preserveInteractionBrushes);
     }
 
     /// <summary>AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.</summary>

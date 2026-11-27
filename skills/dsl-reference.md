@@ -430,10 +430,10 @@ TextBlock("Hello").Set(tb => tb.IsTextScaleFactorEnabled = false)
 ```
 
 The lambda parameter is the real WinUI control — full IntelliSense.
-Reach for `.Set()` only when no modifier exists. It re-runs on every update
-while present and keeps the element on the reconciler's update path.
-Removing the callback leaves its previous writes in place. A declarative
-modifier can still overwrite or clear the same property.
+Reach for `.Set()` only when no modifier exists. Callbacks run during mount
+and update. Reusing an element or its setter array can still allow structural
+skipping. Removing the callback alone leaves its previous writes in place.
+A declarative modifier can still overwrite or clear the same property.
 Properties like `FontFamily`, `FontSize`, `TextWrapping`, `TextTrimming` and
 `MaxLines` all have first-class modifiers — prefer those.
 

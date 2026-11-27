@@ -23,7 +23,7 @@ internal static class ForegroundModifier
     };
 
     internal static UpdateAction PrepareUpdate(IV1HandlerEntry entry, UIElement control, Element previous, Element current,
-        Brush? oldModifier, Brush? modifier)
+        Brush? oldModifier, Brush? modifier, bool preserveInteractionForeground)
     {
         // The built-in descriptor writes the element's explicit Foreground. A custom handler
         // for the same element and control types can decide to leave that declaration unapplied.
@@ -41,8 +41,18 @@ internal static class ForegroundModifier
                 : UpdateAction.None;
         }
 
+        if (oldModifier is null)
+        {
+            // The descriptor is about to write this typed value before setters. Refresh the
+            // retained normal value even if that write reuses the active hover brush.
+            if (preserveInteractionForeground && !Equals(oldRichText.Foreground, newRichText.Foreground))
+                InteractionStateApplier.TryPreserveInteractionForeground(richText, WinUI.RichTextBlock.ForegroundProperty,
+                    (object?)newRichText.Foreground ?? DependencyProperty.UnsetValue);
+            return UpdateAction.None;
+        }
+
         // Without an explicit brush, common modifier removal clears the value after setters (#950).
-        if (oldModifier is null || newRichText.Foreground is not { } explicitForeground)
+        if (newRichText.Foreground is not { } explicitForeground)
             return UpdateAction.None;
 
         // Restore before native setters so they can take precedence. If an interaction state
@@ -76,7 +86,7 @@ internal static class ForegroundModifier
         {
             if (ReferenceEquals(oldForeground, foreground) && update != UpdateAction.Reapply) return;
             if (!preserveInteractionForeground
-                || !InteractionStateApplier.TryUpdateInteractionForegroundRestoreValue(fe, property, foreground))
+                || !InteractionStateApplier.TryPreserveInteractionForeground(fe, property, foreground))
                 fe.SetValue(property, foreground);
             if (fe is WinUI.RichTextBlock)
             {
@@ -88,7 +98,7 @@ internal static class ForegroundModifier
         else
         {
             if (!preserveInteractionForeground
-                || !InteractionStateApplier.TryUpdateInteractionForegroundRestoreValue(fe, property, DependencyProperty.UnsetValue))
+                || !InteractionStateApplier.TryPreserveInteractionForeground(fe, property, DependencyProperty.UnsetValue))
                 fe.ClearValue(property);
             ClearApplied(fe);
         }

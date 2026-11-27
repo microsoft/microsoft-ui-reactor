@@ -375,8 +375,10 @@ them into one call.
 
 #### REACTOR_MOD_002
 
-`.Set(...)` writes a property that has a Reactor modifier. `.Set` runs on
-every render and is never undone. Use the modifier instead.
+`.Set(...)` writes a property that has a Reactor modifier. Its callback runs
+during mount and update. Removing the callback alone leaves previous writes
+in place. A declarative modifier can still overwrite or clear the same
+property during reconciliation. Use the modifier instead.
 
 #### REACTOR_MOD_003
 

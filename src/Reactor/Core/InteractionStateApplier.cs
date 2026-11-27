@@ -90,25 +90,42 @@ internal static class InteractionStateApplier
     internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement)
     {
         if (ForegroundModifier.GetProperty(element) is not { } property
-            || ForegroundOverrideOf(element, property) is not { } tracker
+            || InteractionTrackerOf(element) is not { ForegroundOverrideApplied: true } tracker
             || !ReferenceEquals(tracker.NormalForeground, previous))
             return false;
 
         tracker.NormalForeground = replacement;
-        return true;
+        return ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground);
     }
 
-    internal static bool TryUpdateInteractionForegroundRestoreValue(FrameworkElement element, DependencyProperty property, object restoreValue)
+    internal static bool TryPreserveInteractionForeground(FrameworkElement element, DependencyProperty property, object restoreValue)
     {
-        if (ForegroundOverrideOf(element, property) is not { } tracker) return false;
+        if (InteractionTrackerOf(element) is not { ForegroundOverrideApplied: true } tracker) return false;
+        // A common write can reuse the active brush after a setter displaced it. Always
+        // refresh the restore value, but leave the native write to the caller when unowned.
         tracker.NormalForeground = restoreValue;
-        return true;
+        return ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground);
     }
 
     internal static void PreserveUpdatedBorderBrush(UIElement element)
     {
         if (InteractionTrackerOf(element) is { BorderBrushOverrideApplied: true } tracker)
             tracker.PreserveUpdatedBorderBrush = true;
+    }
+
+    internal static void UpdateInteractionBackgroundRestoreValue(UIElement element, object restoreValue)
+    {
+        if (InteractionTrackerOf(element) is { BackgroundOverrideApplied: true } tracker)
+            tracker.NormalBackground = restoreValue;
+    }
+
+    internal static void UpdateInteractionBorderBrushRestoreValue(UIElement element, Brush restoreValue)
+    {
+        if (InteractionTrackerOf(element) is { BorderBrushOverrideApplied: true } tracker)
+        {
+            tracker.NormalBorderBrush = restoreValue;
+            tracker.NormalBorderBrushHasLocalValue = true;
+        }
     }
 
     internal static bool OwnsInteractionBorderBrush(FrameworkElement element, Brush? activeBrush)
@@ -123,10 +140,6 @@ internal static class InteractionStateApplier
         WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
         _ => null,
     };
-
-    private static InteractionStateTracker? ForegroundOverrideOf(FrameworkElement element, DependencyProperty property)
-        => InteractionTrackerOf(element) is { ForegroundOverrideApplied: true } tracker
-            && ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground) ? tracker : null;
 
     /// <summary>
     /// Sets up or updates InteractionStates on an element. Registers pointer event handlers

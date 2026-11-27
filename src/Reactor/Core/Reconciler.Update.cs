@@ -398,13 +398,35 @@ public sealed partial class Reconciler
         // `control`, return null so callers preserve identity.
         UIElement? UpdateWithV1Handler(IV1HandlerEntry entry)
         {
-            bool sharedFlyout = entry.PreservesTargetTag && newEl is FlyoutElement;
+            bool sharedFlyout = entry.PreservesTargetTag;
             if (sharedFlyout && oldEl.InteractionStates is not null && newEl.InteractionStates is not null)
                 _retainsFlyoutInteractionStates = true;
             var oldForeground = oldModifiers?.Foreground;
             var foreground = modifiers?.Foreground;
-            if (oldForeground is not null || foreground is not null)
-                foregroundUpdate = ForegroundModifier.PrepareUpdate(entry, control, oldEl, newEl, oldForeground, foreground);
+            bool preserveInteractionBrushes = outerRetainsInteractionStates && newEl.InteractionStates is null;
+            if (preserveInteractionBrushes && control is WinUI.Border border
+                && oldEl is BorderElement oldBorder && newEl is BorderElement newBorder
+                && entry is V1Protocol.V1HandlerAdapter<BorderElement, WinUI.Border> borderAdapter
+                && borderAdapter.IsBackedByDescriptor(BorderElement.Descriptor))
+            {
+                // Border's descriptor writes its record/modifier fallback before setters.
+                if (!Equals(oldBorder.Background, newBorder.Background)
+                    || !Equals(oldBorder.Modifiers?.Background, newBorder.Modifiers?.Background))
+                    InteractionStateApplier.UpdateInteractionBackgroundRestoreValue(border,
+                        (object?)newBorder.Background ?? newBorder.Modifiers?.Background ?? DependencyProperty.UnsetValue);
+                // The conditional BorderBrush entry only writes non-null values.
+                if (newBorder.BorderBrush is { } borderBrush && !Equals(oldBorder.BorderBrush, borderBrush))
+                    InteractionStateApplier.UpdateInteractionBorderBrushRestoreValue(border, borderBrush);
+            }
+            else if (preserveInteractionBrushes && control is WinUI.Canvas canvas
+                && oldEl is CanvasElement oldCanvas && newEl is CanvasElement { Background: { } background } newCanvas
+                && !Equals(oldCanvas.Background, background)
+                && entry is V1Protocol.V1HandlerAdapter<CanvasElement, WinUI.Canvas> canvasAdapter
+                && canvasAdapter.IsBackedByDescriptor(CanvasElement.Descriptor))
+                InteractionStateApplier.UpdateInteractionBackgroundRestoreValue(canvas, background);
+            if (oldForeground is not null || foreground is not null || preserveInteractionBrushes)
+                foregroundUpdate = ForegroundModifier.PrepareUpdate(entry, control, oldEl, newEl, oldForeground, foreground,
+                    preserveInteractionBrushes);
             bool hasDeferredRelease = ReferenceEquals(_pendingFlyoutForegroundRelease.Control, control);
             UIElement v1Result;
             if (sharedFlyout && restoresOwnInteractionForeground && !hasDeferredRelease)
@@ -568,8 +590,7 @@ public sealed partial class Reconciler
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
                 ownsControl: ownsControl && result is null,
                 foregroundUpdate: ReferenceEquals(target, control) ? foregroundUpdate : ForegroundModifier.UpdateAction.NewTarget,
-                preserveInteractionForeground: result is null && outerRetainsInteractionStates && newEl.InteractionStates is null
-                    && (dropsInteractionStates || oldModifiers?.Foreground is not null));
+                preserveInteractionBrushes: result is null && outerRetainsInteractionStates && newEl.InteractionStates is null);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
@@ -658,7 +679,7 @@ public sealed partial class Reconciler
             InteractionStateApplier.ApplyInteractionStates(target, newEl.InteractionStates);
         else if (clearsInteractionStates)
             InteractionStateApplier.ClearInteractionStates(target);
-        else if (dropsInteractionStates && !replacedControl)
+        else if (outerRetainsInteractionStates && !replacedControl)
             InteractionStateApplier.PreserveUpdatedBorderBrush(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
