@@ -435,7 +435,11 @@ is also retained for compatibility with JIT-only or not-yet-visible generated pr
 but is **not** a trimming guarantee. Providers produced later by another generator,
 providers in a different assembly, non-public/open-generic providers, providers that
 require constructor arguments or required-member initialization, and ambiguous
-multiple providers need explicit registration when XAML metadata is required.
+multiple providers need explicit registration when XAML metadata is required. The one
+exception is the WinUI framework assembly (`Microsoft.WinUI`): on the experimental channel
+it ships per-feature providers (Charts, Tabular) beside its core one, which Reactor's own
+generated provider already chains to, so a wrapper of a built-in control selects
+`XamlControlsXamlMetaDataProvider`, the same provider the stable single-provider assembly yields.
 `REACTORGEN016` warns when visible candidates cannot be selected safely; no warning is
 issued merely because a code-only library has none. Application subclasses are not
 provider candidates. Use `RegisterAssembly = false` and the existing provider-instance

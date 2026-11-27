@@ -25,6 +25,24 @@ Declared in `ElementExtensions`.
 | --- | --- | --- |
 | `handler` | `Action?` |  |
 
+## `CellEditEnding`
+
+Raised before a cell edit is committed or cancelled.
+
+```csharp
+TableViewElement CellEditEnding(this TableViewElement el, Action<TableViewCellEditEndingEventArgs>? handler)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `handler` | `Action<TableViewCellEditEndingEventArgs>?` |  |
+
 ## `CheckedStateChanged`
 
 Wires the three-state checked-changed handler (`null` = indeterminate). Passing `null` as the handler clears it.
@@ -93,6 +111,78 @@ Declared in `ElementExtensions`.
 | Name | Type | Description |
 | --- | --- | --- |
 | `content` | [`Element`](../elements/Element.md) |  |
+
+## `Density`
+
+Sets the row height density.
+
+```csharp
+TableViewElement Density(this TableViewElement el, TableViewDensity density)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `density` | `TableViewDensity` |  |
+
+## `FilterRows`
+
+Filters the rows (see [`TableViewElement.Filter`](../elements/other.md#tableviewelement)).
+
+```csharp
+TableViewElement FilterRows<T>(this TableViewElement el, Func<T, bool>? predicate)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `predicate` | `Func<T, bool>?` |  |
+
+## `GridLines`
+
+Sets which grid lines are drawn.
+
+```csharp
+TableViewElement GridLines(this TableViewElement el, TableViewGridLinesVisibility visibility)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `visibility` | `TableViewGridLinesVisibility` |  |
+
+## `GroupRows`
+
+Groups the rows by a key (see [`TableViewElement.GroupBy`](../elements/other.md#tableviewelement)).
+
+```csharp
+TableViewElement GroupRows<T>(this TableViewElement el, Func<T, object?>? keySelector)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `keySelector` | `Func<T, object?>?` |  |
 
 ## `IconSource`
 
@@ -191,6 +281,43 @@ Declared in `ElementExtensions`.
 | --- | --- | --- |
 | `handler` | `Action<string?>?` or `Action<TreeViewNodeData>?` or `Action<T>?` |  |
 
+## `KeyRows`
+
+Gives rows a stable identity so successive snapshots are diffed by key (moves, inserts, removals, in-place replacements) instead of by position. See [`TableViewElement.RowKey`](../elements/other.md#tableviewelement).
+
+```csharp
+TableViewElement KeyRows<T>(this TableViewElement el, Func<T, object?> key)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `key` | `Func<T, object?>` |  |
+
+## `Legend`
+
+Shows (or hides) the legend, optionally with a heading.
+
+```csharp
+ChartElement Legend(this ChartElement el, string? title = null, bool show = true)
+```
+
+Declared in `ChartModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Charts;`).
+
+**Applies to:** [`ChartElement`](../elements/other.md#chartelement).
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `title` | `string?` | `null` |  |
+| `show` | `bool` | `true` |  |
+
 ## `PaneOpenChanged`
 
 ```csharp
@@ -212,6 +339,51 @@ Declared in `ElementExtensions`.
 | Name | Type | Description |
 | --- | --- | --- |
 | `handler` | `Action<bool>?` |  |
+
+## `ReadOnly`
+
+```csharp
+TableViewElement ReadOnly(this TableViewElement el, bool isReadOnly = true)
+RatingControlElement ReadOnly(this RatingControlElement el, bool readOnly = true)
+TextBoxElement ReadOnly(this TextBoxElement el, bool readOnly = true)
+```
+
+Declared in `ElementExtensions`, `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+> **Obsolete.** Use IsReadOnly() — aligns with WinUI naming (see #268).
+
+| Overload | Description |
+| --- | --- |
+| `ReadOnly(TableViewElement, bool)` | Makes every cell read-only (or editable again). |
+| `ReadOnly(RatingControlElement, bool)` | Sets whether the RatingControl is read-only. |
+| `ReadOnly(TextBoxElement, bool)` | Sets whether the text field is read-only. |
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement), [`RatingControlElement`](../elements/input.md#ratingcontrolelement), [`TextBoxElement`](../elements/input.md#textboxelement).
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `isReadOnly` | `bool` | `true` |  |
+| `readOnly` | `bool` | `true` |  |
+
+## `SelectedIndex`
+
+Controls the selected row (`-1` clears it).
+
+```csharp
+TableViewElement SelectedIndex(this TableViewElement el, int index)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `index` | `int` |  |
 
 ## `SelectedIndexChanged`
 
@@ -245,6 +417,7 @@ Declared in `ElementExtensions`.
 ## `SelectionChanged`
 
 ```csharp
+TableViewElement SelectionChanged(this TableViewElement el, Action<int, object?>? handler)
 GridViewElement SelectionChanged(this GridViewElement el, Action<IReadOnlyList<int>>? handler)
 ListBoxElement SelectionChanged(this ListBoxElement el, Action<IReadOnlyList<int>>? handler)
 ListViewElement SelectionChanged(this ListViewElement el, Action<IReadOnlyList<int>>? handler)
@@ -255,10 +428,11 @@ TemplatedGridViewElement<T> SelectionChanged<T>(this TemplatedGridViewElement<T>
 TemplatedListViewElement<T> SelectionChanged<T>(this TemplatedListViewElement<T> el, Action<IReadOnlyList<T>>? handler)
 ```
 
-Declared in `ElementExtensions`, `DataGridEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Controls;`).
+Declared in `ElementExtensions`, `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`), `DataGridEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Controls;`).
 
 | Overload | Description |
 | --- | --- |
+| `SelectionChanged(TableViewElement, Action<int, object?>?)` | Raised when the selected row changes, with the new index (`-1` when cleared) and item. |
 | `SelectionChanged(GridViewElement, Action<IReadOnlyList<int>>?)` | Wires the multi-select snapshot handler (see [`SelectionChanged`](#selectionchanged)). |
 | `SelectionChanged(ListBoxElement, Action<IReadOnlyList<int>>?)` | Wires the multi-select snapshot handler. Passing `null` clears. |
 | `SelectionChanged(ListViewElement, Action<IReadOnlyList<int>>?)` | Wires the multi-select snapshot handler. Receives the FULL list of selected indices on every change (not added/removed deltas). Snapshot semantics match `CalendarView.SelectedDatesChanged`. Passing `null` clears. |
@@ -268,13 +442,55 @@ Declared in `ElementExtensions`, `DataGridEventExtensions` (package `Microsoft.U
 | `SelectionChanged<T>(TemplatedGridViewElement<T>, Action<IReadOnlyList<T>>?)` | Wires the multi-select snapshot handler for the typed peer. Passing `null` clears. |
 | `SelectionChanged<T>(TemplatedListViewElement<T>, Action<IReadOnlyList<T>>?)` | Wires the multi-select snapshot handler for the typed peer. Receives the full list of currently selected items. Passing `null` clears. |
 
-**Applies to:** [`GridViewElement`](../elements/collections.md#gridviewelement), [`ListBoxElement`](../elements/collections.md#listboxelement), [`ListViewElement`](../elements/collections.md#listviewelement), [`TextBoxElement`](../elements/input.md#textboxelement), [`DataGridElement<T>`](../elements/data-grid.md#datagridelementt), [`ItemsViewElement<T>`](../elements/collections.md#itemsviewelementt), [`TemplatedGridViewElement<T>`](../elements/collections.md#templatedgridviewelementt), [`TemplatedListViewElement<T>`](../elements/collections.md#templatedlistviewelementt).
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement), [`GridViewElement`](../elements/collections.md#gridviewelement), [`ListBoxElement`](../elements/collections.md#listboxelement), [`ListViewElement`](../elements/collections.md#listviewelement), [`TextBoxElement`](../elements/input.md#textboxelement), [`DataGridElement<T>`](../elements/data-grid.md#datagridelementt), [`ItemsViewElement<T>`](../elements/collections.md#itemsviewelementt), [`TemplatedGridViewElement<T>`](../elements/collections.md#templatedgridviewelementt), [`TemplatedListViewElement<T>`](../elements/collections.md#templatedlistviewelementt).
 
 **Parameters**
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `handler` | `Action<IReadOnlyList<int>>?` or `Action<string, int, int>?` or `Action<IReadOnlySet<RowKey>>?` or `Action<IReadOnlyList<T>>?` |  |
+| `handler` | `Action<int, object?>?` or `Action<IReadOnlyList<int>>?` or `Action<string, int, int>?` or `Action<IReadOnlySet<RowKey>>?` or `Action<IReadOnlyList<T>>?` |  |
+
+## `SelectionMode`
+
+```csharp
+TableViewElement SelectionMode(this TableViewElement el, TableViewSelectionMode mode)
+GridViewElement SelectionMode(this GridViewElement el, ListViewSelectionMode mode)
+ListViewElement SelectionMode(this ListViewElement el, ListViewSelectionMode mode)
+```
+
+Declared in `ElementExtensions`, `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+| Overload | Description |
+| --- | --- |
+| `SelectionMode(TableViewElement, TableViewSelectionMode)` | Sets the row selection mode. |
+| `SelectionMode(GridViewElement, ListViewSelectionMode)` |  |
+| `SelectionMode(ListViewElement, ListViewSelectionMode)` |  |
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement), [`GridViewElement`](../elements/collections.md#gridviewelement), [`ListViewElement`](../elements/collections.md#listviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `mode` | `TableViewSelectionMode` or `ListViewSelectionMode` |  |
+
+## `Sorted`
+
+Raised after a column sort is applied or cleared.
+
+```csharp
+TableViewElement Sorted(this TableViewElement el, Action<TableViewSortedEventArgs>? handler)
+```
+
+Declared in `TableViewModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Tabular;`).
+
+**Applies to:** [`TableViewElement`](../elements/other.md#tableviewelement).
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `handler` | `Action<TableViewSortedEventArgs>?` |  |
 
 ## `TransformOrigin`
 

@@ -433,7 +433,8 @@
         { "file": "reference/elements/interop.md", "label": "Interop" },
         { "file": "reference/elements/data-grid.md", "label": "Data grid" },
         { "file": "reference/elements/docking.md", "label": "Docking" },
-        { "file": "reference/elements/win2d.md", "label": "Win2D canvas" }
+        { "file": "reference/elements/win2d.md", "label": "Win2D canvas" },
+        { "file": "reference/elements/other.md", "label": "Other" }
       ]
     },
     { "dir": "reference/03-elements/01-(types)", "title": "Types", "glob": "reference/elements/*.md" },
@@ -458,7 +459,8 @@
         { "file": "reference/factories/interop.md", "label": "Interop" },
         { "file": "reference/factories/data-grid.md", "label": "Data grid" },
         { "file": "reference/factories/markdown.md", "label": "Markdown" },
-        { "file": "reference/factories/win2d.md", "label": "Win2D canvas" }
+        { "file": "reference/factories/win2d.md", "label": "Win2D canvas" },
+        { "file": "reference/factories/other.md", "label": "Other" }
       ],
       "glob": "reference/factories/*.md"
     },

@@ -1034,30 +1034,6 @@ Declared in `ElementExtensions`.
 | `min` | `double` |  |
 | `max` | `double` |  |
 
-## `ReadOnly`
-
-```csharp
-RatingControlElement ReadOnly(this RatingControlElement el, bool readOnly = true)
-TextBoxElement ReadOnly(this TextBoxElement el, bool readOnly = true)
-```
-
-Declared in `ElementExtensions`.
-
-> **Obsolete.** Use IsReadOnly() — aligns with WinUI naming (see #268).
-
-| Overload | Description |
-| --- | --- |
-| `ReadOnly(RatingControlElement, bool)` | Sets whether the RatingControl is read-only. |
-| `ReadOnly(TextBoxElement, bool)` | Sets whether the text field is read-only. |
-
-**Applies to:** [`RatingControlElement`](../elements/input.md#ratingcontrolelement), [`TextBoxElement`](../elements/input.md#textboxelement).
-
-**Parameters**
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `readOnly` | `bool` | `true` |  |
-
 ## `SaturationRange`
 
 Inclusive saturation bounds (0–100).
