@@ -36,7 +36,7 @@ Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Element`](Element.md).
 
 **Created by:** [`GridView`](../factories/collections.md#gridview)
 
-**Modifiers:** [`IncrementalLoadingTrigger`](../modifiers/collections.md#incrementalloadingtrigger), [`ItemClick`](../modifiers/collections.md#itemclick), [`ItemContainerStyle`](../modifiers/collections.md#itemcontainerstyle), [`SelectedIndexChanged`](../modifiers/shared-controls.md#selectedindexchanged), [`SelectionChanged`](../modifiers/shared-controls.md#selectionchanged), [`SelectionMode`](../modifiers/collections.md#selectionmode), [`Set`](../modifiers/native-properties.md#set)
+**Modifiers:** [`IncrementalLoadingTrigger`](../modifiers/collections.md#incrementalloadingtrigger), [`ItemClick`](../modifiers/collections.md#itemclick), [`ItemContainerStyle`](../modifiers/collections.md#itemcontainerstyle), [`SelectedIndexChanged`](../modifiers/shared-controls.md#selectedindexchanged), [`SelectionChanged`](../modifiers/shared-controls.md#selectionchanged), [`SelectionMode`](../modifiers/shared-controls.md#selectionmode), [`Set`](../modifiers/native-properties.md#set)
 
 | Property | Type | Description |
 | --- | --- | --- |
@@ -291,7 +291,7 @@ Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Element`](Element.md).
 
 **Created by:** [`ListView`](../factories/collections.md#listview)
 
-**Modifiers:** [`IncrementalLoadingTrigger`](../modifiers/collections.md#incrementalloadingtrigger), [`ItemClick`](../modifiers/collections.md#itemclick), [`ItemContainerStyle`](../modifiers/collections.md#itemcontainerstyle), [`SelectedIndexChanged`](../modifiers/shared-controls.md#selectedindexchanged), [`SelectionChanged`](../modifiers/shared-controls.md#selectionchanged), [`SelectionMode`](../modifiers/collections.md#selectionmode), [`Set`](../modifiers/native-properties.md#set)
+**Modifiers:** [`IncrementalLoadingTrigger`](../modifiers/collections.md#incrementalloadingtrigger), [`ItemClick`](../modifiers/collections.md#itemclick), [`ItemContainerStyle`](../modifiers/collections.md#itemcontainerstyle), [`SelectedIndexChanged`](../modifiers/shared-controls.md#selectedindexchanged), [`SelectionChanged`](../modifiers/shared-controls.md#selectionchanged), [`SelectionMode`](../modifiers/shared-controls.md#selectionmode), [`Set`](../modifiers/native-properties.md#set)
 
 | Property | Type | Description |
 | --- | --- | --- |

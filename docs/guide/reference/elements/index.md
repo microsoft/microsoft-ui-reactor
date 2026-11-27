@@ -27,6 +27,7 @@ Every control in Reactor is described by an element record. Factory methods crea
 | [Data grid](data-grid.md) | The data grid and its column factories, from the Microsoft.UI.Reactor.Advanced package. |
 | [Docking](docking.md) | The dock manager and its events, from the Microsoft.UI.Reactor.Advanced package. |
 | [Win2D canvas](win2d.md) | Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package. |
+| [Other](other.md) | Controls that do not fit one of the other areas. |
 
 ## Types
 

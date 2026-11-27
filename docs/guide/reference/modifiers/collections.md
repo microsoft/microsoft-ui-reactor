@@ -131,23 +131,6 @@ Declared in `ElementExtensions`.
 | --- | --- | --- |
 | `handler` | `Action?` |  |
 
-## `SelectionMode`
-
-```csharp
-GridViewElement SelectionMode(this GridViewElement el, ListViewSelectionMode mode)
-ListViewElement SelectionMode(this ListViewElement el, ListViewSelectionMode mode)
-```
-
-Declared in `ElementExtensions`.
-
-**Applies to:** [`GridViewElement`](../elements/collections.md#gridviewelement), [`ListViewElement`](../elements/collections.md#listviewelement).
-
-**Parameters**
-
-| Name | Type | Description |
-| --- | --- | --- |
-| `mode` | `ListViewSelectionMode` |  |
-
 ## `SetRepeater`
 
 ```csharp
