@@ -128,3 +128,10 @@ public sealed class RenderErrorGlobalsCollection { }
 /// </summary>
 [CollectionDefinition("DataSourceDiagnostics", DisableParallelization = true)]
 public sealed class DataSourceDiagnosticsCollection { }
+
+/// <summary>
+/// Isolates tests that replace <see cref="global::System.Net.Http.HttpClient.DefaultProxy"/>.
+/// It is process-wide, so any other test's <c>HttpClient</c> would pick up the test proxy.
+/// </summary>
+[CollectionDefinition("HttpDefaultProxy", DisableParallelization = true)]
+public sealed class HttpDefaultProxyCollection { }

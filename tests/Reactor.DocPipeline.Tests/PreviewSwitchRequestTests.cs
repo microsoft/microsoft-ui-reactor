@@ -74,6 +74,132 @@ public class PreviewSwitchRequestTests
     }
 
     /// <summary>
+    /// A frame is refused when the preview host reports a render error, and also when it
+    /// cannot report one: an absent field is not evidence of a clean render.
+    /// </summary>
+    [Fact]
+    public void Status_render_error_is_read_and_a_missing_field_fails_closed()
+    {
+        Assert.Null(ScreenshotCapture.ParseRenderError("""{"building":false,"renderError":null}"""));
+        Assert.Equal("RootRender in Alert: NullReferenceException: boom",
+            ScreenshotCapture.ParseRenderError("""{"renderError":"RootRender in Alert: NullReferenceException: boom"}"""));
+        Assert.Throws<InvalidOperationException>(() => ScreenshotCapture.ParseRenderError("""{"building":false}"""));
+        Assert.Throws<InvalidOperationException>(() => ScreenshotCapture.ParseRenderError("""{"renderError":42}"""));
+    }
+
+    /// <summary>
+    /// Every way the status check can refuse a frame carries the diagnostic code, and the
+    /// Component&lt;TProps&gt; hint only appears for a null reference.
+    /// </summary>
+    [Theory]
+    [InlineData(200, """{"renderError":null}""", null, false)]
+    [InlineData(200, """{"renderError":"RootRender in Alert: NullReferenceException: boom"}""", "boom", true)]
+    [InlineData(200, """{"renderError":"Reconcile: ArgumentOutOfRangeException: index"}""", "index", false)]
+    [InlineData(200, """{"renderError":"Pending: the component switch has not rendered yet."}""", "Pending", false)]
+    [InlineData(200, """{"building":false}""", "does not report", false)]
+    [InlineData(200, "not json", "could not check", false)]
+    [InlineData(500, "{}", "could not check", false)]
+    public async Task Render_error_check_refuses_with_the_code(int status, string body, string? expected, bool hint)
+    {
+        using var http = new HttpClient(new StubHandler((HttpStatusCode)status, body));
+
+        var refusal = await ScreenshotCapture.CheckRenderError(http, 4242, "Alert", TimeSpan.FromSeconds(5));
+
+        if (expected is null)
+        {
+            Assert.Null(refusal);
+            return;
+        }
+        Assert.NotNull(refusal);
+        Assert.StartsWith(ScreenshotCapture.RenderErrorDiagnosticCode + ":", refusal);
+        Assert.Contains(expected, refusal);
+        Assert.Equal(hint, refusal.Contains("Component<TProps>", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Capture waits while the switch is pending and goes ahead as soon as it is not,
+    /// without waiting out the timeout.
+    /// </summary>
+    [Fact]
+    public async Task Capture_waits_for_a_pending_switch_to_render()
+    {
+        using var handler = new StubHandler(HttpStatusCode.OK, Pending, Pending, """{"renderError":null}""");
+        using var http = new HttpClient(handler, disposeHandler: false);
+
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        var refusal = await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(10));
+
+        Assert.Null(refusal);
+        Assert.Equal(3, handler.Requests);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"waited {sw.Elapsed.TotalSeconds:F1}s for a switch that rendered");
+    }
+
+    /// <summary>
+    /// A switch still pending at the timeout is refused before any capture, even when it
+    /// completes right after: the window may have shown the outgoing component, and a
+    /// post-capture status read would already be clean.
+    /// </summary>
+    [Fact]
+    public async Task A_switch_that_renders_after_the_timeout_is_refused_without_capturing()
+    {
+        // Pending for the whole wait, clean from the first read after it.
+        var bodies = Enumerable.Repeat(Pending, 1000).Append("""{"renderError":null}""").ToArray();
+        using var handler = new StubHandler(HttpStatusCode.OK, bodies);
+        using var http = new HttpClient(handler, disposeHandler: false);
+
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        var refusal = await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(10));
+
+        Assert.NotNull(refusal);
+        Assert.StartsWith(ScreenshotCapture.RenderErrorDiagnosticCode + ":", refusal);
+        Assert.Contains("did not render", refusal);
+        Assert.True(handler.Requests is > 1 and < 1000, $"{handler.Requests} status reads");
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"waited {sw.Elapsed.TotalSeconds:F1}s against a 0.3s timeout");
+    }
+
+    /// <summary>A status that can't be read refuses the switch too.</summary>
+    [Fact]
+    public async Task A_switch_whose_status_cannot_be_read_is_refused()
+    {
+        using var handler = new StubHandler(HttpStatusCode.InternalServerError, "{}");
+        using var http = new HttpClient(handler, disposeHandler: false);
+
+        var refusal = await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(10));
+
+        Assert.NotNull(refusal);
+        Assert.StartsWith(ScreenshotCapture.RenderErrorDiagnosticCode + ":", refusal);
+        Assert.Equal(1, handler.Requests);
+    }
+
+    private const string Pending = """{"renderError":"Pending: the component switch has not rendered yet."}""";
+    /// <summary>Answers <c>/status</c> with each body in turn, repeating the last.</summary>
+    private sealed class StubHandler(HttpStatusCode status, params string[] bodies) : HttpMessageHandler
+    {
+        private readonly List<HttpResponseMessage> _responses = [];
+
+        public int Requests { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Assert.Equal(ScreenshotCapture.StatusUrl(4242), request.RequestUri!.ToString());
+            var body = bodies[Math.Min(Requests++, bodies.Length - 1)];
+            var response = new HttpResponseMessage(status) { Content = new StringContent(body) };
+            _responses.Add(response);
+            return Task.FromResult(response);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                foreach (var response in _responses) response.Dispose();
+                _responses.Clear();
+            }
+            base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>
     /// The component switch must be bounded by its own timeout.
     /// </summary>
     /// <remarks>

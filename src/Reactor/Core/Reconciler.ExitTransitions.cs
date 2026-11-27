@@ -257,7 +257,7 @@ public sealed partial class Reconciler
         }
 
         Unmount(oldControl);
-        children.Replace(index, newControl);
+        children.ReplaceUnmounted(index, oldControl, newControl);
         return false;
     }
 }

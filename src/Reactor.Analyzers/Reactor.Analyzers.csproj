@@ -42,6 +42,8 @@
        Reactor.Tests asserts it matches the CLI's copy byte-for-byte. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
+    <!-- Spec 067: tools/Reactor.ModifierGen emits checked-in code from Modifiers/ModifierSchema.cs. -->
+    <InternalsVisibleTo Include="Reactor.ModifierGen" />
   </ItemGroup>
 
   <ItemGroup>

@@ -128,6 +128,30 @@ Hooks for the Reactor developer tools.
 | --- | --- |
 | [`UseDevtools`](UseDevtools.md) | Returns `true` when the current process is running with the in-app devtools UI enabled. |
 
+## Docking
+
+Hooks that read the dock layout and the enclosing pane. From the Microsoft.UI.Reactor.Advanced package.
+
+| Hook | Description |
+| --- | --- |
+| [`UseActivePaneKey`](UseActivePaneKey.md) | Returns the active pane's `DockableContent.Key`, or null when no pane is active. |
+| [`UseDockHost`](UseDockHost.md) | Returns the nearest enclosing `DockHostModel`, or null when the component is rendered outside any docking host. |
+| [`UseDockLayout`](UseDockLayout.md) | Returns a wide snapshot of the dock layout — re-renders the consumer on any structural change. |
+| [`UseDockPanePersisted`](UseDockPanePersisted.md) | Per-pane persisted state. |
+| [`UseDockState`](UseDockState.md) | Returns the enclosing pane's current dock state (Docked / Floating / AutoHidden / AutoHiddenExpanded / Hidden). |
+| [`UseIsActivePane`](UseIsActivePane.md) | Returns true when the \*enclosing pane\* is the host's currently-active pane. |
+| [`UsePane`](UsePane.md) | Returns identity info for the enclosing pane subtree. |
+
+## Win2D drawing
+
+Hooks that keep Win2D draw state and device resources. From the Microsoft.UI.Reactor.Advanced package.
+
+| Hook | Description |
+| --- | --- |
+| [`UseCanvasResources`](UseCanvasResources.md) | Creates resources for the current Win2D shared device, recreates them after `CanvasDevice.DeviceLost`, and disposes them on unmount. |
+| [`UseDrawCommand`](UseDrawCommand.md) | Memoizes a Win2D draw callback and rebuilds it only when `deps` change. |
+| [`UseDrawState`](UseDrawState.md) | Creates a stable mutable draw-state reference for Win2D callbacks. |
+
 ## Types and options
 
 | Type | Description |

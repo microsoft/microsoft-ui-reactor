@@ -147,10 +147,11 @@ Rows A–D are 29 of the property-writing modifiers on the main bag, and all of 
 Row E is mechanical around one hand-written resolver per family. Row F is not mechanical and this
 spec does not pretend it is.
 
-Two row A/D members carry exceptions the schema has to state, not derive. `RequestedTheme` has a
-set and an unset arm but `CleanElement` never clears it on pool return, and `AutomationName` on a
+One row A/D member carries an exception the schema has to state, not derive. `AutomationName` on a
 captioned control is replaced by a caption-derived local name right after `ApplyModifiers` runs
 (`Reconciler.Update.cs:523-529`), so "unset leaves no local value" is not true for it.
+(`RequestedTheme` used to be a second one: it had a set and an unset arm but `CleanElement` never
+cleared it on pool return. Issue #1717 added the clear.)
 
 ---
 
@@ -296,7 +297,7 @@ internal static partial class ModifierSchema
     internal static readonly ModifierSlot[] Slots =
     {
         Simple("RequestedTheme", Layout, "Microsoft.UI.Xaml.ElementTheme", Family.Theme)
-            .OnFrameworkElement(pool: NotReset("not cleared by CleanElement today")),
+            .OnFrameworkElement(pool: ClearValue),
         // One composite family = one apply call, fed by several slots, each with full metadata.
         CompositeFamily("Margin", target: "Margin", method: "ApplyMarginFamily").OnFrameworkElement(),
         Composite("Margin", Layout, Thickness, Family.Box, family: "Margin"),
@@ -365,7 +366,7 @@ Rules the schema enforces about itself (unit tests over the data, §10.1):
 | `src/Reactor/Core/Reconciler.Modifiers.Generated.cs` | rows A–D arms of `ApplyModifiers` at their current positions, and the call sites of rows E–F | 3 |
 | `src/Reactor/Core/Element.Modifiers.Generated.cs` | `ModifiersEqualCore`, `VisualModifiersEqual`, the three `Merge` bodies | 2 |
 | `src/Reactor/Core/Diagnostics/AppliedModifierMap.Generated.cs` | `AppliedModifierMap.Entries` and its owner helpers | 2 |
-| `src/Reactor/Core/Reconciler.ThemeBindings.Generated.cs` | `GetDependencyPropertyName` | 2 |
+| `src/Reactor/Core/ThemeBindingApplier.Generated.cs` | the common-modifier rows of `GetDependencyPropertyName` (`GetModifierDependencyPropertyName`); `PaneBackground` stays hand-written | 2 |
 | `src/Reactor/Core/ElementPool.Generated.cs` | a `CleanModifierBackedProperties(fe)` helper that `CleanElement` calls, emitted from each receiver's declared `PoolReset` (§6.2) | 5 |
 | `src/Reactor/Core/Reconciler.Pooling.Generated.cs` | `DeclaresTransform` (from `TakesVisualAtMount`) and `HasRestorableModifier`'s field list (from `RestorableOwner`) | 6 |
 
@@ -547,7 +548,6 @@ must not generate it as if it were. Today's `CleanElement` has deliberate except
 
 - `TextBlock.FontSize` is reset with `tb.FontSize = 14`, not `ClearValue`, because the DP inherits
   and a clear would let a recycled `TextBlock` pick up an ancestor's size (`ElementPool.cs:587-601`).
-- `RequestedTheme` has a set and an unset arm in `ApplyModifiers` but no clear in `CleanElement`.
 - Resets run through base-type arms (`Control`, `Panel`) while the pool recycles exact types
   (`Button`, `Grid`, …), so which receivers are reset is an assignability fact
   (`ModifierUnsetClearValueTests.cs:882-889`).
@@ -557,9 +557,10 @@ So each receiver declares its `PoolReset` (`ClearValue`, `WriteDefault` with the
 declarations into a `CleanModifierBackedProperties(fe)` helper that `CleanElement` calls at the
 point its modifier clears sit today, and widens `CleanElementScan` to follow that call (§4.3). The
 non-modifier resets in `CleanElement` (tag, refresh snapshots, event handlers, theme bindings,
-facades, transitions, `Clip`, `FlowDirection`, `RenderTransform`) stay hand-written. Whether
-`RequestedTheme` *should* be reset on pool return is a behaviour question for its own issue, not
-for this migration.
+facades, transitions, `Clip`, `FlowDirection`, `RenderTransform`) stay hand-written.
+`RequestedTheme` was once a third exception, set and unset by `ApplyModifiers` but never cleared on
+pool return. Issue #1717 settled that as a bug and added the clear, so it now declares `ClearValue`
+like its row A siblings.
 
 Event wiring on poolable controls goes through the one-time trampoline and
 `ReactorState.ControlEventState` survives rent and return (issue #114). Row G slots are declared
@@ -595,7 +596,7 @@ remaining-owner semantics would be a behaviour change.
 The `ThemeRef` overloads of `Background`, `Foreground` and `BorderBrush` go through
 `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568-580`), not `ApplyModifiers`, and
 their reach differs: `Foreground` reaches `RichTextBlock` on the theme path but not on the plain
-brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305`). In the
+brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`). Since #1687 the plain write and the `ThemeRef` path reach the same receivers (layer 2 generates the `ThemeRef` rows from the `Theme` receivers, and `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` checks them against `ForegroundModifier.GetProperty`), so no slot has a separate theme gate today; `ModifierTable.ThemeGate` still derives one from `Theme`-role receivers if they ever differ. In the
 schema that is a receiver row with the `Theme` role but not the `Apply` role, so it never widens
 the plain write, and layer 2 generates `GetDependencyPropertyName`'s modifier rows from the
 `Theme`-role rows. The pool reach is a third, separate set (`RichTextBlock.Foreground` is cleared
@@ -672,7 +673,7 @@ m.Layout)` skips the whole layout block), passing the already computed skip-gate
   §10.1), which already suppresses trim warnings, and in the generator tool, which never ships.
 - The analyzer only gains a data file. No `netstandard2.0` restriction is touched: no
   `FrozenDictionary`, no newer BCL APIs. The analyzer already compiles collection expressions
-  (`ModifierTable.cs:304-305`), so the shared file can use the same syntax.
+  (`ModifierTable.cs:304-305` at `4df0f6feb`), so the shared file can use the same syntax. Layer 1's `ModifierSchema.cs` uses plain array initializers.
 - Headless tests cannot touch WinUI objects, and reading `FrameworkElement.MarginProperty`
   activates a WinUI factory. The schema therefore names DPs as strings, never as
   `DependencyProperty` values, so it is constructible in every consumer. Only the generated code
@@ -794,8 +795,8 @@ For every (slot, receiver) the fixture mounts a representative concrete control 
    `tests/Reactor.AppTests.Host/SelfTest/Fixtures/ModifierEventFixtures.cs:784`);
 5. on a poolable receiver, a rented control matches the matrix's expected pool reset: no local
    value for `ClearValue`, the declared value for `WriteDefault` (`TextBlock.FontSize` = 14), and
-   the previous renter's value for `NotReset` (`RequestedTheme`). The last one is a known gap
-   pinned on purpose, not endorsed (the `ModifierPoolClearValueOnRent` shape, `:999`);
+   the previous renter's value for any `NotReset` row (none today; `RequestedTheme` was one until
+   issue #1717) (the `ModifierPoolClearValueOnRent` shape, `:999`);
 6. for gated slots **that have a qualifying control**, on a non-receiver control that declares a
    DP of the same name the modifier deliberately does not reach (for example
    `ContentPresenter.Padding` / `CornerRadius` / `Foreground`, or `RichTextBlock.Foreground` on the
@@ -832,16 +833,140 @@ revertible on its own.
 | 0 | Behaviour-preserving extraction of `ApplyModifiers` into per-family private methods in today's order (proposed separately). Retarget the gate reader and `ScannedMethods` to the extracted methods, with the scan-population check. Freeze today's arm order as a literal list. Merge round-trip and two-way skip-equality tests against the hand-written records. Fix §14 in its own PR. | refactor only, plus the §14 fix | existing suites, new headless tests |
 | 1 | Add `ModifierSchema.cs` and the generator tool, emitting only the typed probe table. Schema invariant tests. Retarget `Every_ControlGate_Matches_…` to the slots' `AnalyzerControlGate`. Add the §10.2 matrix selftest against hand-written code and mutation-check it. Analyzer builds `ControlGate`, `ThemeControlGate`, `GateOnlyInReconciler` and `PoolResetGate` from the slots' declared values, proven identical by the literal parity snapshot. | analyzer only | parity snapshot, analyzer tests unchanged, new selftest green |
 | 2 | Generate the cold consumers: `ModifiersEqual(Core)`, `VisualModifiersEqual`, the three `Merge` bodies, `AppliedModifierMap`, `GetDependencyPropertyName`'s modifier rows. Records become `partial`. | `Element.cs`, diagnostics, theme bindings | freshness test, two-way skip-equality test, perf-compare |
-| 3a–3e | Generate rows A–D one family per PR, each arm at its existing position: sizing and alignment; automation, focus and tier-1 accessibility; typography; control state (`IsEnabled`, `ElementSoundMode`, `TabIndex`, content alignment, `CornerRadius`, `Foreground`); visibility and tooltip placement. | `Reconciler.Modifiers.cs` | §10.2 selftest, unset-arm scans, perf-compare |
+| 3a–3e | Generate rows A–D one family per PR, each arm at its existing position: sizing and alignment (including content alignment, which shares that helper); automation, focus and tier-1 accessibility; typography; control state (`IsEnabled`, `ElementSoundMode`, `TabIndex`, `CornerRadius`; `Foreground` is hand-coded since #1687); visibility and tooltip placement. | `Reconciler.Modifiers.cs` | §10.2 selftest, unset-arm scans, perf-compare |
 | 4 | Composite families: the generated `ApplyModifiers` calls the hand-written resolvers. Only their receivers move to the schema. | `Reconciler.Modifiers.cs` | same |
 | 5 | Generate `PoolableTypes` and a `CleanModifierBackedProperties` helper from each receiver's declared `PoolReset`. `ElementPool` becomes `partial`, and `CleanElementScan` follows the helper in the same PR. | `ElementPool.cs` | pool selftests, every `CleanElementScan` consumer unchanged and green |
 | 6 | Composition metadata: generate `DeclaresTransform` and the five transform rows of `VisualOwningModifiers` from `TakesVisualAtMount` (the other rows stay hand-written, guarded by a full key-set snapshot added first), and `HasRestorableModifier`'s field list from `RestorableOwner`. Apply stays hand-coded. | `Reconciler.Pooling.cs`, `Reconciler.Modifiers.cs`, analyzer | `ModifierTransform_*`, visual-lane selftests, `VisualOwningModifiers` snapshot |
 | 7 | `AccessibilityModifiers` / `ApplyAccessibilityModifiers` get the layer 2–3 treatment for their 11 mechanical fields. `LabeledBy` and the ref fields stay hand-coded. | `Reconciler.Accessibility.cs` | same as 3 |
 
+**Progress.** Layer 0 has landed: #1711 extracted the per-family helpers and the scan-population
+guard, #1719 fixed §14, and the contract tests are `ModifierFieldContractTests` (completeness,
+merge, two-way skip equality, NaN per bucket), `ModifierApplyOrderTests` (frozen arm order for
+`ApplyModifiers` and `ApplyAccessibilityModifiers`, plus the §5 constraints) and the
+`ModifierFieldContract_BrushAndFont` selftest for the fields that can't run headless.
+
+Layer 1 is split in two PRs. The first adds `ModifierSchema` (`src/Reactor.Analyzers/Modifiers/`),
+moves the analyzer's common-modifier gates, `GateOnlyInReconciler` and poolable mirror onto it
+(`ModifierTableParitySnapshotTests` pins every `ModifierInfo` from before the move), points
+`ModifierFieldContractTests` and the `ControlGate` drift test at it, and adds
+`ModifierSchemaTests` (receivers and DPs exist and match `ApplyModifiers` and the `ThemeRef`
+path, slot order matches the frozen apply order, composition flags, fluent names).
+`ModifierGateSource` reads gate arguments from both files. The second adds
+`tools/Reactor.ModifierGen`, which emits the typed probe table
+(`tests/Reactor.AppTests.Host/SelfTest/ModifierMatrix/ModifierProbes.Generated.cs`), and the
+§10.2 matrix selftests `ModifierMatrix_*`, which run the probes against the hand-written frozen
+`ModifierMatrixExpectations`. Unset `AutomationName` runs twice: on a captionless Border it
+releases the local value, and on a captioned TextBlock with no Style it falls back to the caption
+(§10.2 step 3's exception; a Style-provided name would stop that fallback). The negatives use a
+test-only `ContentPresenter` carrier for `CornerRadius` and both content alignments, with
+`Width` as a positive control that modifiers reach the carrier at all. Hand-coded slots
+(composition, brushes including `Foreground` since #1687, tooltips, flyouts, `LabeledBy`) are
+listed in `Excluded` with a reason. The pool step reads the carrier while it sits in the pool (that is
+`CleanElement` alone) and then checks only that a bare renter of the same instance does not get
+the previous value, because a renter's own mount can write the DP (Button's `IsEnabled`, a
+TextBlock's caption-derived name). On TextBlock the descriptor's `ClearValueOnUnset` (#522) also
+clears an unset `FontSize` at mount, so the pool's `FontSize = 14`, written to stop a recycled
+TextBlock inheriting an ancestor's size, never reaches a `TextBlockElement` renter. Layer 5 should decide that
+reset with this in view.
+`ModifierMatrixSchemaAgreementTests` checks headlessly that the probes and the matrix list the
+same (slot, receiver, DP) set, that carriers are receivers and negatives are not, that every gated
+slot has a negative or a recorded reason, that every hand-coded slot is excluded with a reason, and
+that the generated file is fresh.
+
+Layer 2 is split in two PRs. The first generates the skip equality and the four `Merge` bodies
+into `src/Reactor/Core/Element.Modifiers.Generated.cs`. The comparison moved out of `Element` into
+`internal static partial class ModifierEquality` (`ModifierEquality.cs` keeps the declarations
+and the rationale), so `Element` and its doc snippet are untouched, and the four modifier records
+became `partial` with `partial` `Merge` declarations. The emitted shape is today's: Layout and
+Accessibility compare by record `Equals`, Visual and root fields one by one, the routed handlers
+through `ModifierCallbacksEqual`. The emitter throws on a declaration that shape cannot express
+(for example a Layout slot that is not `Value`) instead of emitting different code. Because
+`ModifierFieldContractTests` reads the skip policy from the same schema, a frozen literal
+(`ModifierSkipPolicySnapshotTests`), captured while that test still checked the hand-written
+comparison, is the independent oracle. The second PR generates `AppliedModifierMap.Entries` and
+its owner helpers (`AppliedModifierMap.Generated.cs`) and the common-modifier rows of
+`GetDependencyPropertyName` (`ThemeBindingApplier.Generated.cs`, read by the gate reader through
+`ReconcilerSource.HelperFiles`). Slots gained `ReportTarget` (the transform facades),
+`ReportSuppressedBy` (ToolTip under RichToolTip) and `ReportHandWritten` (AttachedFlyout's
+flyout-slot owner stays hand-written). A gated receiver reports as `<Receiver>.<Property>`, not
+`<DpOwner>.<Property>` as §4.2 sketched, because `TabIndex` reports `Control.TabIndex` today. The
+report order is pinned by `ModifierSchema.AppliedReportOrder`, so the diagnostics output kept its
+order, and `AppliedModifierMapSnapshotTests` freezes the map captured from the hand-written code.
+`GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` is kept, not deleted as §9
+planned: the brush apply arms stay hand-coded, so it still compares two independent sources.
+
+Layer 3 generates whole family helpers, one family per PR, listed in
+`ModifierEmitter.GeneratedHelpers` and emitted into `Reconciler.Modifiers.Generated.cs` under their
+existing names, so each keeps its call site and the apply order does not move. `ApplyModifiers`
+itself and its call sequence stay hand-written (this replaces §4.3's plan to generate the E–F call
+sites). A helper names its slots as an explicit `First`..`Last` range of `ModifierSchema.Slots`,
+because families are labels that cross helpers (`IsEnabled` and `ElementSoundMode` are both
+control state but live in different helpers). 3a generates `ApplySizeAndAlignmentModifiers`
+(sizing, alignment and the content alignments, which share that helper today). 3a emitted only an
+ungated value-typed set/unset pair and a declared `SharedGate` run of slots gated on one receiver
+type inside one `if (fe is T x)` block, and the generated method was token-identical to the
+hand-written one it replaced. For generated helpers the source gates read generated code, so the
+independent oracle is the frozen §10.2 matrix. 3b generates `ApplyAutomationAndFocusModifiers`,
+which adds three declared shapes: attached setters (`AutomationProperties.SetName`,
+`TitleBar.SetIsDragRegion`), value-compared `string` arms, and `InlineGates` (`ElementSoundMode`,
+`TabIndex`: `… && fe is WinUI.Control x`, with the reset re-testing the type under its own variable,
+issue #986). `IsEnabled`'s inline-gated form is expressible the same way and is generated in 3d.
+At 3b, converted slots, receiver chains and reference-compared (`WriteEquality.Reference`) fields
+still threw. Every arm is laid out on two lines with a blank line between arms, so 3b re-lays out 3a's
+one-line arms (whitespace only). 3b's output is
+token-identical to the removed method once comments are ignored; the emitter writes one fixed #986
+comment above each inline-gated arm in place of the hand-written prose. `InlineGates` declares the
+pattern-variable names, instead of deriving them, to keep that token identity as a review aid. 3c
+generates `ApplyTypographyModifiers` (`FontFamily`, `FontSize`, `FontWeight`), which adds declared
+`ReceiverChains` (one pattern variable per Apply receiver, tried in schema order inside the set and
+the reset arm, `Control` then `TextBlock`) and reference-compared guards (`!ReferenceEquals`, for
+`FontFamily`). Its output is token-identical to the removed method once comments are ignored and
+`TextBlock` is read as `WinUI.TextBlock`, the generated file's only spelling for that namespace.
+Converted and hand-coded slots still throw. Three arms left for 3d and 3e sit in helpers that also
+hold hand-coded arms: `CornerRadius` opens `ApplyBorderModifiers`, `IsVisible` closes the composition
+helper `ApplyOpacityTransformAndVisibilityModifiers`, and `ToolTipPlacement` sits inside
+`ApplyToolTipAndFlyoutModifiers`. Whole-helper generation reaches them only once each is moved into a
+helper of its own at the same point in the call sequence, so the apply order does not move. Each of
+those PRs makes that extraction first. 3d moves the `CornerRadius` arm out of `ApplyBorderModifiers`
+into the helper that held `IsEnabled`, which is called just before it and whose slot precedes it in
+schema order, and generates that helper whole as `ApplyIsEnabledAndCornerRadiusModifiers`
+(`IsEnabled` through `InlineGates`, `CornerRadius` as a five-receiver chain). The apply order does
+not move, and the generated method is token-identical to the two removed arms once comments are
+ignored. `Foreground` is hand-coded (#1687) and stays in `ApplyBackgroundAndForegroundModifiers`.
+3e finishes rows A–D. `IsVisible` moves out of the composition helper (renamed
+`ApplyOpacityAndTransformModifiers`) into a generated `ApplyVisibilityModifier` called right after it,
+and `ToolTipPlacement` into a generated `ApplyToolTipPlacementModifier`, with the tooltip helper split
+around it into `ApplyToolTipModifiers` and `ApplyFlyoutModifiers`. The calls run in the old statement
+order, so the apply order does not move, and the schema's `.Method` owners follow the renames. Row C
+is emitted for an ungated slot only: the value goes through its `Converter`, a static method in the
+new `ModifierConverters` class (`ToVisibility`), in place of the inline ternary. That is the one
+arm whose tokens change; the write is the same.
+
+Layer 4 keeps the composite families' BiDi resolvers hand-written, as planned, but `ApplyModifiers`
+stays hand-written too, so nothing generated calls them. What moves to the schema is the part
+that lists receivers: the write and release of the resolved value over the physical slot's
+Apply receivers, and the reader the resolver uses for its overlay base. Each family is declared
+in `ModifierEmitter.GeneratedComposites` and gets an `ApplyResolved<X>Modifier` helper, which the
+resolver calls with the resolved value and whether the previous overlay wrote something else, and
+a `Read<X>` reader. The write fires when the resolved value differs from the previous physical
+value, an inline slot changed, or the overlay is stale; the release fires when no slot of the
+family is set and one was, and the write didn't fire. Those are the hand-written conditions,
+rewritten over the bag. Because the release is the write's else branch, a resolver must not hand
+back a value for a family the bag no longer sets; the Padding resolver did when an inline edge was
+dropped with the physical padding, until #1751 resolved it from the bag like Margin (issue #1749).
+`ModifierApplyOrderTests` dedupes a nested helper's reads against its caller's, so the generated
+helper doesn't repeat the resolver's fields in the frozen order. 4a generates `Padding` and 4b
+`BorderThickness` (with `BorderInlineStart`, inside `ApplyBorderModifiers`, whose `BorderBrush` arm
+stays hand-coded). `Margin` has the single `FrameworkElement` receiver, so it has no receiver list
+to move, and that finishes layer 4.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short
-"common modifiers" note at the same time, edited in its `docs/_pipeline/templates` source.
+"common modifiers" note at the same time, edited in its `docs/_pipeline/templates` source. 3e
+updates the field note's apply-arm part only (rows A–D are generated; place the slot in a
+`GeneratedHelpers` range). The full rewrite and the guide note wait for layer 5, because the pool
+reset in `CleanElement` is still hand-written until then and the short recipe would leave it out.
 
 **Stop points.** Layers 0 and 1 are worth landing even if nothing after them does: layer 0 closes
 the §14 bug class, and layer 1 gives the analyzer one source and adds the behavioural selftest.
@@ -934,8 +1059,8 @@ bucket design that keeps the common case to one or two small records.
 7. **Interaction with the parallel `ApplyModifiers` extraction.** Layer 0 assumes that refactor
    lands first, or is folded into layer 0. The schema's method names for rows E–F should match
    whatever names it picks.
-8. **Pool reset gaps.** `RequestedTheme` is not cleared on pool return today (§6.2). The matrix
-   pins it as-is. Should it get its own issue?
+8. **Pool reset gaps.** *Resolved.* `RequestedTheme` was not cleared on pool return (§6.2). It got
+   its own issue, #1717, which added the clear.
 
 ---
 

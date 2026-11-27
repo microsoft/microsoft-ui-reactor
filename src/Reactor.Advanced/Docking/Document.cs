@@ -89,9 +89,9 @@ public sealed record ToolWindow : DockableContent
 
 /// <summary>
 /// A document with typed per-pane state. The <typeparamref name="TState"/>
-/// is serialized through <c>WindowPersistedScope</c> (spec 033/036) and
-/// included in the layout JSON round-trip so app state survives
-/// save→quit→restart.
+/// is included in the layout JSON that
+/// <see cref="Persistence.DockLayoutSerializer.Save"/> writes, so app state
+/// survives a restart when the app stores that JSON and loads it back.
 /// </summary>
 /// <remarks>
 /// Spec 045 §5.3.2 (Phase 2 addition). Per-pane <typeparamref name="TState"/>

@@ -101,7 +101,8 @@ public sealed partial class Reconciler
     private Element? _reconcilingElement;
     // The outermost current layer updating this same native control. Custom
     // decorators share modifier priority just like the built-in flyout decorators.
-    internal (UIElement? Control, Element? Root, ElementModifiers? Modifiers) ModifierUpdate;
+    // A pending clear only vetoes foreground preservation; it does not change tracker lifetime.
+    internal (UIElement? Control, Element? Root, ElementModifiers? Modifiers, bool ClearsInteractionStates) ModifierUpdate;
     private bool _hasModifierTargets;
     private Element? _modifierMountParent;
     private List<(UIElement Control, Element Target)>? _modifierMounts;

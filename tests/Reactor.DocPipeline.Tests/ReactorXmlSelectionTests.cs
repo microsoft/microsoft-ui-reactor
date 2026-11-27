@@ -515,6 +515,44 @@ public class ReactorXmlSelectionTests
         Assert.Equal(new[] { real }, CompileCommand.EnumerateReactorSources(fx.Root));
     }
 
+    // ── Microsoft.UI.Reactor.Advanced (issue #1721) ─────────────────────────
+
+    /// <summary>
+    /// Each documented assembly is looked up under its own project's <c>bin</c>,
+    /// by its own file name. A core XML copied into Advanced's output (a
+    /// ProjectReference does that) must not be taken as Advanced's.
+    /// </summary>
+    [Fact]
+    public void Advanced_xml_is_found_under_its_own_project_only()
+    {
+        using var fx = new RepoFixture();
+        var core = fx.Xml("x64/Debug/net10.0-windows10.0.22621.0", Base);
+        var layout = Path.Join("src", "Reactor.Advanced", "bin", "x64", "Debug", "net10.0-windows10.0.22621.0");
+        var advanced = fx.Write(layout, "Microsoft.UI.Reactor.Advanced.xml", Base);
+        // Copied beside it by the ProjectReference, and newer.
+        fx.Write(layout, "Microsoft.UI.Reactor.xml", Base.AddMinutes(5));
+
+        Assert.Equal(advanced, CompileCommand.FindAssemblyXml(fx.Root, CompileCommand.AdvancedAssembly)?.Path);
+        Assert.Equal(core, CompileCommand.FindAssemblyXml(fx.Root, CompileCommand.CoreAssembly)?.Path);
+    }
+
+    /// <summary>The staleness warning for Advanced compares against Advanced's sources and names its XML.</summary>
+    [Fact]
+    public void Advanced_staleness_compares_against_advanced_sources()
+    {
+        using var fx = new RepoFixture();
+        var xml = fx.Write(Path.Join("src", "Reactor.Advanced", "bin", "Release"), "Microsoft.UI.Reactor.Advanced.xml", Base);
+        // Newer core source is not Advanced's business.
+        fx.Source("Core/Widget.cs", Base.AddMinutes(10));
+        Assert.Null(CompileCommand.BuildStaleXmlFinding(fx.Root, xml, CompileCommand.AdvancedAssembly));
+
+        fx.Write(Path.Join("src", "Reactor.Advanced", "Charting"), "Charts.cs", Base.AddMinutes(10));
+        var finding = CompileCommand.BuildStaleXmlFinding(fx.Root, xml, CompileCommand.AdvancedAssembly);
+        Assert.NotNull(finding);
+        Assert.Contains("Microsoft.UI.Reactor.Advanced.xml", finding.Message);
+        Assert.Contains("src/Reactor.Advanced/Charting/Charts.cs", finding.Message);
+    }
+
     // ── Fixture ──────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -550,7 +588,7 @@ public class ReactorXmlSelectionTests
                 writeUtc);
         }
 
-        private string Write(string relativeDir, string fileName, DateTime writeUtc)
+        public string Write(string relativeDir, string fileName, DateTime writeUtc)
         {
             var dir = Path.Join(Root, relativeDir);
             Directory.CreateDirectory(dir);

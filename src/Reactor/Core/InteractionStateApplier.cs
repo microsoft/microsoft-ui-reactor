@@ -87,24 +87,42 @@ internal static class InteractionStateApplier
             ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
     }
 
-    internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement)
+    internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush replacement, Reconciler reconciler)
+        => InteractionTrackerOf(element)?.NormalForeground is Brush normal
+            && BrushHelper.BrushesEqual(normal, replacement)
+            && TryReplaceInteractionForegroundRestoreValue(element, normal, replacement, reconciler);
+
+    internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement, Reconciler? reconciler = null)
     {
         if (ForegroundModifier.GetProperty(element) is not { } property
             || InteractionTrackerOf(element) is not { ForegroundOverrideApplied: true } tracker
             || !ReferenceEquals(tracker.NormalForeground, previous))
             return false;
 
+        // A lookup can invoke decorator code. Only owned candidates need its final-state check;
+        // the restore-only path still updates a displaced brush without a reconciler lookup.
+        if (reconciler is not null && !ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground))
+            return false;
+
+        // Resolve the final state only for an owned equivalent-normal candidate. A pending
+        // tracker clear or changed/withdrawn state foreground must allow the normal write.
+        if (reconciler is not null
+            && (reconciler.FindUpdatingInteractionStates(element) is not { } config
+                || GetStateValues(config, tracker.CurrentState)?.Foreground is not { } stateForeground
+                || !BrushHelper.BrushesEqual(tracker.ActiveForeground, stateForeground)
+                || !ReferenceEquals(InteractionTrackerOf(element), tracker)
+                || !ReferenceEquals(tracker.NormalForeground, previous)
+                || !ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground)))
+            return false;
+
         tracker.NormalForeground = replacement;
         return ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground);
     }
 
-    internal static bool TryPreserveInteractionForeground(FrameworkElement element, DependencyProperty property, object restoreValue)
+    internal static void UpdateInteractionForegroundRestoreValue(UIElement element, object restoreValue)
     {
-        if (InteractionTrackerOf(element) is not { ForegroundOverrideApplied: true } tracker) return false;
-        // A common write can reuse the active brush after a setter displaced it. Always
-        // refresh the restore value, but leave the native write to the caller when unowned.
-        tracker.NormalForeground = restoreValue;
-        return ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground);
+        if (InteractionTrackerOf(element) is { ForegroundOverrideApplied: true } tracker)
+            tracker.NormalForeground = restoreValue;
     }
 
     internal static void PreserveUpdatedBorderBrush(UIElement element)

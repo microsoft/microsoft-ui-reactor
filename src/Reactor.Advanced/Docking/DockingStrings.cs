@@ -88,10 +88,10 @@ public static class DockingStringKeys
 /// <remarks>
 /// Spec 045 §2.21. The contract:
 /// <list type="bullet">
-///   <item><description><c>Resolver</c> is invoked with a key
-///   (e.g. <c>Docking.DropTarget.Center</c>) and the English default.
-///   It returns the localized string, or null to fall back to the
-///   default.</description></item>
+///   <item><description><c>Resolver</c> is invoked with the key alone
+///   (e.g. <c>Docking.DropTarget.Center</c>). It returns the localized
+///   string, or null to fall back to the English default, which
+///   <see cref="Get"/> supplies itself.</description></item>
 ///   <item><description>The resolver is called from the UI thread
 ///   during render / hit-test paths — keep it allocation-light and
 ///   side-effect-free.</description></item>

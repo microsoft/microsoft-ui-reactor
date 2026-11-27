@@ -85,6 +85,99 @@ internal static class ThemeRefStyleFixtures
         return await Harness.WaitFor(isDark);
     }
 
+    internal sealed class ForegroundInteractionLookupIsLazy(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            ControlRegistry.RegisterDecorator<LookupProbe>(static () => new LookupProbeHandler());
+            using var reconciler = new Reconciler();
+            int lookups = 0;
+            var hover = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var probe = new LookupProbe(TextBlock("probe").InteractionStates(s => s.PointerOver(foreground: hover)), () => lookups++);
+            var text = new WinUI.TextBlock();
+            var border = new WinUI.Border();
+            Reconciler.SetDecoratorElementTag(text, probe);
+            Reconciler.SetDecoratorElementTag(border, probe);
+            var brush = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var empty = new ElementModifiers();
+            var foreground = new ElementModifiers { Foreground = brush };
+            try
+            {
+                Check("NoForeground", text, empty, empty, ForegroundModifier.UpdateAction.None, queries: false);
+                Check("ChangedForegroundWithoutTracker", text, empty, foreground, ForegroundModifier.UpdateAction.None, queries: false);
+                H.Check("LazyForegroundLookup_BrushApplied", ReferenceEquals(text.Foreground, brush));
+                Check("SameForeground", text, foreground, foreground, ForegroundModifier.UpdateAction.None, queries: false);
+                Check("RemovedForeground", text, foreground, empty, ForegroundModifier.UpdateAction.None, queries: false);
+                H.Check("LazyForegroundLookup_LocalBrushCleared", !HasLocal(text, WinUI.TextBlock.ForegroundProperty));
+                Check("RemovalHandled", text, empty, foreground, ForegroundModifier.UpdateAction.RemovalHandled, queries: false);
+                Check("ReapplyWithoutTracker", text, foreground, foreground, ForegroundModifier.UpdateAction.Reapply, queries: false);
+                Check("NewTargetWithoutTracker", text, foreground, foreground, ForegroundModifier.UpdateAction.NewTarget, queries: false);
+                Check("UnsupportedTarget", border, empty, foreground, ForegroundModifier.UpdateAction.None, queries: false);
+
+                InteractionStateApplier.ApplyInteractionStates(text, probe.Target.InteractionStates!);
+                var inactiveForeground = new ElementModifiers { Foreground = new SolidColorBrush(Microsoft.UI.Colors.Black) };
+                Check("InactiveInteraction", text, foreground, inactiveForeground, ForegroundModifier.UpdateAction.None, queries: false);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                Check("SameForegroundDuringHover", text, inactiveForeground, inactiveForeground, ForegroundModifier.UpdateAction.None, queries: false);
+                var rebuiltBrush = new SolidColorBrush(Microsoft.UI.Colors.Black);
+                var rebuiltForeground = new ElementModifiers { Foreground = rebuiltBrush };
+                Check("EquivalentForegroundDuringHover", text, inactiveForeground, rebuiltForeground, ForegroundModifier.UpdateAction.None, queries: true);
+                H.Check("LazyForegroundLookup_HoverPreserved", ReferenceEquals(text.Foreground, hover));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("LazyForegroundLookup_ExitRestoresNewBrush", ReferenceEquals(text.Foreground, rebuiltBrush));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+                var changedForeground = new ElementModifiers { Foreground = blue };
+                Check("DifferentForegroundDuringHover", text, rebuiltForeground, changedForeground, ForegroundModifier.UpdateAction.None, queries: false);
+                H.Check("LazyForegroundLookup_DifferentBrushApplied", ReferenceEquals(text.Foreground, blue));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("LazyForegroundLookup_ExitKeepsDifferentBrush", ReferenceEquals(text.Foreground, blue));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                text.Foreground = brush;
+                var rebuiltBlue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+                var externalForeground = new ElementModifiers { Foreground = rebuiltBlue };
+                Check("ExternalWriteDuringHover", text, changedForeground, externalForeground, ForegroundModifier.UpdateAction.None, queries: false);
+                H.Check("LazyForegroundLookup_ExternalWriteReplaced", ReferenceEquals(text.Foreground, rebuiltBlue));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("LazyForegroundLookup_ExternalWriteExitKeepsNormal", ReferenceEquals(text.Foreground, rebuiltBlue));
+            }
+            finally
+            {
+                InteractionStateApplier.ClearInteractionStates(text, restoreBrushes: true);
+                Reconciler.ClearElementTag(text);
+                Reconciler.ClearElementTag(border);
+            }
+            return Task.CompletedTask;
+
+            void Check(string name, FrameworkElement control, ElementModifiers previous, ElementModifiers current,
+                ForegroundModifier.UpdateAction action, bool queries)
+            {
+                int before = lookups;
+                reconciler.ApplyModifiers(control, previous, current, static () => { }, foregroundUpdate: action);
+                int count = lookups - before;
+                H.Check("LazyForegroundLookup_" + name, queries ? count > 0 : count == 0, $"lookups={count}");
+            }
+        }
+
+        private sealed record LookupProbe(Element Target, Action OnLookup) : Element;
+
+        private sealed class LookupProbeHandler : IDecoratorElementHandler<LookupProbe>
+        {
+            public UIElement Mount(MountContext ctx, LookupProbe element) => ctx.MountChild(element.Target)!;
+            public UIElement Update(UpdateContext ctx, LookupProbe previous, LookupProbe current, UIElement control)
+                => ctx.Reconciler.Update(previous.Target, current.Target, control, ctx.RequestRerender) ?? control;
+            public V1UnmountDisposition Unmount(UnmountContext ctx, LookupProbe? element, UIElement control)
+                => V1UnmountDisposition.ContinueDefaultTraversal;
+            public Element? GetSourceTarget(LookupProbe element)
+            {
+                element.OnLookup();
+                return element.Target;
+            }
+        }
+    }
+
     internal sealed class ForegroundAppliedAfterBackgroundCallback(Harness h) : SelfTestFixtureBase(h)
     {
         public override Task RunAsync()
@@ -276,7 +369,15 @@ internal static class ThemeRefStyleFixtures
                 InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
                 H.Check("RichTextHoverRemoval_HoverGreenApplied", ReferenceEquals(text.Foreground, green));
 
-                var replacement = reconciler.Update(initial, next, text, static () => { });
+                var rebuiltRed = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                var rebuilt = (initial with { Text = "rebuilt" }).Foreground<RichTextBlockElement>(rebuiltRed);
+                var replacement = reconciler.Update(initial, rebuilt, text, static () => { });
+                H.Check("RichTextHoverRemoval_RebuiltTextApplied", text.Blocks.Count == 1
+                    && text.Blocks[0] is Microsoft.UI.Xaml.Documents.Paragraph { Inlines.Count: 1 } paragraph
+                    && paragraph.Inlines[0] is Microsoft.UI.Xaml.Documents.Run { Text: "rebuilt" });
+                H.Check("RichTextHoverRemoval_EquivalentBrushKeepsHover", replacement is null && ReferenceEquals(text.Foreground, green));
+
+                replacement = reconciler.Update(rebuilt, next, text, static () => { });
                 H.Check("RichTextHoverRemoval_SameControlStaysGreen", replacement is null && ReferenceEquals(text.Foreground, green));
 
                 InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
@@ -356,6 +457,348 @@ internal static class ThemeRefStyleFixtures
                     replacement is null && ReferenceEquals(icon.Foreground, green));
             }
             finally { reconciler.UnmountChild(icon); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class RebuiltNormalForegroundKeepsInteraction(Harness h, Func<Element, Element> wrap, bool layered = true) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            CheckInteraction(pressed: false, inheritsHover: false);
+            CheckInteraction(pressed: true, inheritsHover: false);
+            CheckInteraction(pressed: true, inheritsHover: true);
+            for (int scenario = 0; scenario < 6; scenario++) CheckStateForegroundChange(scenario);
+            if (layered)
+            {
+                CheckTrackerRemoval(removesOuter: true);
+                CheckTrackerRemoval(removesOuter: false);
+            }
+            return Task.CompletedTask;
+        }
+
+        private void CheckStateForegroundChange(int scenario)
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var rebuiltBlack = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green) { Opacity = 0.5 };
+            var orange = new SolidColorBrush(Microsoft.UI.Colors.Orange) { Opacity = 0.7 };
+            bool pressed = scenario >= 3;
+            string[] names = ["ChangedHover", "ChangedHoverBrushOpacity", "WithdrawnHover", "ChangedPressedInheritance", "ChangedPressedForeground", "EquivalentPressedForeground"];
+            string name = names[scenario];
+            var initial = wrap(TextBlock("initial state").Foreground(black))
+                .InteractionStates(s => s.PointerOver(foreground: green).Pressed(scale: 0.97f, foreground: scenario >= 4 ? orange : null));
+            Brush? nextHover = scenario switch
+            {
+                1 => new SolidColorBrush(Microsoft.UI.Colors.Green) { Opacity = 0.75 },
+                2 => null,
+                4 => new SolidColorBrush(Microsoft.UI.Colors.Green) { Opacity = 0.5 },
+                _ => new SolidColorBrush(Microsoft.UI.Colors.Purple) { Opacity = 0.5 },
+            };
+            Brush? nextPressed = scenario switch
+            {
+                4 => new SolidColorBrush(Microsoft.UI.Colors.Purple) { Opacity = 0.7 },
+                5 => new SolidColorBrush(Microsoft.UI.Colors.Orange) { Opacity = 0.7 },
+                _ => null,
+            };
+            var next = wrap(TextBlock("updated state").Foreground(rebuiltBlack))
+                .InteractionStates(s => s.PointerOver(opacity: 0.8f, foreground: nextHover).Pressed(scale: 0.97f, foreground: nextPressed));
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                InteractionStateApplier.SimulatePointerOverForTests(text, true);
+                if (pressed) InteractionStateApplier.SimulatePressedForTests(text, true);
+                H.Check(name + "_InitialState", ReferenceEquals(text.Foreground, pressed && scenario >= 4 ? orange : green));
+                var replacement = reconciler.Update(initial, next, text, static () => { });
+                H.Check(name + "_UpdatedForeground", replacement is null && text.Text == "updated state"
+                    && ReferenceEquals(text.Foreground, scenario == 5 ? orange : rebuiltBlack), $"foreground={ColorOf(text.Foreground)}");
+                if (pressed)
+                {
+                    InteractionStateApplier.SimulatePressedForTests(text, false);
+                    H.Check(name + "_ReleaseUsesUpdatedHover", ReferenceEquals(text.Foreground, nextHover));
+                }
+                InteractionStateApplier.SimulatePointerOverForTests(text, false);
+                H.Check(name + "_ExitRestoresNewNormal", ReferenceEquals(text.Foreground, rebuiltBlack));
+            }
+            finally { reconciler.UnmountChild(text); }
+        }
+
+        private void CheckTrackerRemoval(bool removesOuter)
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var rebuiltBlack = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var initialTarget = TextBlock("initial tracker").Foreground(black).InteractionStates(s => s.PointerOver(foreground: green));
+            var nextTarget = TextBlock("updated tracker").Foreground(rebuiltBlack);
+            if (removesOuter) nextTarget = nextTarget.InteractionStates(s => s.PointerOver(foreground: green));
+            var initial = wrap(initialTarget).InteractionStates(s => s.PointerOver(foreground: green));
+            var next = wrap(nextTarget);
+            if (!removesOuter) next = next.InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green)));
+            string name = removesOuter ? "OuterTrackerRemoval" : "InnerTrackerRemoval";
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                InteractionStateApplier.SimulatePointerOverForTests(text, true);
+                H.Check(name + "_Entered", ReferenceEquals(text.Foreground, green));
+                var replacement = reconciler.Update(initial, next, text, static () => { });
+                H.Check(name + (removesOuter ? "_EquivalentNormalWriteStands" : "_EquivalentNormalKeepsOuterHover"),
+                    replacement is null && text.Text == "updated tracker"
+                    && ReferenceEquals(text.Foreground, removesOuter ? rebuiltBlack : green), $"foreground={ColorOf(text.Foreground)}");
+                InteractionStateApplier.SimulatePointerOverForTests(text, false);
+                H.Check(name + "_ExitKeepsNewNormal", ReferenceEquals(text.Foreground, rebuiltBlack));
+
+                // The clear veto must not affect a later update whose tracker remains alive.
+                var resumedTarget = TextBlock("resumed tracker").Foreground(rebuiltBlack).InteractionStates(s => s.PointerOver(foreground: green));
+                var resumed = wrap(resumedTarget).InteractionStates(s => s.PointerOver(foreground: green));
+                reconciler.Update(next, resumed, text, static () => { });
+                InteractionStateApplier.SimulatePointerOverForTests(text, true);
+                H.Check(name + "_Reentered", ReferenceEquals(text.Foreground, green));
+                var finalBlack = new SolidColorBrush(Microsoft.UI.Colors.Black);
+                var rebuilt = wrap((resumedTarget with { Content = "rebuilt after removal" }).Foreground(finalBlack))
+                    .InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green)));
+                replacement = reconciler.Update(resumed, rebuilt, text, static () => { });
+                H.Check(name + "_LaterEquivalentUpdateKeepsHover", replacement is null && ReferenceEquals(text.Foreground, green));
+                InteractionStateApplier.SimulatePointerOverForTests(text, false);
+                H.Check(name + "_LaterExitRestoresNewNormal", ReferenceEquals(text.Foreground, finalBlack));
+            }
+            finally { reconciler.UnmountChild(text); }
+        }
+
+        private void CheckInteraction(bool pressed, bool inheritsHover)
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var red = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            string name = !pressed ? "PointerOver" : inheritsHover ? "PressedInherited" : "PressedExplicit";
+            Element Render(string label, Brush foreground) => wrap(TextBlock(label).Foreground(foreground))
+                .InteractionStates(s => s
+                    .PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green) { Opacity = 0.5 })
+                    .Pressed(scale: 0.97f, foreground: inheritsHover ? null : new SolidColorBrush(Microsoft.UI.Colors.Orange)));
+
+            var initial = Render("initial", black);
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            int foregroundWrites = 0;
+            long callback = text.RegisterPropertyChangedCallback(WinUI.TextBlock.ForegroundProperty, (_, _) => foregroundWrites++);
+            try
+            {
+                H.Check(name + "_InitialForeground", ReferenceEquals(text.Foreground, black));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                if (pressed) InteractionStateApplier.SimulatePressedForTests(text, isPressed: true);
+                var active = text.Foreground;
+                H.Check(name + "_Entered", ColorOf(active) == (pressed && !inheritsHover ? Microsoft.UI.Colors.Orange : Microsoft.UI.Colors.Green)
+                    && active.Opacity == (pressed && !inheritsHover ? 1 : 0.5));
+
+                // Change text as well as brush identity so the reconciler cannot skip this update.
+                var rebuiltBlack = new SolidColorBrush(Microsoft.UI.Colors.Black);
+                var rebuilt = Render("rebuilt", rebuiltBlack);
+                foregroundWrites = 0;
+                var replacement = reconciler.Update(initial, rebuilt, text, static () => { });
+                H.Check(name + "_EquivalentNormalKeepsInteraction", replacement is null && text.Text == "rebuilt"
+                    && ReferenceEquals(text.Foreground, active), $"foreground={ColorOf(text.Foreground)}");
+                H.Check(name + "_EquivalentNormalDoesNotWriteNativeForeground", foregroundWrites == 0, $"writes={foregroundWrites}");
+
+                if (pressed)
+                {
+                    InteractionStateApplier.SimulatePressedForTests(text, isPressed: false);
+                    H.Check(name + "_ReleaseUsesHover", ColorOf(text.Foreground) == Microsoft.UI.Colors.Green && text.Foreground.Opacity == 0.5);
+                }
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExitRestoresNewBrushInstance", ReferenceEquals(text.Foreground, rebuiltBlack));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                if (pressed) InteractionStateApplier.SimulatePressedForTests(text, isPressed: true);
+                var changed = Render("changed", blue);
+                foregroundWrites = 0;
+                replacement = reconciler.Update(rebuilt, changed, text, static () => { });
+                H.Check(name + "_DifferentNormalStands", replacement is null && ReferenceEquals(text.Foreground, blue));
+                // Positive control for the write counter used by the equivalent-normal assertion.
+                H.Check(name + "_DifferentNormalWritesNativeForeground", foregroundWrites > 0, $"writes={foregroundWrites}");
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExitKeepsDifferentNormal", ReferenceEquals(text.Foreground, blue));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                text.Foreground = red;
+                var externalWrite = Render("external", blue);
+                replacement = reconciler.Update(changed, externalWrite, text, static () => { });
+                H.Check(name + "_ExternalWriteSurvivesUnchangedNormal", replacement is null && ReferenceEquals(text.Foreground, red));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExternalWriteSurvivesExit", ReferenceEquals(text.Foreground, red));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                var translucentRed = new SolidColorBrush(Microsoft.UI.Colors.Red) { Opacity = 0.75 };
+                var changedOpacity = Render("opacity", translucentRed);
+                replacement = reconciler.Update(externalWrite, changedOpacity, text, static () => { });
+                H.Check(name + "_DifferentNormalOpacityStands", replacement is null && ReferenceEquals(text.Foreground, translucentRed));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExitKeepsDifferentNormalOpacity", ReferenceEquals(text.Foreground, translucentRed));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                if (pressed) InteractionStateApplier.SimulatePressedForTests(text, isPressed: true);
+                text.Foreground = blue;
+                var rebuiltRed = new SolidColorBrush(Microsoft.UI.Colors.Red) { Opacity = 0.75 };
+                var externalRebuild = Render("external rebuilt", rebuiltRed);
+                foregroundWrites = 0;
+                replacement = reconciler.Update(changedOpacity, externalRebuild, text, static () => { });
+                H.Check(name + "_EquivalentNormalAfterExternalWriteApplied", replacement is null && text.Text == "external rebuilt"
+                    && ReferenceEquals(text.Foreground, rebuiltRed), $"foreground={ColorOf(text.Foreground)}");
+                H.Check(name + "_EquivalentNormalAfterExternalWriteWritesForeground", foregroundWrites > 0, $"writes={foregroundWrites}");
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExternalRebuildExitKeepsNormal", ReferenceEquals(text.Foreground, rebuiltRed));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                var normalWithoutStates = new SolidColorBrush(Microsoft.UI.Colors.Red) { Opacity = 0.75 };
+                var withoutStates = Render("without states", normalWithoutStates) with { InteractionStates = null };
+                replacement = reconciler.Update(externalRebuild, withoutStates, text, static () => { });
+                H.Check(name + "_RemovingStatesAppliesEquivalentNormal", replacement is null && ReferenceEquals(text.Foreground, normalWithoutStates));
+            }
+            finally
+            {
+                text.UnregisterPropertyChangedCallback(WinUI.TextBlock.ForegroundProperty, callback);
+                reconciler.UnmountChild(text);
+            }
+        }
+    }
+
+    internal sealed class MemoKeepsHoverForegroundDuringFlyoutResourceRefresh(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var rebuiltBlack = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var purple = new SolidColorBrush(Microsoft.UI.Colors.Purple);
+            int factoryCalls = 0;
+            var root = Memo("stable", () =>
+            {
+                factoryCalls++;
+                return Flyout(TextBlock("target").Foreground(black), TextBlock("flyout"))
+                    .InteractionStates(s => s.PointerOver(foreground: green));
+            }).Foreground(black).InteractionStates(s => s.PointerOver(foreground: purple));
+            var text = (WinUI.TextBlock)reconciler.Mount(root, static () => { })!;
+            try
+            {
+                H.Check("MemoFlyoutHover_InitialNormalApplied", ReferenceEquals(text.Foreground, black));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("MemoFlyoutHover_OuterBrushApplied", ReferenceEquals(text.Foreground, purple));
+
+                int callsBeforeRefresh = factoryCalls;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(root, root, text, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                H.Check("MemoFlyoutHover_ResourceRefreshRebuiltFlyout", factoryCalls > callsBeforeRefresh);
+                H.Check("MemoFlyoutHover_OuterBrushSurvivesRefresh", ReferenceEquals(text.Foreground, purple),
+                    $"foreground={ColorOf(text.Foreground)}");
+
+                var next = root.Foreground(rebuiltBlack)
+                    .InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Purple)));
+                callsBeforeRefresh = factoryCalls;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(root, next, text, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                H.Check("MemoFlyoutHover_NormalUpdateRebuiltFlyout", factoryCalls > callsBeforeRefresh);
+                H.Check("MemoFlyoutHover_OuterBrushSurvivesEquivalentNormal", ReferenceEquals(text.Foreground, purple),
+                    $"foreground={ColorOf(text.Foreground)}");
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("MemoFlyoutHover_ExitRestoresNewNormalInstance", ReferenceEquals(text.Foreground, rebuiltBlack));
+            }
+            finally { reconciler.UnmountChild(text); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class MemoForegroundUpdateKeepsEquivalentFlyoutHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            for (int scenario = 0; scenario < 4; scenario++) CheckForegroundUpdate(scenario);
+            return Task.CompletedTask;
+        }
+
+        private void CheckForegroundUpdate(int scenario)
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var nextNormal = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            int factoryCalls = 0;
+            var initial = Memo("stable", () =>
+            {
+                factoryCalls++;
+                return Flyout(TextBlock("target"), TextBlock("flyout"))
+                    .InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green)));
+            }).Foreground(black);
+            var next = initial.Foreground(nextNormal);
+            if (scenario != 0)
+            {
+                initial = initial.InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Green)));
+                next = scenario switch
+                {
+                    1 => next.InteractionStates(s => s.PointerOver(foreground: new SolidColorBrush(Microsoft.UI.Colors.Purple))),
+                    2 => next,
+                    _ => next.InteractionStates(s => s.PointerOver(opacity: 0.8f)),
+                };
+            }
+
+            string[] names = ["MemoRebuiltHover", "MemoChangedHover", "MemoRemovedStates", "MemoWithdrawnForeground"];
+            string name = names[scenario];
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check(name + "_InitialNormalApplied", ReferenceEquals(text.Foreground, black));
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                var hover = text.Foreground;
+                H.Check(name + "_HoverApplied", ColorOf(hover) == Microsoft.UI.Colors.Green);
+
+                int callsBeforeRefresh = factoryCalls;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(initial, next, text, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                H.Check(name + "_FactoryRebuilt", factoryCalls > callsBeforeRefresh);
+                H.Check(name + "_ForegroundAfterOuterWrite",
+                    ReferenceEquals(text.Foreground, scenario == 0 ? hover : nextNormal), $"foreground={ColorOf(text.Foreground)}");
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExitRestoresOuterNormal", ReferenceEquals(text.Foreground, nextNormal));
+            }
+            finally { reconciler.UnmountChild(text); }
+        }
+    }
+
+    internal sealed class NestedFlyoutDoesNotRestoreWithdrawnHoverForeground(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var innerHover = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var outerHover = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var target = TextBlock("target").Foreground(black);
+            var inner = Flyout(target, TextBlock("inner")).InteractionStates(s => s.PointerOver(foreground: innerHover));
+            var initial = Flyout(inner, TextBlock("outer")).InteractionStates(s => s.PointerOver(foreground: outerHover));
+            var next = (initial with { Target = inner with { Target = target.Foreground(blue) } })
+                .InteractionStates(s => s.PointerOver(opacity: 0.8f));
+            var text = (WinUI.TextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("NestedFlyoutWithdrawal_OuterBrushApplied", ReferenceEquals(text.Foreground, outerHover));
+
+                var replacement = reconciler.Update(initial, next, text, static () => { });
+                H.Check("NestedFlyoutWithdrawal_UpdatedNormalRemainsVisible",
+                    replacement is null && ReferenceEquals(text.Foreground, blue), $"foreground={ColorOf(text.Foreground)}");
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("NestedFlyoutWithdrawal_ExitKeepsUpdatedNormal", ReferenceEquals(text.Foreground, blue));
+            }
+            finally { reconciler.UnmountChild(text); }
             return Task.CompletedTask;
         }
     }
@@ -449,14 +892,14 @@ internal static class ThemeRefStyleFixtures
             var noFallback = RichTextBlock("foreground");
             var textTarget = noFallback.Foreground(black);
             var hoveredTarget = textTarget.InteractionStates(s => s.PointerOver(foreground: blue));
-            foreach (var (name, oldTarget, nextTarget, normal, restored) in new[]
+            foreach (var (name, oldTarget, nextTarget, normal, updated, restored) in new[]
             {
-                ("KeepsBrush", hoveredTarget, textTarget, (Brush?)black, (Brush?)black),
-                ("DropsCommonBrush", hoveredTarget.Foreground<RichTextBlockElement>(red), textTarget, red, black),
+                ("KeepsBrush", hoveredTarget, textTarget, (Brush?)black, (Brush?)green, (Brush?)black),
+                ("DropsCommonBrush", hoveredTarget.Foreground<RichTextBlockElement>(red), textTarget, red, green, black),
                 ("DropsCommonBrushWithoutFallback", noFallback.Foreground<RichTextBlockElement>(red)
-                    .InteractionStates(s => s.PointerOver(foreground: blue)), noFallback, red, null),
+                    .InteractionStates(s => s.PointerOver(foreground: blue)), noFallback, red, null, null),
                 ("AddsFirstCommonBrush", noFallback.InteractionStates(s => s.PointerOver(opacity: 0.8f)),
-                    noFallback.Foreground<RichTextBlockElement>(blue), null, blue),
+                    noFallback.Foreground<RichTextBlockElement>(blue), null, blue, blue),
             })
             foreach (var (layer, wrap) in new (string, Func<Element, Element>)[]
             {
@@ -478,8 +921,9 @@ internal static class ThemeRefStyleFixtures
                     H.Check($"{caseName}_OuterGreenApplied", ReferenceEquals(text.Foreground, green));
 
                     var replacement = reconciler.Update(oldFlyout, newFlyout, text, static () => { });
-                    H.Check($"{caseName}_OuterStaysGreen",
-                        replacement is null && ReferenceEquals(text.Foreground, green), $"foreground={ColorOf(text.Foreground)}");
+                    H.Check($"{caseName}_UpdatedForeground", replacement is null && (updated is null
+                        ? !HasLocal(text, WinUI.RichTextBlock.ForegroundProperty)
+                        : ReferenceEquals(text.Foreground, updated)), $"foreground={ColorOf(text.Foreground)}");
 
                     InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
                     H.Check($"{caseName}_ExitRestoresNormal", restored is null
@@ -515,8 +959,7 @@ internal static class ThemeRefStyleFixtures
                     var withFirstForeground = wrap(nextTarget);
                     replacement = reconciler.Update(withoutStates, withFirstForeground, text, static () => { });
                     H.Check($"{caseName}_SetterSeesHover", ReferenceEquals(beforeSetter, green));
-                    var expected = writeFromSetter ? blue : green;
-                    H.Check($"{caseName}_CurrentBrush", replacement is null && ReferenceEquals(text.Foreground, expected),
+                    H.Check($"{caseName}_FirstNormalAppliedImmediately", replacement is null && ReferenceEquals(text.Foreground, blue),
                         $"foreground={ColorOf(text.Foreground)}");
 
                     InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
@@ -791,6 +1234,66 @@ internal static class ThemeRefStyleFixtures
             }
             finally { reconciler.UnmountChild(text); }
 
+            var added = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+            var displaced = new SolidColorBrush(Microsoft.UI.Colors.Purple);
+            (string Name, Func<Element, Element> Wrap)[] overlays =
+            {
+                ("Flyout", child => Flyout(child, TextBlock("flyout"))),
+                ("MenuFlyout", child => MenuFlyout(child)),
+                ("CommandBarFlyout", child => CommandBarFlyout(child)),
+            };
+            foreach (var (name, wrap) in overlays)
+            foreach (bool typedFallback in new[] { false, true })
+            foreach (bool removeOuterStates in new[] { false, true })
+            {
+                var caseName = $"FirstCommonOnRelease_{name}_{typedFallback}_{removeOuterStates}";
+                var firstTarget = RichTextBlock("first common foreground");
+                if (typedFallback) firstTarget = firstTarget.Foreground(normal);
+                var before = wrap(firstTarget.InteractionStates(s => s.PointerOver(opacity: 0.9f)))
+                    .InteractionStates(s => s.PointerOver(foreground: hover));
+                text = (WinUI.RichTextBlock)reconciler.Mount(before, static () => { })!;
+                try
+                {
+                    H.Check($"{caseName}_InitialNormal", typedFallback ? ReferenceEquals(text.Foreground, normal)
+                        : !HasLocal(text, WinUI.RichTextBlock.ForegroundProperty));
+                    InteractionStateApplier.SimulatePointerOverForTests(text, true);
+                    H.Check($"{caseName}_HoverApplied", ReferenceEquals(text.Foreground, hover));
+                    Brush? beforeSetter = null;
+                    bool setterFinished = false, wrotePrevious = false, addedBeforeSetter = false, addedAfterSetter = false;
+                    var nextTarget = firstTarget.Set(native =>
+                    {
+                        beforeSetter = native.Foreground;
+                        native.Foreground = displaced;
+                        setterFinished = true;
+                    }).Foreground<RichTextBlockElement>(added);
+                    var after = wrap(nextTarget);
+                    if (!removeOuterStates) after = after.InteractionStates(s => s.PointerOver(opacity: 0.8f));
+                    var observer = text.RegisterPropertyChangedCallback(WinUI.RichTextBlock.ForegroundProperty, (sender, _) =>
+                    {
+                        var native = (WinUI.RichTextBlock)sender;
+                        wrotePrevious |= typedFallback ? ReferenceEquals(native.Foreground, normal)
+                            : !HasLocal(native, WinUI.RichTextBlock.ForegroundProperty);
+                        if (ReferenceEquals(native.Foreground, added))
+                        {
+                            addedBeforeSetter |= !setterFinished;
+                            addedAfterSetter |= setterFinished;
+                        }
+                    });
+                    try
+                    {
+                        var replacement = reconciler.Update(before, after, text, static () => { });
+                        H.Check($"{caseName}_SetterSeesHover", ReferenceEquals(beforeSetter, hover));
+                        H.Check($"{caseName}_NewNormalAfterSetter", !addedBeforeSetter && addedAfterSetter);
+                        H.Check($"{caseName}_NewNormalApplied", replacement is null && ReferenceEquals(text.Foreground, added));
+                        InteractionStateApplier.SimulatePointerOverForTests(text, false);
+                        H.Check($"{caseName}_ExitKeepsNewNormal", ReferenceEquals(text.Foreground, added));
+                        H.Check($"{caseName}_NoPreviousNormalWrite", !wrotePrevious);
+                    }
+                    finally { text.UnregisterPropertyChangedCallback(WinUI.RichTextBlock.ForegroundProperty, observer); }
+                }
+                finally { reconciler.UnmountChild(text); }
+            }
+
             return Task.CompletedTask;
         }
     }
@@ -838,11 +1341,8 @@ internal static class ThemeRefStyleFixtures
                     });
                     H.Check($"{name}_SetterSeesHover", ReferenceEquals(beforeSetter, hover), $"before setter={ColorOf(beforeSetter)}");
                     H.Check($"{name}_NoRemovedBrushWrite", !wroteRemovedBrush);
-                    if (releaseOuterForeground)
-                        H.Check($"{name}_ClearsAfterSetter", replacement is null && !clearedBeforeSetter && clearedAfterSetter
-                            && !HasLocal(text, WinUI.RichTextBlock.ForegroundProperty));
-                    else
-                        H.Check($"{name}_KeepsHover", replacement is null && ReferenceEquals(text.Foreground, hover));
+                    H.Check($"{name}_ClearsAfterSetter", replacement is null && !clearedBeforeSetter && clearedAfterSetter
+                        && !HasLocal(text, WinUI.RichTextBlock.ForegroundProperty));
                     InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
                     H.Check($"{name}_ExitClearsRemovedForeground", !HasLocal(text, WinUI.RichTextBlock.ForegroundProperty));
                 }

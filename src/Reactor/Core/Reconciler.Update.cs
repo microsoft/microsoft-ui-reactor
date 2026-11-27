@@ -261,13 +261,15 @@ public sealed partial class Reconciler
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;
         var previousModifierUpdate = ModifierUpdate;
-        if (!ReferenceEquals(ModifierUpdate.Control, control))
-            ModifierUpdate = (control, newEl, modifiers);
         // Pass a Flyout's retained tracker through every layer on the same native target.
         bool previouslyRetainedInteractionStates = _retainsFlyoutInteractionStates;
         bool outerRetainsInteractionStates = modifierParent is not null && previouslyRetainedInteractionStates;
         bool dropsInteractionStates = oldEl.InteractionStates is not null && newEl.InteractionStates is null;
         bool clearsInteractionStates = dropsInteractionStates && !outerRetainsInteractionStates;
+        if (!ReferenceEquals(ModifierUpdate.Control, control))
+            ModifierUpdate = (control, newEl, modifiers, clearsInteractionStates);
+        else if (clearsInteractionStates)
+            ModifierUpdate.ClearsInteractionStates = true;
         _retainsFlyoutInteractionStates = outerRetainsInteractionStates;
         var previousInteractionStates = _updatingInteractionStates;
         // The outermost configured layer is the one whose config remains on the shared tracker.
@@ -376,7 +378,7 @@ public sealed partial class Reconciler
         bool restoresOwnInteractionForeground = !outerRetainsInteractionStates && oldEl.InteractionStates is not null;
 
         bool WritesCommonForegroundAfterSetters() => foregroundUpdate == ForegroundModifier.UpdateAction.None
-            && oldModifiers?.Foreground is { } oldForeground && !ReferenceEquals(oldForeground, modifiers?.Foreground);
+            && !ReferenceEquals(oldModifiers?.Foreground, modifiers?.Foreground);
 
         void ReleaseDeferredTargetForeground() => ReleaseDeferredFlyoutForeground(control, WritesCommonForegroundAfterSetters(),
             restoresExplicitForeground: foregroundUpdate == ForegroundModifier.UpdateAction.RemovalRestorePrepared);

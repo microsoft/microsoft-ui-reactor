@@ -547,7 +547,7 @@ public class ModifierTableIntegrityTests
     /// fails <see cref="Every_Attached_Entry_Names_A_Generic_Modifier_That_Exists"/> until
     /// that class is listed here.
     /// </summary>
-    private static readonly Lazy<HashSet<string>> DeclaredGenericModifiers = new(() =>
+    internal static readonly Lazy<HashSet<string>> DeclaredGenericModifiers = new(() =>
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         CollectGenericModifiers(typeof(Microsoft.UI.Reactor.ElementExtensions), names);
@@ -631,19 +631,23 @@ public class ModifierTableIntegrityTests
         // WIDE makes the analyzer suggest a modifier the reconciler never writes (the rewrite
         // compiles and does nothing — the ValueList/CellComponent regression), while one that
         // is too NARROW just drops diagnostics. Nothing else notices either, so pin the copy
-        // to its source.
+        // to its source. Since spec 067 layer 1 the gate is declared on the ModifierSchema slot
+        // (AnalyzerControlGate) and ModifierTable reads it from there.
         var actualGates = ReadApplyModifierControlGates();
         var problems = new List<string>();
+        var compared = 0;
 
-        foreach (var (prop, info) in ModifierTable.Properties)
+        foreach (var slot in Microsoft.UI.Reactor.Analyzers.Modifiers.ModifierSchema.Slots)
         {
-            if (info.ControlGate is not { } declared)
+            if (slot.AnalyzerControlGate is not { } declared)
                 continue;
+            var prop = slot.Name;
+            compared++;
 
             if (!actualGates.TryGetValue(prop, out var actual))
             {
                 problems.Add(
-                    $"{prop}: ModifierTable declares a control gate [{string.Join("|", declared)}], " +
+                    $"{prop}: ModifierSchema declares an analyzer control gate [{string.Join("|", declared)}], " +
                     "but ApplyModifiers has no 'fe is <Type>' test guarded by 'm." + prop + "'");
                 continue;
             }
@@ -651,14 +655,33 @@ public class ModifierTableIntegrityTests
             if (!actual.SetEquals(declared))
             {
                 problems.Add(
-                    $"{prop}: ModifierTable says [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
+                    $"{prop}: ModifierSchema says [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
                     $"but ApplyModifiers writes to [{string.Join("|", actual.OrderBy(t => t, StringComparer.Ordinal))}]");
             }
         }
 
+        Assert.True(compared >= 8, $"Only {compared} slots declare an analyzer control gate.");
+
+        // Every shipped row too: Common(...) rows read the schema gate checked above, and an
+        // editorial `new ModifierInfo(..., controlGate: …)` row is checked here directly, so no
+        // gate NoOpModifierAnalyzer reads escapes both loops.
+        foreach (var (prop, info) in ModifierTable.Properties)
+        {
+            if (info.ControlGate is not { } declared
+                || ReferenceEquals(declared, Microsoft.UI.Reactor.Analyzers.Modifiers.ModifierSchema.Find(prop)?.AnalyzerControlGate))
+            {
+                continue;
+            }
+
+            if (!actualGates.TryGetValue(prop, out var actual))
+                problems.Add($"{prop}: ModifierTable declares a control gate [{string.Join("|", declared)}], but ApplyModifiers has no 'fe is <Type>' test guarded by 'm." + prop + "'");
+            else if (!actual.SetEquals(declared))
+                problems.Add($"{prop}: ModifierTable says [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] but ApplyModifiers writes to [{string.Join("|", actual.OrderBy(t => t, StringComparer.Ordinal))}]");
+        }
+
         Assert.True(
             problems.Count == 0,
-            "ModifierTable.ControlGate has drifted from Reconciler.ApplyModifiers, which is the " +
+            "The analyzer's control gates have drifted from Reconciler.ApplyModifiers, which is the " +
             "runtime authority for which controls a modifier is actually written to:\n  " +
             string.Join("\n  ", problems));
     }
@@ -669,11 +692,11 @@ public class ModifierTableIntegrityTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// That test iterates <see cref="ModifierTable.Properties"/> and skips entries whose
-    /// <see cref="ModifierInfo.ControlGate"/> is <see langword="null"/>, so a gate the reconciler
-    /// enforces but the table does not name is invisible to it — including a brand-new type-gated
-    /// modifier, and the <c>IsEnabled</c> / <c>H|VContentAlignment</c> trio whose gate is
-    /// deliberately left null for the <c>.Set</c> direction.
+    /// That test only checks gates that are declared (on a <c>ModifierSchema</c> slot or a
+    /// <see cref="ModifierTable.Properties"/> row), so a gate the reconciler enforces but nothing
+    /// names is invisible to it — including a brand-new type-gated modifier, and the
+    /// <c>IsEnabled</c> / <c>H|VContentAlignment</c> trio whose gate is deliberately left null for
+    /// the <c>.Set</c> direction.
     /// </para>
     /// <para>
     /// That gap matters because <see cref="NoOpModifierAnalyzer"/> (<c>REACTOR_MOD_003</c>) reads the
@@ -710,10 +733,11 @@ public class ModifierTableIntegrityTests
 
             problems.Add(
                 $"{prop}: ApplyModifiers gates it on [{string.Join("|", actual.OrderBy(t => t, StringComparer.Ordinal))}] " +
-                "but ModifierTable neither declares a ControlGate for it nor records it in " +
-                "GateOnlyInReconciler. Declare the gate (so REACTOR_MOD_002 withholds its suggestion and " +
-                "REACTOR_MOD_003 reports the silent drop), or add a GateOnlyInReconciler entry saying why " +
-                "neither rule needs it.");
+                "but the analyzer neither declares a ControlGate for it nor records it in " +
+                "GateOnlyInReconciler. Declare the gate on its ModifierSchema slot with " +
+                ".Analyzer(controlGate: …) and give it a Common(\"" + prop + "\") row in ModifierTable.Properties " +
+                "(so REACTOR_MOD_002 withholds its suggestion and REACTOR_MOD_003 reports the silent drop), " +
+                "or give the slot .Analyzer(gateOnlyInReconciler: \"…\") saying why neither rule needs it.");
         }
 
         Assert.True(
@@ -842,20 +866,30 @@ public class ModifierTableIntegrityTests
 
     /// <summary>
     /// Property name → the WinUI type names <c>ThemeBindingApplier.GetDependencyPropertyName</c> will emit a
-    /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. The method's body is a
+    /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. Its rows, and those of the
+    /// generated <c>GetModifierDependencyPropertyName</c> it calls first (spec 067 layer 2), are a
     /// chain of <c>if (property == "X" &amp;&amp; (fe is A || fe is B)) return "X";</c>, so each
-    /// branch's string comparison names the property. The type tests or the shared foreground
-    /// lookup supply its receiver gate.
+    /// branch's string comparison names the property and its type tests supply the receiver gate.
     /// </summary>
-    private static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
+    internal static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
     {
         var method = ReconcilerSource.Methods("GetDependencyPropertyName").FirstOrDefault();
 
         Assert.NotNull(method);
 
+        // Spec 067 layer 2: the common-modifier rows moved into the generated
+        // GetModifierDependencyPropertyName. Reading its rows only means something if the
+        // hand-written method still calls it.
+        var generated = ReconcilerSource.Methods("GetModifierDependencyPropertyName").FirstOrDefault();
+        Assert.NotNull(generated);
+        Assert.True(method!.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Any(call => ReconcilerSource.InvokedName(call) == "GetModifierDependencyPropertyName"),
+            "GetDependencyPropertyName no longer calls the generated GetModifierDependencyPropertyName, so the "
+            + "Background/Foreground/BorderBrush ThemeRef rows are unreachable.");
+
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        foreach (var ifStatement in method!.DescendantNodes()
+        foreach (var ifStatement in new[] { method!, generated! }.SelectMany(m => m.DescendantNodes())
             .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.IfStatementSyntax>())
         {
             var property = ifStatement.Condition
@@ -874,9 +908,6 @@ public class ModifierTableIntegrityTests
                             && b.Left is Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax { Identifier.Text: "fe" })
                 .Select(b => SimpleTypeName(b.Right))
                 .Where(typeName => typeName is not null);
-
-            if (property == "Foreground" && CallsForegroundPropertyLookup(ifStatement.Condition))
-                typeNames = typeNames.Concat(ReadForegroundPropertyGate(ReadForegroundModifierSource(RepoRootFinder.FindRepoRoot()!)));
 
             foreach (var typeName in typeNames)
             {
@@ -917,7 +948,9 @@ public class ModifierTableIntegrityTests
         Assert.NotNull(root);
         var runtimeReceivers = ReadForegroundPropertyGate(ReadForegroundModifierSource(root!));
 
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.cs");
+        // Spec 067 layer 2: the owner helpers are generated from the schema; the runtime side,
+        // ForegroundModifier.GetProperty, stays hand-written, so this still compares two sources.
+        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.Generated.cs");
         var cancellationToken = TestContext.Current.CancellationToken;
         var source = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree
             .ParseText(File.ReadAllText(file), cancellationToken: cancellationToken)
@@ -1193,7 +1226,7 @@ public class ModifierTableIntegrityTests
     /// the containment relationship exact, so this test fails on real drift instead of on
     /// reformatting.
     /// </remarks>
-    private static Dictionary<string, HashSet<string>> ReadApplyModifierControlGates()
+    internal static Dictionary<string, HashSet<string>> ReadApplyModifierControlGates()
     {
         // ApplyModifiers itself is an ordered sequence of per-family helper calls; the arms
         // live in those helpers, so read the whole family.
@@ -1213,9 +1246,10 @@ public class ModifierTableIntegrityTests
 
         foreach (var method in methods)
         {
-            // Padding and BorderThickness are computed into a local first (to overlay the
-            // BiDi-aware inline variants), so the guard reads `resolvedPadding`, not
-            // `m.Padding`. Map those locals back to the modifier they were seeded from.
+            // Margin is computed into a local first (to overlay the BiDi-aware inline variants),
+            // so its guard reads `resolvedMargin`, not `m.Margin`. Map such locals back to the
+            // modifier they were seeded from. Padding and BorderThickness write through the
+            // generated ApplyResolved<X>Modifier (spec 067 layer 4), whose guards name the bag.
             var localToProperty = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var declarator in method.DescendantNodes()
                 .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax>()

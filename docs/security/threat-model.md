@@ -151,7 +151,7 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 **Endpoints:**
 
 - `GET /frame` — returns the latest JPEG-encoded screenshot of the WinUI window (captured via `PrintWindow`).
-- `GET /status` — fps/port introspection.
+- `GET /status` — fps/port introspection, plus `renderError`: the source, component name, exception type and message of the first render error that replaced content since the last component switch (no stack trace). This includes errors whose text an app's `RenderErrorHandler` keeps off screen; like every endpoint here it needs the per-launch bearer token on loopback.
 - `GET /components` — list of registered preview components.
 - `POST /focus` — brings the developer's app window to foreground.
 - `POST /preview` — switches the previewed component by name.

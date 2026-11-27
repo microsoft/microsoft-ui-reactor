@@ -66,6 +66,12 @@
     <!-- Spec 066 §12.1: the transforms matrix generator, composition model and ledger are pure
          managed code shared with the selftest host, so they are tested here headless. -->
     <Compile Include="..\Reactor.AppTests.Host\SelfTest\TransformsMatrix\*.cs" Link="TransformsMatrix\%(Filename)%(Extension)" />
+    <!-- Spec 067 §10.1: the brush / FontFamily fields the selftest covers, checked against the
+         headless contract table so the two tiers can't drift apart. -->
+    <Compile Include="..\Reactor.AppTests.Host\SelfTest\ModifierFieldContractSelfTestFields.cs" Link="ModifierFieldContractSelfTestFields.cs" />
+    <!-- Spec 067 §10.2: the frozen matrix the selftest runs, linked so
+         ModifierMatrixSchemaAgreementTests can check schema and matrix agree headlessly. -->
+    <Compile Include="..\Reactor.AppTests.Host\SelfTest\ModifierMatrix\ModifierMatrixExpectations.cs" Link="ModifierMatrixExpectations.cs" />
   </ItemGroup>
 
   <!--
@@ -115,6 +121,7 @@
     <ProjectReference Include="..\..\tools\Reactor.MurCheckGuardrail\Reactor.MurCheckGuardrail.csproj" />
     <ProjectReference Include="..\..\tools\Reactor.ApiIndex\Reactor.ApiIndex.csproj" />
     <ProjectReference Include="..\..\tools\Reactor.SearchIndex\Reactor.SearchIndex.csproj" />
+    <ProjectReference Include="..\..\tools\Reactor.ModifierGen\Reactor.ModifierGen.csproj" />
   </ItemGroup>
 
 </Project>
