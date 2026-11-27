@@ -852,7 +852,26 @@ moves the analyzer's common-modifier gates, `GateOnlyInReconciler` and poolable 
 `ModifierSchemaTests` (receivers and DPs exist and match `ApplyModifiers` and the `ThemeRef`
 path, slot order matches the frozen apply order, composition flags, fluent names).
 `ModifierGateSource` reads gate arguments from both files. The second adds
-`tools/Reactor.ModifierGen`, the typed probe table and the §10.2 matrix selftest.
+`tools/Reactor.ModifierGen`, which emits the typed probe table
+(`tests/Reactor.AppTests.Host/SelfTest/ModifierMatrix/ModifierProbes.Generated.cs`), and the
+§10.2 matrix selftests `ModifierMatrix_*`, which run the probes against the hand-written frozen
+`ModifierMatrixExpectations`. Unset `AutomationName` runs twice: on a captionless Border it
+releases the local value, and on a captioned TextBlock with no Style it falls back to the caption
+(§10.2 step 3's exception; a Style-provided name would stop that fallback). The negatives use a
+test-only `ContentPresenter` carrier for `CornerRadius` and both content alignments, with
+`Width` as a positive control that modifiers reach the carrier at all. Hand-coded slots
+(composition, brushes including `Foreground` since #1687, tooltips, flyouts, `LabeledBy`) are
+listed in `Excluded` with a reason. The pool step reads the carrier while it sits in the pool (that is
+`CleanElement` alone) and then checks only that a bare renter of the same instance does not get
+the previous value, because a renter's own mount can write the DP (Button's `IsEnabled`, a
+TextBlock's caption-derived name). On TextBlock the descriptor's `ClearValueOnUnset` (#522) also
+clears an unset `FontSize` at mount, so the pool's `FontSize = 14`, written to stop a recycled
+TextBlock inheriting an ancestor's size, never reaches a `TextBlockElement` renter. Layer 5 should decide that
+reset with this in view.
+`ModifierMatrixSchemaAgreementTests` checks headlessly that the probes and the matrix list the
+same (slot, receiver, DP) set, that carriers are receivers and negatives are not, that every gated
+slot has a negative or a recorded reason, that every hand-coded slot is excluded with a reason, and
+that the generated file is fresh.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
