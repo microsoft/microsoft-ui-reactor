@@ -371,8 +371,7 @@ public sealed partial class Reconciler
         // `resolvedPadding` made the value non-null whenever the last render had padding, so a
         // render that dropped `.Padding(x)` and an inline edge together took the write arm (the
         // inline edge changed) and wrote `x` back, and the reset below never ran (#1749).
-        // `wantsPadding` is the honest question for the reset, and `hadPadding` covers the
-        // inline-only case (oldM.Padding null but an overlay was written).
+        // `!wantsPadding && hadPadding` is the same reset guard Margin spells out inline.
         var wantsPadding = m.Padding.HasValue || m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue;
         var hadPadding = oldM is not null && (oldM.Padding.HasValue || oldM.PaddingInlineStart.HasValue || oldM.PaddingInlineEnd.HasValue);
         var resolvedPadding = m.Padding;
