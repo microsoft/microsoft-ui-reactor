@@ -266,7 +266,15 @@ internal static class ThemeRefStyleFixtures
                 InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
                 H.Check("RichTextHoverRemoval_HoverGreenApplied", ReferenceEquals(text.Foreground, green));
 
-                var replacement = reconciler.Update(initial, next, text, static () => { });
+                var rebuiltRed = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                var rebuilt = (initial with { Text = "rebuilt" }).Foreground<RichTextBlockElement>(rebuiltRed);
+                var replacement = reconciler.Update(initial, rebuilt, text, static () => { });
+                H.Check("RichTextHoverRemoval_RebuiltTextApplied", text.Blocks.Count == 1
+                    && text.Blocks[0] is Microsoft.UI.Xaml.Documents.Paragraph { Inlines.Count: 1 } paragraph
+                    && paragraph.Inlines[0] is Microsoft.UI.Xaml.Documents.Run { Text: "rebuilt" });
+                H.Check("RichTextHoverRemoval_EquivalentBrushKeepsHover", replacement is null && ReferenceEquals(text.Foreground, green));
+
+                replacement = reconciler.Update(rebuilt, next, text, static () => { });
                 H.Check("RichTextHoverRemoval_SameControlStaysGreen", replacement is null && ReferenceEquals(text.Foreground, green));
 
                 InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
@@ -427,9 +435,22 @@ internal static class ThemeRefStyleFixtures
                 H.Check(name + "_ExitKeepsDifferentNormalOpacity", ReferenceEquals(text.Foreground, translucentRed));
 
                 InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
+                if (pressed) InteractionStateApplier.SimulatePressedForTests(text, isPressed: true);
+                text.Foreground = blue;
+                var rebuiltRed = new SolidColorBrush(Microsoft.UI.Colors.Red) { Opacity = 0.75 };
+                var externalRebuild = Render("external rebuilt", rebuiltRed);
+                foregroundWrites = 0;
+                replacement = reconciler.Update(changedOpacity, externalRebuild, text, static () => { });
+                H.Check(name + "_EquivalentNormalAfterExternalWriteApplied", replacement is null && text.Text == "external rebuilt"
+                    && ReferenceEquals(text.Foreground, rebuiltRed), $"foreground={ColorOf(text.Foreground)}");
+                H.Check(name + "_EquivalentNormalAfterExternalWriteWritesForeground", foregroundWrites > 0, $"writes={foregroundWrites}");
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
+                H.Check(name + "_ExternalRebuildExitKeepsNormal", ReferenceEquals(text.Foreground, rebuiltRed));
+
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
                 var normalWithoutStates = new SolidColorBrush(Microsoft.UI.Colors.Red) { Opacity = 0.75 };
                 var withoutStates = Render("without states", normalWithoutStates) with { InteractionStates = null };
-                replacement = reconciler.Update(changedOpacity, withoutStates, text, static () => { });
+                replacement = reconciler.Update(externalRebuild, withoutStates, text, static () => { });
                 H.Check(name + "_RemovingStatesAppliesEquivalentNormal", replacement is null && ReferenceEquals(text.Foreground, normalWithoutStates));
             }
             finally
