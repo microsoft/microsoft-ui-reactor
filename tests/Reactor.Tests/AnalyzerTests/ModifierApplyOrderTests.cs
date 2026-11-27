@@ -156,6 +156,37 @@ public class ModifierApplyOrderTests
             order);
     }
 
+    [Fact]
+    public void A_Helper_Called_From_A_Helper_Shares_Its_Callers_Reads()
+    {
+        // Spec 067 layer 4: a hand-written resolver hands its result to a generated write helper
+        // that reads the same fields. Those reads are the resolver's arm, not a second pass, so
+        // only a field the nested helper reads first adds an entry.
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText("""
+            class R
+            {
+                void ApplyModifiers(object fe, object oldM, object m)
+                {
+                    ApplyPaddingModifiers(fe, oldM, m);
+                    var x = m.OnMountAction;
+                }
+                void ApplyPaddingModifiers(object fe, object oldM, object m)
+                {
+                    var resolved = m.Padding ?? m.PaddingInlineStart;
+                    ApplyResolvedPaddingModifier(fe, oldM, m, resolved);
+                }
+                void ApplyResolvedPaddingModifier(object fe, object oldM, object m, object resolved)
+                {
+                    if (resolved != null && (m.PaddingInlineStart != oldM || m.PaddingInlineEnd != oldM || m.Padding != oldM)) { }
+                }
+            }
+            """, cancellationToken: TestContext.Current.CancellationToken);
+        var methods = tree.GetRoot(TestContext.Current.CancellationToken).DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .ToDictionary(method => method.Identifier.Text, StringComparer.Ordinal);
+
+        Assert.Equal(["Padding", "PaddingInlineStart", "PaddingInlineEnd", "OnMountAction"], ReadOrder(methods["ApplyModifiers"], "m", methods));
+    }
+
     internal static List<string> ReadApplyOrder()
     {
         // ApplyModifiers has a mount overload without oldM that forwards to the main one.
@@ -184,13 +215,15 @@ public class ModifierApplyOrderTests
         return order.Where(o => !o.StartsWith('→')).ToList();
     }
 
-    // Field reads are deduplicated per walked method (an arm reads its field several times), but
-    // every helper call and every handoff is recorded each time it happens, so a second call to a
-    // helper or handler wiring, for example after the lifecycle callbacks, changes the list.
+    // Field reads are deduplicated per helper called from ApplyModifiers, including the helpers it
+    // calls in turn (an arm reads its field several times, and a resolver hands its result to a
+    // generated write helper that reads the same fields, spec 067 layer 4). Every call ApplyModifiers
+    // makes and every handoff is recorded each time it happens, so a second call to a helper or
+    // handler wiring, for example after the lifecycle callbacks, changes the list.
     private static void Walk(MethodDeclarationSyntax method, string bag, IReadOnlyDictionary<string, MethodDeclarationSyntax> family,
-        List<string> order)
+        List<string> order, HashSet<string>? callerSeen = null)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = callerSeen ?? new HashSet<string>(StringComparer.Ordinal);
         SyntaxNode body = (SyntaxNode?)method.Body ?? method.ExpressionBody!;
         bool ShouldDescend(SyntaxNode node) => !DeclaresParameter(node, bag);
 
@@ -215,7 +248,7 @@ public class ModifierApplyOrderTests
                     break;
                 case InvocationExpressionSyntax invocation when ReconcilerSource.InvokedName(invocation) is { } name:
                     if (family.TryGetValue(name, out var helper))
-                        Walk(helper, bag, family, order);
+                        Walk(helper, bag, family, order, method.Identifier.Text == ReconcilerSource.ApplyModifiersName ? null : seen);
                     else if ((ReconcilerSource.IsBagHandoff(invocation)
                               || invocation.ArgumentList.Arguments.Any(a => a.Expression is IdentifierNameSyntax id && derived.Contains(id.Identifier.Text))))
                         order.Add("→" + MarkerName(invocation, name));
