@@ -244,8 +244,11 @@ public sealed partial class Reconciler
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;
         var previousModifierUpdate = ModifierUpdate;
+        bool clearsInteractionStates = oldEl.InteractionStates is not null && newEl.InteractionStates is null;
         if (!ReferenceEquals(ModifierUpdate.Control, control))
-            ModifierUpdate = (control, newEl, modifiers);
+            ModifierUpdate = (control, newEl, modifiers, clearsInteractionStates);
+        else if (clearsInteractionStates)
+            ModifierUpdate.ClearsInteractionStates = true;
         var previousImplicitSlot = _implicitSlot;
         _implicitSlot = implicitSlot;
         var previousUpdateStagger = _updateStagger;

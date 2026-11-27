@@ -71,7 +71,12 @@ internal static class InteractionStateApplier
                 ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
     }
 
-    internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement)
+    internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush replacement, Reconciler reconciler)
+        => InteractionTrackerOf(element)?.NormalForeground is Brush normal
+            && BrushHelper.BrushesEqual(normal, replacement)
+            && TryReplaceInteractionForegroundRestoreValue(element, normal, replacement, reconciler);
+
+    internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement, Reconciler? reconciler = null)
     {
         // Leave the visible state brush in place while it still owns the local value.
         if (InteractionTrackerOf(element) is not { } tracker
@@ -79,6 +84,17 @@ internal static class InteractionStateApplier
             || !ReferenceEquals(tracker.NormalForeground, previous)
             || ForegroundModifier.GetProperty(element) is not { } property
             || !ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground))
+            return false;
+
+        // Resolve the final state only for an owned equivalent-normal candidate. A pending
+        // tracker clear or changed/withdrawn state foreground must allow the normal write.
+        if (reconciler is not null
+            && (reconciler.FindUpdatingInteractionStates(element) is not { } config
+                || ValuesForState(config, tracker.CurrentState)?.Foreground is not { } stateForeground
+                || !BrushHelper.BrushesEqual(tracker.ActiveForeground, stateForeground)
+                || !ReferenceEquals(InteractionTrackerOf(element), tracker)
+                || !ReferenceEquals(tracker.NormalForeground, previous)
+                || !ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground)))
             return false;
 
         tracker.NormalForeground = replacement;
@@ -191,13 +207,7 @@ internal static class InteractionStateApplier
         var curve = config.Curve ?? Curve.Ease(200, Easing.Standard);
 
         // Resolve effective state values (Pressed inherits from PointerOver)
-        var values = newState switch
-        {
-            InteractionState.PointerOver => config.PointerOver,
-            InteractionState.Pressed => MergePressed(config.PointerOver, config.Pressed),
-            InteractionState.Focused => config.Focused,
-            _ => null, // Normal
-        };
+        var values = ValuesForState(config, newState);
 
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
@@ -353,6 +363,15 @@ internal static class InteractionStateApplier
         else
             fe.ClearValue(dp);
     }
+
+    private static InteractionStateValues? ValuesForState(InteractionStatesConfig config, InteractionState state)
+        => state switch
+        {
+            InteractionState.PointerOver => config.PointerOver,
+            InteractionState.Pressed => MergePressed(config.PointerOver, config.Pressed),
+            InteractionState.Focused => config.Focused,
+            _ => null,
+        };
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {
