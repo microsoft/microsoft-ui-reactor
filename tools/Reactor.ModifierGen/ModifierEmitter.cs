@@ -53,9 +53,8 @@ internal static class ModifierEmitter
         sb.Append("internal static partial class AppliedModifierMap\n{\n");
         var owners = new List<(string Name, List<ModifierReceiver> Chain)>();
         var entries = new List<string>();
-        foreach (var name in order)
+        foreach (var slot in order.Select(name => reported[name]))
         {
-            var slot = reported[name];
             var modifier = slot.Bucket == ModifierBucket.Accessibility ? "Accessibility." + slot.Name : slot.Name;
             var read = slot.Bucket == ModifierBucket.Accessibility ? $"m.Accessibility?.{slot.Name}" : $"m.{slot.Name}";
             if (slot.ReportSuppressedBy is { } suppressor)
