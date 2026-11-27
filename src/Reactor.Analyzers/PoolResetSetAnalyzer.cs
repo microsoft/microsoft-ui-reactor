@@ -178,14 +178,14 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
         "Use the Reactor modifier instead of .Set";
 
     private static readonly LocalizableString ModifierAvailableMessageFormat =
-        "A '{1}' modifier exists for '{0}'. Prefer it over '.Set(...)', which re-runs every render, is never unwound, and keeps the element on the reconciler's update path.";
+        "A '{1}' modifier exists for '{0}'. Prefer it over '.Set(...)', whose imperative callbacks run on mount and updates that are not structurally skipped. Removing the callback alone leaves its previous writes in place.";
 
     private static readonly LocalizableString ModifierAvailableDescription =
-        "Reactor exposes a fluent modifier for this property. Modifier values are stored on " +
-        "Element.Modifiers, structurally diffed, and cleared when removed, whereas '.Set(...)' " +
-        "setters are imperative writes the reconciler cannot diff — Element.SettersEqual only " +
-        "treats setter arrays as equal when they are the same instance or both empty, so any " +
-        "element carrying setters re-runs them on every reconcile. Unlike the pool-reset " +
+        "Reactor exposes a fluent modifier for this property. Modifier values participate in " +
+        "property diffing and removal handling, whereas '.Set(...)' callbacks make imperative " +
+        "writes on mount and updates that are not structurally skipped. Fresh setter arrays " +
+        "normally prevent skipping; reusing the same element or setter array can allow skipping. " +
+        "Removing the callback alone does not undo its previous writes. Unlike the pool-reset " +
         "properties this is a preference rather than a correctness bug, so it reports as Info.";
 
     private static readonly DiagnosticDescriptor ModifierAvailableRule = new(

@@ -465,7 +465,7 @@ TextBlock("Title").FontSize(28).FontWeight(new FontWeight(700))
 **Rules:**
 - Use `SemiBold` (600), never `Bold` (700) for emphasis — except `Heading()` which intentionally uses 700 for page titles.
 - Minimum font size: 12px. Anything smaller makes complex scripts unreadable.
-- Use `SymbolThemeFontFamily` for icon fonts, applied with the `.FontFamily(...)` modifier (not `.Set`, which re-runs every update and is never unwound):
+- Use `SymbolThemeFontFamily` for icon fonts and apply it with the `.FontFamily(...)` modifier so Reactor can update or clear the property:
   ```csharp
   TextBlock("\uE710")
       .FontFamily((FontFamily)Application.Current.Resources["SymbolThemeFontFamily"])

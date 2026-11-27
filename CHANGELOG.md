@@ -345,6 +345,13 @@ Conventions for contributors:
   overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and
   `REACTOR_MOD_003` now accepts the supported `.Foreground(...)` calls (issue #1674).
 
+- Flyout, MenuFlyout, and CommandBarFlyout retain the shared interaction tracker
+  when their target removes its own states while the outer state remains active.
+  Foreground updates follow the same equivalent-brush and active-state checks as
+  plain targets. Saved `Foreground`, `Background`, and `BorderBrush` restore values
+  stay current, including typed brush writes, without changing setter order.
+  Releasing foreground overrides avoids restoring removed or replaced brushes (#1728).
+
 - Changing `.Opacity()` preserves playback progress when the current keyframe entry
   animates opacity and its trigger stays the same. Removing the looping entry or
   finishing a one-shot applies the latest declared opacity (#1651, #1660).

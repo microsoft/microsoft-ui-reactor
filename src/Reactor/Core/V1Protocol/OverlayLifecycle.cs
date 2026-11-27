@@ -547,6 +547,9 @@ internal static class OverlayLifecycle
         {
             var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
             if (replacement is not null) updated = replacement;
+            // Markdown selection reconciles a different native child, whose shallow skip
+            // cannot consume this target's pending release. Finish it before Flyout setters.
+            else reconciler.ReleaseDeferredFlyoutForeground(targetControl);
         }
         else
         {
@@ -716,6 +719,7 @@ internal static class OverlayLifecycle
         {
             var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
             if (replacement is not null) updated = replacement;
+            else reconciler.ReleaseDeferredFlyoutForeground(targetControl);
         }
         else
         {
@@ -838,6 +842,7 @@ internal static class OverlayLifecycle
         {
             var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
             if (replacement is not null) updated = replacement;
+            else reconciler.ReleaseDeferredFlyoutForeground(targetControl);
         }
         else
         {

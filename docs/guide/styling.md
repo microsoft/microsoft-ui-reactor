@@ -602,8 +602,9 @@ Button("Save", onSave).Set(c => c.RequestedTheme = ElementTheme.Dark);
 
 The `.RequestedTheme(...)` modifier participates in property diffing —
 the next render that removes the modifier walks the property back to
-default. `.Set` is imperative and one-way; the next render won't undo
-it. The `REACTOR_THEME_003` analyzer catches this specific case with a
+default. Dropping a `.Set(...)` callback alone leaves its write in place.
+The modifier can still overwrite or clear the same property. The
+`REACTOR_THEME_003` analyzer catches this specific case with a
 code-fix to the modifier. See [advanced](advanced.md) for the broader
 `.Set` discussion.
 

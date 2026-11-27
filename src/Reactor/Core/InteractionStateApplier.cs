@@ -45,7 +45,7 @@ internal static class InteractionStateApplier
     {
         public InteractionState CurrentState;
         public InteractionStatesConfig Config = null!;
-        // Background/Foreground: the raw local value (DependencyProperty.UnsetValue when there was
+        // Background/Foreground keep the raw local value (DependencyProperty.UnsetValue when there was
         // none) a state restores when it ends, captured when the state first writes over the
         // property. With no local value the property is cleared, so a {ThemeResource} Style
         // setter or the default style shows again. Active* is the brush the state wrote:
@@ -57,18 +57,34 @@ internal static class InteractionStateApplier
         public Brush? ActiveForeground;
         public bool ForegroundOverrideApplied;
         public Brush? NormalBorderBrush;
+        public Brush? ActiveBorderBrush;
         public bool NormalBorderBrushHasLocalValue;
         public bool BorderBrushOverrideApplied;
+        public bool PreserveUpdatedBorderBrush;
     }
 
     internal enum InteractionState { Normal, PointerOver, Pressed, Focused }
 
-    internal static void RestoreInteractionForeground(FrameworkElement element)
+    internal static void ReleaseRemovedInteractionForeground(UIElement uie, InteractionStatesConfig? config,
+        bool writesForegroundAfterSetters = false)
     {
-        if (InteractionTrackerOf(element) is { } tracker
-            && ForegroundModifier.GetProperty(element) is { } property)
-            ApplyInteractionBrush(element, property, stateBrush: null,
-                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
+        if (uie is not FrameworkElement element
+            || InteractionTrackerOf(element) is not { ForegroundOverrideApplied: true } tracker
+            || GetStateValues(config, tracker.CurrentState)?.Foreground is not null
+            || ForegroundModifier.GetProperty(element) is not { } property)
+            return;
+
+        if (writesForegroundAfterSetters)
+        {
+            // The common modifier will replace or clear the property after setters.
+            tracker.NormalForeground = null;
+            tracker.ActiveForeground = null;
+            tracker.ForegroundOverrideApplied = false;
+            return;
+        }
+
+        ApplyInteractionBrush(element, property, stateBrush: null,
+            ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
     }
 
     internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush replacement, Reconciler reconciler)
@@ -78,19 +94,21 @@ internal static class InteractionStateApplier
 
     internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement, Reconciler? reconciler = null)
     {
-        // Leave the visible state brush in place while it still owns the local value.
-        if (InteractionTrackerOf(element) is not { } tracker
-            || !tracker.ForegroundOverrideApplied
-            || !ReferenceEquals(tracker.NormalForeground, previous)
-            || ForegroundModifier.GetProperty(element) is not { } property
-            || !ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground))
+        if (ForegroundModifier.GetProperty(element) is not { } property
+            || InteractionTrackerOf(element) is not { ForegroundOverrideApplied: true } tracker
+            || !ReferenceEquals(tracker.NormalForeground, previous))
+            return false;
+
+        // A lookup can invoke decorator code. Only owned candidates need its final-state check;
+        // the restore-only path still updates a displaced brush without a reconciler lookup.
+        if (reconciler is not null && !ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground))
             return false;
 
         // Resolve the final state only for an owned equivalent-normal candidate. A pending
         // tracker clear or changed/withdrawn state foreground must allow the normal write.
         if (reconciler is not null
             && (reconciler.FindUpdatingInteractionStates(element) is not { } config
-                || ValuesForState(config, tracker.CurrentState)?.Foreground is not { } stateForeground
+                || GetStateValues(config, tracker.CurrentState)?.Foreground is not { } stateForeground
                 || !BrushHelper.BrushesEqual(tracker.ActiveForeground, stateForeground)
                 || !ReferenceEquals(InteractionTrackerOf(element), tracker)
                 || !ReferenceEquals(tracker.NormalForeground, previous)
@@ -98,8 +116,48 @@ internal static class InteractionStateApplier
             return false;
 
         tracker.NormalForeground = replacement;
-        return true;
+        return ReferenceEquals(element.ReadLocalValue(property), tracker.ActiveForeground);
     }
+
+    internal static void UpdateInteractionForegroundRestoreValue(UIElement element, object restoreValue)
+    {
+        if (InteractionTrackerOf(element) is { ForegroundOverrideApplied: true } tracker)
+            tracker.NormalForeground = restoreValue;
+    }
+
+    internal static void PreserveUpdatedBorderBrush(UIElement element)
+    {
+        if (InteractionTrackerOf(element) is { BorderBrushOverrideApplied: true } tracker)
+            tracker.PreserveUpdatedBorderBrush = true;
+    }
+
+    internal static void UpdateInteractionBackgroundRestoreValue(UIElement element, object restoreValue)
+    {
+        if (InteractionTrackerOf(element) is { BackgroundOverrideApplied: true } tracker)
+            tracker.NormalBackground = restoreValue;
+    }
+
+    internal static void UpdateInteractionBorderBrushRestoreValue(UIElement element, Brush restoreValue)
+    {
+        if (InteractionTrackerOf(element) is { BorderBrushOverrideApplied: true } tracker)
+        {
+            tracker.NormalBorderBrush = restoreValue;
+            tracker.NormalBorderBrushHasLocalValue = true;
+        }
+    }
+
+    internal static bool OwnsInteractionBorderBrush(FrameworkElement element, Brush? activeBrush)
+        => GetBorderBrushProperty(element) is { } property && ReferenceEquals(element.ReadLocalValue(property), activeBrush);
+
+    private static DependencyProperty? GetBorderBrushProperty(FrameworkElement element) => element switch
+    {
+        WinUI.Control => WinUI.Control.BorderBrushProperty,
+        WinUI.Border => WinUI.Border.BorderBrushProperty,
+        WinUI.Grid => WinUI.Grid.BorderBrushProperty,
+        WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
+        WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
+        _ => null,
+    };
 
     /// <summary>
     /// Sets up or updates InteractionStates on an element. Registers pointer event handlers
@@ -207,7 +265,7 @@ internal static class InteractionStateApplier
         var curve = config.Curve ?? Curve.Ease(200, Easing.Standard);
 
         // Resolve effective state values (Pressed inherits from PointerOver)
-        var values = ValuesForState(config, newState);
+        var values = GetStateValues(config, newState);
 
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
@@ -280,35 +338,37 @@ internal static class InteractionStateApplier
             ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
                 ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
-        var borderProperty = fe switch
-        {
-            WinUI.Control => WinUI.Control.BorderBrushProperty,
-            WinUI.Border => WinUI.Border.BorderBrushProperty,
-            WinUI.Grid => WinUI.Grid.BorderBrushProperty,
-            WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
-            WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
-            _ => null,
-        };
+        var borderProperty = GetBorderBrushProperty(fe);
         if (borderProperty is not null)
         {
             if (values?.BorderBrush is { } borderBrush)
             {
-                if (!tracker.BorderBrushOverrideApplied)
+                if (!tracker.BorderBrushOverrideApplied || (tracker.PreserveUpdatedBorderBrush
+                    && !ReferenceEquals(fe.ReadLocalValue(borderProperty), tracker.ActiveBorderBrush)))
                 {
                     // Capture the latest normal value before applying an override.
                     tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
                     tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
                     tracker.BorderBrushOverrideApplied = true;
                 }
+                tracker.ActiveBorderBrush = borderBrush;
                 fe.SetValue(borderProperty, borderBrush);
             }
             else if (tracker.BorderBrushOverrideApplied)
             {
-                if (tracker.NormalBorderBrushHasLocalValue)
-                    fe.SetValue(borderProperty, tracker.NormalBorderBrush);
-                else
-                    fe.ClearValue(borderProperty);
+                // A Flyout can keep the tracker alive after its target writes a new normal brush.
+                bool restore = !tracker.PreserveUpdatedBorderBrush
+                    || ReferenceEquals(fe.ReadLocalValue(borderProperty), tracker.ActiveBorderBrush);
+                if (restore)
+                {
+                    if (tracker.NormalBorderBrushHasLocalValue)
+                        fe.SetValue(borderProperty, tracker.NormalBorderBrush);
+                    else
+                        fe.ClearValue(borderProperty);
+                }
+                tracker.ActiveBorderBrush = null;
                 tracker.BorderBrushOverrideApplied = false;
+                tracker.PreserveUpdatedBorderBrush = false;
             }
         }
     }
@@ -364,14 +424,13 @@ internal static class InteractionStateApplier
             fe.ClearValue(dp);
     }
 
-    private static InteractionStateValues? ValuesForState(InteractionStatesConfig config, InteractionState state)
-        => state switch
-        {
-            InteractionState.PointerOver => config.PointerOver,
-            InteractionState.Pressed => MergePressed(config.PointerOver, config.Pressed),
-            InteractionState.Focused => config.Focused,
-            _ => null,
-        };
+    private static InteractionStateValues? GetStateValues(InteractionStatesConfig? config, InteractionState state) => state switch
+    {
+        InteractionState.PointerOver => config?.PointerOver,
+        InteractionState.Pressed when config is not null => MergePressed(config.PointerOver, config.Pressed),
+        InteractionState.Focused => config?.Focused,
+        _ => null,
+    };
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {

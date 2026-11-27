@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Core;
 
 internal static class ForegroundModifier
 {
-    internal enum UpdateAction { None, Reapply, RemovalHandled, NewTarget }
+    internal enum UpdateAction { None, Reapply, RemovalHandled, RemovalRestorePrepared, NewTarget }
 
     // A skipped render can declare a new equivalent brush. Remember the instance the common
     // modifier applied (or stored for interaction-state restoration), even if WinRT projects a new wrapper.
@@ -23,15 +23,8 @@ internal static class ForegroundModifier
     };
 
     internal static UpdateAction PrepareUpdate(IV1HandlerEntry entry, UIElement control, Element previous, Element current,
-        Brush? oldModifier, Brush? modifier, bool hasModifierParent)
+        Brush? oldModifier, Brush? modifier, bool preserveInteractionForeground)
     {
-        var interactionStatesRemoved = previous.InteractionStates is not null && current.InteractionStates is null;
-        // Restore the saved foreground before setters when the common brush is unchanged.
-        // A nested update on the same control can share the outer layer's interaction tracker.
-        if (!hasModifierParent && interactionStatesRemoved && modifier is not null && ReferenceEquals(oldModifier, modifier)
-            && control is FrameworkElement element && entry.OwnsControl(current))
-            InteractionStateApplier.RestoreInteractionForeground(element);
-
         // The built-in descriptor writes the element's explicit Foreground. A custom handler
         // for the same element and control types can decide to leave that declaration unapplied.
         if (control is not WinUI.RichTextBlock richText || previous is not RichTextBlockElement oldRichText
@@ -48,8 +41,18 @@ internal static class ForegroundModifier
                 : UpdateAction.None;
         }
 
+        if (oldModifier is null)
+        {
+            // The descriptor is about to write this typed value before setters. Refresh the
+            // retained normal value even if that write reuses the active hover brush.
+            if (preserveInteractionForeground && !Equals(oldRichText.Foreground, newRichText.Foreground))
+                InteractionStateApplier.UpdateInteractionForegroundRestoreValue(richText,
+                    (object?)newRichText.Foreground ?? DependencyProperty.UnsetValue);
+            return UpdateAction.None;
+        }
+
         // Without an explicit brush, common modifier removal clears the value after setters (#950).
-        if (oldModifier is null || newRichText.Foreground is not { } explicitForeground)
+        if (newRichText.Foreground is not { } explicitForeground)
             return UpdateAction.None;
 
         // Restore before native setters so they can take precedence. If an interaction state
@@ -60,34 +63,36 @@ internal static class ForegroundModifier
             richText.ClearValue(property);
             if (applied is not null)
             {
-                var stateOwnsForeground = InteractionStateApplier.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground);
-
-                var shouldRestoreImmediately = stateOwnsForeground
-                    ? interactionStatesRemoved
-                    : ReferenceEquals(richText.ReadLocalValue(WinUI.RichTextBlock.ForegroundProperty), applied);
-
-                if (shouldRestoreImmediately)
+                if (InteractionStateApplier.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground))
+                    return UpdateAction.RemovalRestorePrepared;
+                if (ReferenceEquals(richText.ReadLocalValue(WinUI.RichTextBlock.ForegroundProperty), applied))
                     richText.Foreground = explicitForeground;
             }
         }
         return UpdateAction.RemovalHandled;
     }
 
-    internal static void Apply(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, UpdateAction update, Reconciler reconciler)
+    internal static void Apply(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, UpdateAction update,
+        Reconciler reconciler, bool updateInteractionRestoreValue = false)
     {
         var oldForeground = update == UpdateAction.NewTarget ? null : oldM?.Foreground;
         var foreground = m.Foreground;
-        if (update == UpdateAction.RemovalHandled || (oldForeground is null && foreground is null)
+        if (update is UpdateAction.RemovalHandled or UpdateAction.RemovalRestorePrepared
+            || (oldForeground is null && foreground is null)
             || GetProperty(fe) is not { } property)
             return;
 
         if (foreground is not null)
         {
             if (ReferenceEquals(oldForeground, foreground) && update != UpdateAction.Reapply) return;
-            // Equivalent normal brushes must not overwrite a foreground still owned by an
-            // interaction state (#1727). A genuinely different normal value writes as usual.
             if (!InteractionStateApplier.TryReplaceInteractionForegroundRestoreValue(fe, foreground, reconciler))
+            {
+                // This normal write also replaces a retained tracker's old restore value,
+                // including when a setter displaced hover or the normal aliases its brush.
+                if (updateInteractionRestoreValue)
+                    InteractionStateApplier.UpdateInteractionForegroundRestoreValue(fe, foreground);
                 fe.SetValue(property, foreground);
+            }
             if (fe is WinUI.RichTextBlock)
             {
                 var appliedProperty = s_appliedForegroundProperty ??= DependencyProperty.RegisterAttached(
@@ -97,6 +102,8 @@ internal static class ForegroundModifier
         }
         else
         {
+            if (updateInteractionRestoreValue)
+                InteractionStateApplier.UpdateInteractionForegroundRestoreValue(fe, DependencyProperty.UnsetValue);
             fe.ClearValue(property);
             ClearApplied(fe);
         }

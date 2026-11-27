@@ -29,6 +29,9 @@ public sealed partial class Reconciler
     private int _implicitSlot;
     // Set when a layer of the control being updated deferred an implicit key's restore.
     private bool _implicitDeferred;
+    private bool _retainsFlyoutInteractionStates;
+    private InteractionStatesConfig? _updatingInteractionStates;
+    private (UIElement? Control, InteractionStatesConfig? Config, bool WritesForegroundAfterSetters) _pendingFlyoutForegroundRelease;
     // Mount frames are numbered as they start, so a frame nested in another has a higher number.
     // A control whose claims were made by a deeper frame was forwarded to this layer by its
     // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
@@ -62,6 +65,18 @@ public sealed partial class Reconciler
         if (self is not null && claims.MountOwner?.TryGetTarget(out var owner) == true && ReferenceEquals(owner, self)) return;
         claims.ShiftInward();
         if (layer is not null) Stamp(claims, stampFrame > 0 ? stampFrame : frame, layer);
+    }
+
+    internal void ReleaseDeferredFlyoutForeground(UIElement control, bool writesForegroundAfterSetters = false,
+        bool restoresExplicitForeground = false)
+    {
+        var pending = _pendingFlyoutForegroundRelease;
+        if (!ReferenceEquals(pending.Control, control)) return;
+
+        _pendingFlyoutForegroundRelease = default;
+        // #1687's explicit fallback is prepared before the target's setters.
+        InteractionStateApplier.ReleaseRemovedInteractionForeground(control, pending.Config,
+            !restoresExplicitForeground && (writesForegroundAfterSetters || pending.WritesForegroundAfterSetters));
     }
 
     /// <summary>
@@ -189,6 +204,8 @@ public sealed partial class Reconciler
             // No _ambientRequestedTheme restore here: the field is written only on the
             // non-skip path inside the try below, never on this early-return arm (which
             // reads the LOCAL effectiveTheme at line ~109), so it cannot leak.
+            // Finish a shared-target release before a forwarding handler continues after its skipped child.
+            ReleaseDeferredFlyoutForeground(control);
             return null; // null = keep existing control as-is
         }
 
@@ -244,11 +261,19 @@ public sealed partial class Reconciler
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;
         var previousModifierUpdate = ModifierUpdate;
-        bool clearsInteractionStates = oldEl.InteractionStates is not null && newEl.InteractionStates is null;
+        // Pass a Flyout's retained tracker through every layer on the same native target.
+        bool previouslyRetainedInteractionStates = _retainsFlyoutInteractionStates;
+        bool outerRetainsInteractionStates = modifierParent is not null && previouslyRetainedInteractionStates;
+        bool dropsInteractionStates = oldEl.InteractionStates is not null && newEl.InteractionStates is null;
+        bool clearsInteractionStates = dropsInteractionStates && !outerRetainsInteractionStates;
         if (!ReferenceEquals(ModifierUpdate.Control, control))
             ModifierUpdate = (control, newEl, modifiers, clearsInteractionStates);
         else if (clearsInteractionStates)
             ModifierUpdate.ClearsInteractionStates = true;
+        _retainsFlyoutInteractionStates = outerRetainsInteractionStates;
+        var previousInteractionStates = _updatingInteractionStates;
+        // The outermost configured layer is the one whose config remains on the shared tracker.
+        _updatingInteractionStates = (modifierParent is null ? null : previousInteractionStates) ?? newEl.InteractionStates;
         var previousImplicitSlot = _implicitSlot;
         _implicitSlot = implicitSlot;
         var previousUpdateStagger = _updateStagger;
@@ -350,6 +375,22 @@ public sealed partial class Reconciler
             && control.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoWrapsDecorator: true };
 
         var foregroundUpdate = ForegroundModifier.UpdateAction.None;
+        bool restoresOwnInteractionForeground = !outerRetainsInteractionStates && oldEl.InteractionStates is not null;
+
+        bool WritesCommonForegroundAfterSetters() => foregroundUpdate == ForegroundModifier.UpdateAction.None
+            && !ReferenceEquals(oldModifiers?.Foreground, modifiers?.Foreground);
+
+        void ReleaseDeferredTargetForeground() => ReleaseDeferredFlyoutForeground(control, WritesCommonForegroundAfterSetters(),
+            restoresExplicitForeground: foregroundUpdate == ForegroundModifier.UpdateAction.RemovalRestorePrepared);
+
+        UIElement UpdateFlyoutWithDeferredForegroundRelease(IV1HandlerEntry entry)
+        {
+            var previousRelease = _pendingFlyoutForegroundRelease;
+            _pendingFlyoutForegroundRelease = (control, _updatingInteractionStates, WritesCommonForegroundAfterSetters());
+            try { return entry.Update(oldEl, newEl, control, requestRerender, this); }
+            finally { _pendingFlyoutForegroundRelease = previousRelease; }
+        }
+
         // V1 Update returns the UIElement to install in the parent's
         // slot. Standard handlers always return `control` unchanged
         // (§13 Q12 — no substitution on the public author surface);
@@ -359,12 +400,56 @@ public sealed partial class Reconciler
         // `control`, return null so callers preserve identity.
         UIElement? UpdateWithV1Handler(IV1HandlerEntry entry)
         {
+            bool sharedFlyout = entry.PreservesTargetTag;
+            if (sharedFlyout && oldEl.InteractionStates is not null && newEl.InteractionStates is not null)
+                _retainsFlyoutInteractionStates = true;
             var oldForeground = oldModifiers?.Foreground;
             var foreground = modifiers?.Foreground;
-            if (oldForeground is not null || foreground is not null)
+            bool preserveInteractionBrushes = outerRetainsInteractionStates && newEl.InteractionStates is null;
+            if (preserveInteractionBrushes && control is WinUI.Border border
+                && oldEl is BorderElement oldBorder && newEl is BorderElement newBorder
+                && entry is V1Protocol.V1HandlerAdapter<BorderElement, WinUI.Border> borderAdapter
+                && borderAdapter.IsBackedByDescriptor(BorderElement.Descriptor))
+            {
+                // Border's descriptor writes its record/modifier fallback before setters.
+                if (!Equals(oldBorder.Background, newBorder.Background)
+                    || !Equals(oldBorder.Modifiers?.Background, newBorder.Modifiers?.Background))
+                    InteractionStateApplier.UpdateInteractionBackgroundRestoreValue(border,
+                        (object?)newBorder.Background ?? newBorder.Modifiers?.Background ?? DependencyProperty.UnsetValue);
+                // The conditional BorderBrush entry only writes non-null values.
+                if (newBorder.BorderBrush is { } borderBrush && !Equals(oldBorder.BorderBrush, borderBrush))
+                    InteractionStateApplier.UpdateInteractionBorderBrushRestoreValue(border, borderBrush);
+            }
+            else if (preserveInteractionBrushes && control is WinUI.Canvas canvas
+                && oldEl is CanvasElement oldCanvas && newEl is CanvasElement { Background: { } background } newCanvas
+                && !Equals(oldCanvas.Background, background)
+                && entry is V1Protocol.V1HandlerAdapter<CanvasElement, WinUI.Canvas> canvasAdapter
+                && canvasAdapter.IsBackedByDescriptor(CanvasElement.Descriptor))
+                InteractionStateApplier.UpdateInteractionBackgroundRestoreValue(canvas, background);
+            if (oldForeground is not null || foreground is not null || preserveInteractionBrushes)
                 foregroundUpdate = ForegroundModifier.PrepareUpdate(entry, control, oldEl, newEl, oldForeground, foreground,
-                    hasModifierParent: modifierParent is not null);
-            var v1Result = entry.Update(oldEl, newEl, control, requestRerender, this);
+                    preserveInteractionBrushes);
+            bool hasDeferredRelease = ReferenceEquals(_pendingFlyoutForegroundRelease.Control, control);
+            UIElement v1Result;
+            if (sharedFlyout && restoresOwnInteractionForeground && !hasDeferredRelease)
+                v1Result = UpdateFlyoutWithDeferredForegroundRelease(entry);
+            else
+            {
+                // A shared target prepares its normal brush before releasing the override and running setters.
+                if (hasDeferredRelease)
+                {
+                    if (!entry.PreservesTargetTag && entry.OwnsControl(newEl))
+                        ReleaseDeferredTargetForeground();
+                    else if (WritesCommonForegroundAfterSetters())
+                        _pendingFlyoutForegroundRelease.WritesForegroundAfterSetters = true;
+                }
+                else if (clearsInteractionStates
+                    && (foregroundUpdate == ForegroundModifier.UpdateAction.RemovalRestorePrepared
+                        || (modifierParent is null && foreground is not null
+                            && ReferenceEquals(oldForeground, foreground) && entry.OwnsControl(newEl))))
+                    InteractionStateApplier.ReleaseRemovedInteractionForeground(control, config: null);
+                v1Result = entry.Update(oldEl, newEl, control, requestRerender, this);
+            }
             ownsControl = entry.OwnsControl(newEl);
             return ReferenceEquals(v1Result, control) ? null : v1Result;
         }
@@ -383,6 +468,7 @@ public sealed partial class Reconciler
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
         {
+            ReleaseDeferredTargetForeground();
             result = reg.Update(oldEl, newEl, control, requestRerender, this);
             registeredType = true;
         }
@@ -392,6 +478,7 @@ public sealed partial class Reconciler
         }
         else
         {
+        ReleaseDeferredTargetForeground();
         result = (oldEl, newEl, control) switch
         {
             (ErrorBoundaryElement oldEb, ErrorBoundaryElement newEb, Border)
@@ -504,7 +591,8 @@ public sealed partial class Reconciler
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
                 ownsControl: ownsControl && result is null,
-                foregroundUpdate: ReferenceEquals(target, control) ? foregroundUpdate : ForegroundModifier.UpdateAction.NewTarget);
+                foregroundUpdate: ReferenceEquals(target, control) ? foregroundUpdate : ForegroundModifier.UpdateAction.NewTarget,
+                preserveInteractionBrushes: result is null && outerRetainsInteractionStates && newEl.InteractionStates is null);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
@@ -591,8 +679,10 @@ public sealed partial class Reconciler
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)
             InteractionStateApplier.ApplyInteractionStates(target, newEl.InteractionStates);
-        else if (oldEl.InteractionStates is not null)
+        else if (clearsInteractionStates)
             InteractionStateApplier.ClearInteractionStates(target);
+        else if (outerRetainsInteractionStates && !replacedControl)
+            InteractionStateApplier.PreserveUpdatedBorderBrush(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
         if (keyframes is not null)
@@ -615,6 +705,8 @@ public sealed partial class Reconciler
         finally
         {
             ModifierUpdate = previousModifierUpdate;
+            _retainsFlyoutInteractionStates = previouslyRetainedInteractionStates;
+            _updatingInteractionStates = previousInteractionStates;
             _implicitSlot = previousImplicitSlot;
             _updateStagger = previousUpdateStagger;
             if (modifierParent is null)
