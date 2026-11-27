@@ -373,8 +373,9 @@ internal static class Issue950TextBlockPaddingFixture
     /// <summary>
     /// The reset arm has four type branches and the fixture above only reaches the
     /// <c>Control</c> and <c>TextBlock</c> ones. These cover the other two, plus the
-    /// <c>PaddingInlineEnd</c>-only case that <c>hadPadding</c> has to notice — dropping
-    /// <c>m.PaddingInlineEnd</c> from that expression leaves the overlay stuck on the control.
+    /// <c>PaddingInlineEnd</c>-only case the release in <c>ApplyResolvedPaddingModifier</c> has to
+    /// notice — dropping <c>oldM?.PaddingInlineEnd</c> from its previous-bag test leaves the overlay
+    /// stuck on the control.
     /// <para>
     /// <c>Border</c> and <c>StackPanel</c> both default to zero padding, so reading
     /// <c>.Padding</c> back cannot distinguish "cleared" from "written as a local zero" the
@@ -467,7 +468,8 @@ internal static class Issue950TextBlockPaddingFixture
                 ReferenceEquals(tb, H.FindText("Issue950_AllTypes_InlineEnd")));
 
             // oldM.Padding is null on this one — only PaddingInlineEnd was ever set — so a
-            // `hadPadding` that forgot the InlineEnd slot would leave (0,0,23,0) in place.
+            // release that forgot the InlineEnd slot in its previous-bag test would leave
+            // (0,0,23,0) in place.
             H.Check("Issue950_AllTypes_InlineEndCleared",
                 ReferenceEquals(
                     DependencyProperty.UnsetValue,

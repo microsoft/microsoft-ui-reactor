@@ -942,6 +942,22 @@ is emitted for an ungated slot only: the value goes through its `Converter`, a s
 new `ModifierConverters` class (`ToVisibility`), in place of the inline ternary. That is the one
 arm whose tokens change; the write is the same.
 
+Layer 4 keeps the composite families' BiDi resolvers hand-written, as planned, but `ApplyModifiers`
+stays hand-written too, so nothing generated calls them. What moves to the schema is the part
+that lists receivers: the write and release of the resolved value over the physical slot's
+Apply receivers, and the reader the resolver uses for its overlay base. Each family is declared
+in `ModifierEmitter.GeneratedComposites` and gets an `ApplyResolved<X>Modifier` helper, which the
+resolver calls with the resolved value and whether the previous overlay wrote something else, and
+a `Read<X>` reader. The write fires when the resolved value differs from the previous physical
+value, an inline slot changed, or the overlay is stale; the release fires when no slot of the
+family is set and one was, and the write didn't fire. Those are the hand-written conditions,
+rewritten over the bag. Because the release is the write's else branch, a resolver must not hand
+back a value for a family the bag no longer sets; the Padding resolver did when an inline edge was
+dropped with the physical padding, until #1751 resolved it from the bag like Margin (issue #1749).
+`ModifierApplyOrderTests` dedupes a nested helper's reads against its caller's, so the generated
+helper doesn't repeat the resolver's fields in the frozen order. 4a generates `Padding`. `Margin`
+has the single `FrameworkElement` receiver, so it has no receiver list to move.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

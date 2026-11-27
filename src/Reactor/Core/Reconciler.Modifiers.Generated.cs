@@ -211,4 +211,41 @@ public sealed partial class Reconciler
         else if (!m.ToolTipPlacement.HasValue && oldM?.ToolTipPlacement.HasValue == true)
             fe.ClearValue(WinUI.ToolTipService.PlacementProperty);
     }
+
+    /// <summary>Padding written to its receivers once <c>ApplyPaddingModifiers</c> has resolved the BiDi overlay into <paramref name="resolved"/>.</summary>
+    private static void ApplyResolvedPaddingModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Thickness? resolved, bool overlayStale)
+    {
+        if (resolved.HasValue && (resolved != oldM?.Padding || m.PaddingInlineStart != oldM?.PaddingInlineStart || m.PaddingInlineEnd != oldM?.PaddingInlineEnd || overlayStale))
+        {
+            if (fe is WinUI.Control padCtrl) padCtrl.Padding = resolved.Value;
+            else if (fe is WinUI.Border padBdr) padBdr.Padding = resolved.Value;
+            else if (fe is WinUI.StackPanel padSp) padSp.Padding = resolved.Value;
+            else if (fe is WinUI.Grid padGrid) padGrid.Padding = resolved.Value;
+            else if (fe is WinUI.RelativePanel padRelative) padRelative.Padding = resolved.Value;
+            else if (fe is WinUI.TextBlock padTb) padTb.Padding = resolved.Value;
+        }
+        // Released through ClearValue, never a zero local, so the styled value shows again (#952).
+        else if (!m.Padding.HasValue && !m.PaddingInlineStart.HasValue && !m.PaddingInlineEnd.HasValue
+            && (oldM?.Padding.HasValue == true || oldM?.PaddingInlineStart.HasValue == true || oldM?.PaddingInlineEnd.HasValue == true))
+        {
+            if (fe is WinUI.Control padCtrl) padCtrl.ClearValue(WinUI.Control.PaddingProperty);
+            else if (fe is WinUI.Border padBdr) padBdr.ClearValue(WinUI.Border.PaddingProperty);
+            else if (fe is WinUI.StackPanel padSp) padSp.ClearValue(WinUI.StackPanel.PaddingProperty);
+            else if (fe is WinUI.Grid padGrid) padGrid.ClearValue(WinUI.Grid.PaddingProperty);
+            else if (fe is WinUI.RelativePanel padRelative) padRelative.ClearValue(WinUI.RelativePanel.PaddingProperty);
+            else if (fe is WinUI.TextBlock padTb) padTb.ClearValue(WinUI.TextBlock.PaddingProperty);
+        }
+    }
+
+    /// <summary>The Padding the element holds now, the overlay's base when the bag has none.</summary>
+    private static Thickness ReadPadding(FrameworkElement fe) => fe switch
+    {
+        WinUI.Control padCtrl => padCtrl.Padding,
+        WinUI.Border padBdr => padBdr.Padding,
+        WinUI.StackPanel padSp => padSp.Padding,
+        WinUI.Grid padGrid => padGrid.Padding,
+        WinUI.RelativePanel padRelative => padRelative.Padding,
+        WinUI.TextBlock padTb => padTb.Padding,
+        _ => new Thickness(),
+    };
 }
