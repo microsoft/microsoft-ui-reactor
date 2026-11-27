@@ -376,10 +376,8 @@ public sealed partial class Reconciler
         // physical padding forward solely as the inline overlay's *base*. Folding it into
         // `resolvedPadding` made the value non-null whenever the last render had padding, so a
         // render that dropped `.Padding(x)` and an inline edge together took the write arm (the
-        // inline edge changed) and wrote `x` back, and the reset below never ran (#1749).
-        // `!wantsPadding && hadPadding` is the same reset guard Margin spells out inline.
-        var wantsPadding = m.Padding.HasValue || m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue;
-        var hadPadding = oldM is not null && (oldM.Padding.HasValue || oldM.PaddingInlineStart.HasValue || oldM.PaddingInlineEnd.HasValue);
+        // inline edge changed) and wrote `x` back, and the release never ran (#1749). The release
+        // in ApplyResolvedPaddingModifier tests the bag, as Margin's reset does.
         var resolvedPadding = m.Padding;
         InlineOverlay? prevPadOverlay = null;
         if (m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue)
@@ -387,16 +385,7 @@ public sealed partial class Reconciler
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
             if (ownsControl && oldM is { } oldPads && (oldPads.PaddingInlineStart.HasValue || oldPads.PaddingInlineEnd.HasValue))
                 prevPadOverlay = GetInlineOverlays(fe)?.Padding;
-            var basePad = resolvedPadding ?? oldM?.Padding ?? UnoverlaidBase(fe switch
-            {
-                WinUI.Control pc => pc.Padding,
-                WinUI.Border pb => pb.Padding,
-                WinUI.StackPanel psp => psp.Padding,
-                WinUI.Grid pg => pg.Padding,
-                WinUI.RelativePanel prp => prp.Padding,
-                WinUI.TextBlock ptb => ptb.Padding,
-                _ => new Thickness(),
-            }, prevPadOverlay);
+            var basePad = resolvedPadding ?? oldM?.Padding ?? UnoverlaidBase(ReadPadding(fe), prevPadOverlay);
             var left = isRtl ? (m.PaddingInlineEnd ?? basePad.Left) : (m.PaddingInlineStart ?? basePad.Left);
             var right = isRtl ? (m.PaddingInlineStart ?? basePad.Right) : (m.PaddingInlineEnd ?? basePad.Right);
             resolvedPadding = new Thickness(left, basePad.Top, right, basePad.Bottom);
@@ -404,32 +393,9 @@ public sealed partial class Reconciler
             if (ownsControl && prevPadOverlay != padOverlay)
                 GetOrCreateInlineOverlays(fe).Padding = padOverlay;
         }
-        // Same inline-delta rule as Margin (ApplyMarginModifiers).
-        var paddingInlineChanged = m.PaddingInlineStart != oldM?.PaddingInlineStart
-            || m.PaddingInlineEnd != oldM?.PaddingInlineEnd
-            || (prevPadOverlay is { } pp && pp.Written != resolvedPadding);
-        if (resolvedPadding.HasValue && (resolvedPadding != oldM?.Padding || paddingInlineChanged))
-        {
-            if (fe is WinUI.Control padCtrl) padCtrl.Padding = resolvedPadding.Value;
-            else if (fe is WinUI.Border padBdr) padBdr.Padding = resolvedPadding.Value;
-            else if (fe is WinUI.StackPanel padSp) padSp.Padding = resolvedPadding.Value;
-            else if (fe is WinUI.Grid padGrid) padGrid.Padding = resolvedPadding.Value;
-            else if (fe is WinUI.RelativePanel padRelative) padRelative.Padding = resolvedPadding.Value;
-            else if (fe is WinUI.TextBlock padTb) padTb.Padding = resolvedPadding.Value;
-        }
-        else if (!wantsPadding && hadPadding)
-        {
-            // Clear rather than write a local `new Thickness(0)`: a zero local wins over the
-            // control's style/template, so a Button that dropped `.Padding(...)` would flush to
-            // nothing instead of returning to its themed padding. This is the `Padding` half of
-            // issue #952; the sizing/alignment arms (ApplySizeAndAlignmentModifiers) follow the same rule.
-            if (fe is WinUI.Control padCtrl) padCtrl.ClearValue(WinUI.Control.PaddingProperty);
-            else if (fe is WinUI.Border padBdr) padBdr.ClearValue(WinUI.Border.PaddingProperty);
-            else if (fe is WinUI.StackPanel padSp) padSp.ClearValue(WinUI.StackPanel.PaddingProperty);
-            else if (fe is WinUI.Grid padGrid) padGrid.ClearValue(WinUI.Grid.PaddingProperty);
-            else if (fe is WinUI.RelativePanel padRelative) padRelative.ClearValue(WinUI.RelativePanel.PaddingProperty);
-            else if (fe is WinUI.TextBlock padTb) padTb.ClearValue(WinUI.TextBlock.PaddingProperty);
-        }
+        // Same inline-delta rule as Margin (ApplyMarginModifiers): the generated write also fires
+        // when an inline edge changed or the previous overlay wrote something else.
+        ApplyResolvedPaddingModifier(fe, oldM, m, resolvedPadding, prevPadOverlay is { } pp && pp.Written != resolvedPadding);
     }
 
     /// <summary>Opacity and the facade transforms (Scale, Rotation, Translation, TransformOrigin, CenterPoint).</summary>
@@ -576,15 +542,7 @@ public sealed partial class Reconciler
                 prevBorderOverlay = GetInlineOverlays(fe)?.Border;
             // Same base rule as Margin/Padding: the previous render's physical thickness, else the
             // control's value minus the previous inline overlay (issue #965).
-            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? UnoverlaidBase(fe switch
-            {
-                WinUI.Control c => c.BorderThickness,
-                WinUI.Border b => b.BorderThickness,
-                WinUI.Grid g => g.BorderThickness,
-                WinUI.StackPanel s => s.BorderThickness,
-                WinUI.RelativePanel r => r.BorderThickness,
-                _ => new Thickness(),
-            }, prevBorderOverlay);
+            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? UnoverlaidBase(ReadBorderThickness(fe), prevBorderOverlay);
             var inlineStartThickness = m.BorderInlineStart.Value;
             if (isRtl)
                 resolvedBorder = new Thickness(baseBorder.Left, baseBorder.Top, inlineStartThickness.Left, baseBorder.Bottom);
@@ -594,26 +552,10 @@ public sealed partial class Reconciler
             if (ownsControl && prevBorderOverlay != borderOverlay)
                 GetOrCreateInlineOverlays(fe).Border = borderOverlay;
         }
-        // Same inline-delta rule as Margin/Padding; the reset arm likewise has to fire
-        // when the old bag carried only an inline border, or that edge is never released.
-        var borderInlineChanged = m.BorderInlineStart != oldM?.BorderInlineStart
-            || (prevBorderOverlay is { } pb2 && pb2.Written != resolvedBorder);
-        if (resolvedBorder.HasValue && (resolvedBorder != oldM?.BorderThickness || borderInlineChanged))
-        {
-            if (fe is WinUI.Control btCtrl) btCtrl.BorderThickness = resolvedBorder.Value;
-            else if (fe is WinUI.Border btBdr) btBdr.BorderThickness = resolvedBorder.Value;
-            else if (fe is WinUI.Grid btGrid) btGrid.BorderThickness = resolvedBorder.Value;
-            else if (fe is WinUI.StackPanel btStack) btStack.BorderThickness = resolvedBorder.Value;
-            else if (fe is WinUI.RelativePanel btRelative) btRelative.BorderThickness = resolvedBorder.Value;
-        }
-        else if (!resolvedBorder.HasValue && (oldM?.BorderThickness.HasValue == true || oldM?.BorderInlineStart.HasValue == true))
-        {
-            if (fe is WinUI.Control btCtrl) btCtrl.ClearValue(WinUI.Control.BorderThicknessProperty);
-            else if (fe is WinUI.Border btBdr) btBdr.ClearValue(WinUI.Border.BorderThicknessProperty);
-            else if (fe is WinUI.Grid btGrid) btGrid.ClearValue(WinUI.Grid.BorderThicknessProperty);
-            else if (fe is WinUI.StackPanel btStack) btStack.ClearValue(WinUI.StackPanel.BorderThicknessProperty);
-            else if (fe is WinUI.RelativePanel btRelative) btRelative.ClearValue(WinUI.RelativePanel.BorderThicknessProperty);
-        }
+        // Same inline-delta rule as Margin/Padding: the generated write also fires when the inline
+        // edge changed or the previous overlay wrote something else, and the release fires when
+        // the old bag carried only an inline border too, or that edge would never be released.
+        ApplyResolvedBorderThicknessModifier(fe, oldM, m, resolvedBorder, prevBorderOverlay is { } pb2 && pb2.Written != resolvedBorder);
     }
 
     /// <summary>Background and Foreground.</summary>

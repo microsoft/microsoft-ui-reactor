@@ -1250,9 +1250,10 @@ public class ModifierTableIntegrityTests
 
         foreach (var method in methods)
         {
-            // Padding and BorderThickness are computed into a local first (to overlay the
-            // BiDi-aware inline variants), so the guard reads `resolvedPadding`, not
-            // `m.Padding`. Map those locals back to the modifier they were seeded from.
+            // Margin is computed into a local first (to overlay the BiDi-aware inline variants),
+            // so its guard reads `resolvedMargin`, not `m.Margin`. Map such locals back to the
+            // modifier they were seeded from. Padding and BorderThickness write through the
+            // generated ApplyResolved<X>Modifier (spec 067 layer 4), whose guards name the bag.
             var localToProperty = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var declarator in method.DescendantNodes()
                 .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax>()

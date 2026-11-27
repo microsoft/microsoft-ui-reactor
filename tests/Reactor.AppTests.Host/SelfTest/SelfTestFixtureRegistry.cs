@@ -1264,6 +1264,9 @@ internal static class SelfTestFixtureRegistry
         ("Hosting_NotifyResourcesChangedRefreshesThemeRefOverrides", static harness => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesThemeRefOverrides(harness)),
         ("Hosting_NotifyResourcesChangedRefreshesMemoizedThemeModifiers", static harness => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesMemoizedThemeModifiers(harness)),
         ("Hosting_NotifyDuringRenderPassSchedulesRender", static harness => new HostIdleAndThemeResourceFixtures.NotifyDuringRenderPassSchedulesRender(harness)),
+        ("Hosting_HighContrastProbeFollowsWinUITheme", static harness => new HighContrastRefreshFixtures.ProbeFollowsWinUITheme(harness)),
+        ("Hosting_HighContrastHostControlRefresh", static harness => new HighContrastRefreshFixtures.HostControlRefreshesOnContrastSwitch(harness)),
+        ("Hosting_HighContrastWindowHostRefresh", static harness => new HighContrastRefreshFixtures.WindowHostRefreshesOnContrastSwitch(harness)),
         // Navigation coverage — advanced handle ops, serialization, deep links, transitions
         ("NavCov_HandleAdvancedOps", static harness => new NavigationCoverageFixtures.NavHandleAdvancedOps(harness)),
         ("NavCov_HandlePopTo", static harness => new NavigationCoverageFixtures.NavHandlePopTo(harness)),

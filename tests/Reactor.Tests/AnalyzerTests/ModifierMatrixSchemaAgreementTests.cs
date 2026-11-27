@@ -68,6 +68,28 @@ public class ModifierMatrixSchemaAgreementTests
         Assert.Contains(expected, ex.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("inline out of order", "declare the physical slot, then its inline slots, as the schema orders them: [Padding, PaddingInlineStart, PaddingInlineEnd]")]
+    [InlineData("inline missing", "declare the physical slot, then its inline slots, as the schema orders them: [Padding, PaddingInlineStart, PaddingInlineEnd]")]
+    [InlineData("chain miscounted", "Padding has Apply receivers (Control, Border, StackPanel, Grid, RelativePanel, TextBlock)")]
+    [InlineData("single FrameworkElement receiver", "Margin has Apply receivers (FrameworkElement)")]
+    [InlineData("unknown family", "no schema slot declares CompositeFamily \"BorderThickness\". Known families: Margin, Padding, Border.")]
+    public void Reconciler_Emitter_Rejects_Undeclared_Composites(string scenario, string expected)
+    {
+        string[] chain = ["a", "b", "c", "d", "e", "f"];
+        ModifierEmitter.GeneratedComposite composite = scenario switch
+        {
+            "inline out of order" => new("Padding", "Padding", ["PaddingInlineEnd", "PaddingInlineStart"], chain),
+            "inline missing" => new("Padding", "Padding", ["PaddingInlineStart"], chain),
+            "chain miscounted" => new("Padding", "Padding", ["PaddingInlineStart", "PaddingInlineEnd"], ["a"]),
+            "single FrameworkElement receiver" => new("Margin", "Margin", ["MarginInlineStart", "MarginInlineEnd"], ["a"]),
+            "unknown family" => new("BorderThickness", "BorderThickness", ["BorderInlineStart"], ["a", "b", "c", "d", "e"]),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
+        };
+        var ex = Assert.Throws<InvalidOperationException>(() => ModifierEmitter.EmitReconcilerModifiers([], [composite]));
+        Assert.Contains(expected, ex.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Matrix_Has_One_Case_Per_Generated_Probe()
     {
