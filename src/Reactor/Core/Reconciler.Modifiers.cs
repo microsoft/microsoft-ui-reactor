@@ -366,24 +366,23 @@ public sealed partial class Reconciler
     {
         // Apply physical padding, then overlay logical (BiDi-aware) inline padding.
         //
-        // `resolvedPadding` falls back to the OLD padding so the inline overlay has a base for
-        // the edges it does not own. That fallback is not evidence the author still wants
-        // padding this render, so the reset arm below cannot test it: `m.Padding ?? oldM?.Padding`
-        // is null only when oldM had no padding either, which made the old
-        // `!resolvedPadding.HasValue && oldM?.Padding.HasValue == true` guard a contradiction —
-        // dead code that left a dropped `.Padding(...)` stuck on the control forever. `wantsPadding`
-        // is the honest question, and `hadPadding` covers the inline-only case (oldM.Padding null
-        // but an overlay was written) that `oldM?.Padding.HasValue` missed.
+        // Same shape as Margin: resolve from the new bag only, and carry the previous render's
+        // physical padding forward solely as the inline overlay's *base*. Folding it into
+        // `resolvedPadding` made the value non-null whenever the last render had padding, so a
+        // render that dropped `.Padding(x)` and an inline edge together took the write arm (the
+        // inline edge changed) and wrote `x` back, and the reset below never ran (#1749).
+        // `wantsPadding` is the honest question for the reset, and `hadPadding` covers the
+        // inline-only case (oldM.Padding null but an overlay was written).
         var wantsPadding = m.Padding.HasValue || m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue;
         var hadPadding = oldM is not null && (oldM.Padding.HasValue || oldM.PaddingInlineStart.HasValue || oldM.PaddingInlineEnd.HasValue);
-        var resolvedPadding = m.Padding ?? oldM?.Padding;
+        var resolvedPadding = m.Padding;
         InlineOverlay? prevPadOverlay = null;
         if (m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
             if (ownsControl && oldM is { } oldPads && (oldPads.PaddingInlineStart.HasValue || oldPads.PaddingInlineEnd.HasValue))
                 prevPadOverlay = GetInlineOverlays(fe)?.Padding;
-            var basePad = resolvedPadding ?? UnoverlaidBase(fe switch
+            var basePad = resolvedPadding ?? oldM?.Padding ?? UnoverlaidBase(fe switch
             {
                 WinUI.Control pc => pc.Padding,
                 WinUI.Border pb => pb.Padding,

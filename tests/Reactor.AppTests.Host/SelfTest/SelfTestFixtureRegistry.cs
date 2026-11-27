@@ -432,6 +432,9 @@ internal static class SelfTestFixtureRegistry
         // Issue #965 — inline Margin/Padding/Border edges must not read the previous
         // render's overlay back as their base.
         ("Issue965_InlineEdgesDoNotReadBackPreviousOverlay", static harness => new Issue965InlineEdgeFixture.InlineEdgesDoNotReadBackPreviousOverlay(harness)),
+        // Issue #1749 — dropping .Padding(x) and an inline padding edge in the same render
+        // must release the padding, not write x back.
+        ("Issue1749_DroppingPaddingAndInlineEdgeTogetherClears", static harness => new Issue1749PaddingDropBothFixture.DroppingPaddingAndInlineEdgeTogetherClears(harness)),
         // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
         // Reactor subtrees (Flyout content, Popup child) the generic recursion
         // cannot reach.

@@ -297,6 +297,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Dropping `.Padding(x)` and `.PaddingInlineStart(y)` or `.PaddingInlineEnd(y)` in
+  the same render now releases the padding. Before, the control kept `x` as a
+  local value, so a `Button` never got its themed padding back (issue #1749).
+
 - Replacing a `Win2DCanvas`, `Win2DAnimatedCanvas` or `Win2DVirtualCanvas` with an
   element of another type no longer removes the following sibling, or throws
   `ArgumentOutOfRangeException` when the canvas was the last child. This covers a
