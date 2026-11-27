@@ -76,6 +76,12 @@ internal static class Issue965InlineEdgeFixture
                     Border(TextBlock("Issue965_flipBorder"))
                         .Set(b => b.FlowDirection = dir)
                         .BorderInlineStart(new Thickness(9)),
+                    // BorderThickness's twin of flipDeclared: LTR resolves back to the declared
+                    // physical value, so only the stale-overlay check makes the RTL → LTR write.
+                    Border(TextBlock("Issue965_flipBorderDeclared"))
+                        .Set(b => b.FlowDirection = dir)
+                        .BorderThickness(new Thickness(9, 0, 1, 0))
+                        .BorderInlineStart(new Thickness(9)),
                     // With a physical value declared, LTR resolves back to exactly that value,
                     // so a guard comparing only against the old physical slot skips the
                     // RTL → LTR write and strands the RTL overlay.
@@ -110,6 +116,7 @@ internal static class Issue965InlineEdgeFixture
             var flipPad = H.FindText("Issue965_flipPad");
             var flipMargin = H.FindText("Issue965_flipMargin");
             var flipBorder = FindBorder("Issue965_flipBorder");
+            var flipBorderDeclared = FindBorder("Issue965_flipBorderDeclared");
             var setterBase = H.FindText("Issue965_setterBase");
             var flipDeclared = H.FindText("Issue965_flipDeclared");
             var flyoutTarget = H.FindButton("Issue965_flyoutTarget");
@@ -126,8 +133,8 @@ internal static class Issue965InlineEdgeFixture
                 && flipPad is not null && flipMargin is not null && flipBorder is not null
                 && setterBase is not null && flipDeclared is not null && flyoutTarget is not null
                 && flyoutCollide is not null && flyoutEqual is not null
-                && memoWrapper is not null && expander is not null);
-            if (padSwap is null || marginSwap is null || buttonSwap is null || flipPad is null
+                && memoWrapper is not null && expander is not null && flipBorderDeclared is not null);
+            if (flipBorderDeclared is null || padSwap is null || marginSwap is null || buttonSwap is null || flipPad is null
                 || flipMargin is null || flipBorder is null || setterBase is null
                 || flipDeclared is null || flyoutTarget is null || flyoutCollide is null
                 || flyoutEqual is null || memoWrapper is null || expander is null) return;
@@ -140,6 +147,7 @@ internal static class Issue965InlineEdgeFixture
             H.Check("Issue965_Phase0_FlipPadLtr", flipPad.Padding == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase0_FlipMarginLtr", flipMargin.Margin == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase0_FlipBorderLtr", flipBorder.BorderThickness == new Thickness(9, 0, 0, 0));
+            H.Check("Issue965_Phase0_FlipBorderDeclaredLtr", flipBorderDeclared.BorderThickness == new Thickness(9, 0, 1, 0));
             H.Check("Issue965_Phase0_SetterBaseOverlaid", setterBase.Padding == new Thickness(1, 6, 7, 8));
             H.Check("Issue965_Phase0_FlipDeclaredLtr", flipDeclared.Padding == new Thickness(5, 0, 9, 0));
             H.Check("Issue965_Phase0_FlyoutLayersCombined", flyoutTarget.Margin == new Thickness(8, 0, 4, 0));
@@ -175,6 +183,7 @@ internal static class Issue965InlineEdgeFixture
             H.Check("Issue965_Phase1_FlipPadRtl", flipPad.Padding == new Thickness(0, 0, 8, 0));
             H.Check("Issue965_Phase1_FlipMarginRtl", flipMargin.Margin == new Thickness(0, 0, 8, 0));
             H.Check("Issue965_Phase1_FlipBorderRtl", flipBorder.BorderThickness == new Thickness(0, 0, 9, 0));
+            H.Check("Issue965_Phase1_FlipBorderDeclaredRtl", flipBorderDeclared.BorderThickness == new Thickness(9, 0, 9, 0));
             H.Check("Issue965_Phase1_SetterBaseFollowsSetter", setterBase.Padding == new Thickness(1, 9, 9, 9));
             H.Check("Issue965_Phase1_FlipDeclaredRtl", flipDeclared.Padding == new Thickness(5, 0, 5, 0));
             // Sharing one record, the decorator re-adopted the target's old 8 as its base.
@@ -199,6 +208,8 @@ internal static class Issue965InlineEdgeFixture
             H.Check("Issue965_Phase2_FlipPadBackToLtr", flipPad.Padding == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase2_FlipMarginBackToLtr", flipMargin.Margin == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase2_FlipBorderBackToLtr", flipBorder.BorderThickness == new Thickness(9, 0, 0, 0));
+            H.Check("Issue965_Phase2_FlipBorderDeclaredBackToLtr", SameInstance(flipBorderDeclared, FindBorder("Issue965_flipBorderDeclared"))
+                && flipBorderDeclared.BorderThickness == new Thickness(9, 0, 1, 0));
             H.Check("Issue965_Phase2_FlipDeclaredBackToLtr", flipDeclared.Padding == new Thickness(5, 0, 9, 0));
             H.Check("Issue965_Phase2_ExpanderBackToLtr", expander.Padding == new Thickness(5, 0, 9, 0));
         }
