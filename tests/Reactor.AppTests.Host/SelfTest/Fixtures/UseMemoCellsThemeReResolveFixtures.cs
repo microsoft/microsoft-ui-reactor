@@ -20,7 +20,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// EMPIRICAL FINDING (verified WITH and WITHOUT the <c>AnyThemeSensitive</c> gate,
 /// and the basis for narrowing it in #758): the themed Foreground re-resolves
 /// identically in both cases (000000 Light -> FFFFFF Dark). A <c>.Foreground(Theme.X)</c>
-/// binding compiles to a <c>{ThemeResource}</c> Style setter which WinUI re-resolves
+/// binding compiles to a live theme-resource binding (<c>SetThemeResourceBinding</c>) which WinUI re-resolves
 /// NATIVELY on the cell's effective-theme change — independent of whether Reactor
 /// recurses into the cell or the container <c>ShallowEquals</c>-skips it. Since #758,
 /// ThemeBindings are NO LONGER theme-sensitive, so this list now takes the array-reuse

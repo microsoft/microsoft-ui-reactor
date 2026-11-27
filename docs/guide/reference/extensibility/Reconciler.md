@@ -135,7 +135,7 @@ public static void ApplySetters<T>(Action<T>[] setters, T control) where T : cla
 
 ### `ApplyThemeBindings`
 
-Applies [`ThemeRef`](../theming/ThemeRef.md) bindings as a synthesized `{ThemeResource}`-driven Style. Spec 047 §14 Phase 1 (1.3), promoted from private (per audit existing-api-surface.md); provisional API, see `REACTOR_V1_PREVIEW`.
+Applies [`ThemeRef`](../theming/ThemeRef.md) bindings with [`FrameworkElement.SetThemeResourceBinding`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.frameworkelement.setthemeresourcebinding), which installs the same live binding as a `{ThemeResource key}` markup extension. WinUI re-resolves it when the control's effective theme changes (the per-element/inherited `ActualTheme`, an ancestor `RequestedTheme` override included), on a high-contrast change, and when the control is parented, so a binding installed at mount on a control that is not in the tree yet picks up its ancestors' theme once it joins. That native self-heal is why a ThemeBindings-only element is safe to structurally skip (#758; verified in `ThemeBindingsSkipSelfHealFixtures` across immediate and inherited ancestor `RequestedTheme` toggles). Contrast a `ResourceOverrides.ThemeRef`, which resolves to a CONCRETE brush at reconcile and does NOT self-heal (so it stays theme-sensitive for the skip gate).
 
 ```csharp
 public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
@@ -150,9 +150,11 @@ public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<s
 
 **Remarks**
 
-WinUI handles theme-reactive resolution natively: the live `{ThemeResource}` Style setter re-resolves on the control's effective-theme change, which tracks the per-element/inherited `ActualTheme` (an ancestor `RequestedTheme` override included), not just the app-level theme. This native self-heal is why a ThemeBindings-only element is safe to structurally skip (#758; empirically verified in `ThemeBindingsSkipSelfHealFixtures` across immediate and inherited ancestor `RequestedTheme` toggles). Contrast a `ResourceOverrides.ThemeRef`, which resolves to a CONCRETE brush at reconcile and does NOT self-heal (so it stays theme-sensitive for the skip gate).
+Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit existing-api-surface.md). Provisional API; see `REACTOR_V1_PREVIEW`.
 
-A Style already on the control is kept: the themed Style is built `BasedOn` it, and calling this again re-wraps the same base rather than chaining another level. When that base cannot be a `BasedOn` of the control's WinUI type (a Style whose `TargetType` is an app subclass), the themed Style replaces it, as before Styles were kept, and a warning is logged once. Failures are logged, never thrown.
+The binding sits at local-value precedence, where earlier releases used a synthesized Style. To keep the old winner, a property that already holds a value Reactor did not bind (a `.Set` setter, an element property, app code) is left alone, and `fe.Style` is never touched.
+
+Only the properties Reactor maps are bound: `Background`, `Foreground`, `BorderBrush` (on the control types that declare them) and `SplitView.PaneBackground`. A key that cannot be resolved from the control at call time is logged and skipped, and a property Reactor had bound to an earlier key is released rather than left on that key's brush.
 
 ### `DetachReactorState`
 

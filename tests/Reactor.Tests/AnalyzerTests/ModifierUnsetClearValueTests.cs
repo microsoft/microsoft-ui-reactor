@@ -1289,6 +1289,10 @@ public class ModifierUnsetClearValueTests
                 "lists, ClearValue for PlacementTarget) when the ref is dropped or the control is torn down. " +
                 "That wiring/reset contract lives in ReferenceEdgeWiring.cs, not in set/unset arms " +
                 "these gates can read.",
+            ["SuppressModifierOwnedThemeBindings"] =
+                "ThemeBindingApplier (#1618). Writes no dependency property: it only marks the control's " +
+                "ThemeRef binding records for the brushes this bag sets as suppressed, so the explicit brush " +
+                "keeps winning. The brush writes themselves stay in the Background/Border/Foreground helpers.",
         };
 
     /// <summary>

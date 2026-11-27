@@ -64,7 +64,7 @@ internal sealed class ChildDiffHint
     /// even on untouched, reference-equal cells — a parent <c>RequestedTheme</c> toggle
     /// changes the effective theme WITHOUT touching the element tree, so a structural
     /// skip would otherwise leave a resolved-brush override stale. (<c>ThemeBindings</c>
-    /// are excluded: their <c>{ThemeResource}</c> setters self-heal natively — see
+    /// are excluded: their live theme-resource bindings self-heal natively — see
     /// <see cref="ChildDiffHints.IsThemeSensitive"/>.)
     /// </summary>
     /// <remarks>
@@ -105,7 +105,8 @@ internal static class ChildDiffHints
     /// CONCRETE brush at reconcile (and which therefore goes stale on an effective-theme
     /// change unless <c>Update</c> re-runs). <c>ThemeBindings</c> are deliberately EXCLUDED
     /// (narrowed per #758): <c>.Foreground(Theme.X)</c> compiles to a
-    /// <c>{ThemeResource}</c> Style setter that WinUI re-resolves NATIVELY on the
+    /// live theme-resource binding (the code equivalent of <c>{ThemeResource}</c>) that
+    /// WinUI re-resolves NATIVELY on the
     /// control's effective-theme change (app theme OR an ancestor
     /// <c>RequestedTheme</c>) — self-healing whether or not Reactor recurses into the
     /// cell, so a ThemeBindings-only cell is safe to structurally skip.

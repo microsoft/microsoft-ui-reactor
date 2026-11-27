@@ -355,16 +355,14 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(UIElement.ClipProperty);
 
         // Issue #522 defense-in-depth — the in-place Update path clears the
-        // synthesized themed Style when an element transitions ThemeBindings
-        // set → unset, but a full unmount (the element is removed entirely,
-        // not transitioned) does not. Without clearing here, a control that
-        // was themed would carry that Style into the pool and the next
-        // unrelated element to rent it would inherit the prior brushes.
-        // ClearThemeBindings also drops Reactor's ownership marker, so the
-        // pooled control holds no reference to the previous renter's themed
-        // Style. Gated on Style being non-null so non-themed controls (the
-        // common case) skip the redundant COM call.
+        // theme bindings when an element transitions ThemeBindings set → unset,
+        // but a full unmount (the element is removed entirely, not transitioned)
+        // does not. Without clearing here, a themed control would carry its
+        // bound brushes into the pool and the next unrelated element to rent it
+        // would inherit them. Only the properties Reactor bound are cleared.
         ThemeBindingApplier.ClearThemeBindings(fe);
+        // A Style written by a setter or app code would bleed the same way.
+        // Gated on Style being non-null so the common case skips the COM call.
         if (fe.Style is not null)
             fe.ClearValue(FrameworkElement.StyleProperty);
 

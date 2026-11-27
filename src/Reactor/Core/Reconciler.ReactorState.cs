@@ -213,6 +213,18 @@ public sealed partial class Reconciler
         public HashSet<string>? ManagedResourceKeys;
 
         /// <summary>
+        /// The <see cref="ThemeRef"/> bindings this control currently carries, as property
+        /// name (<c>"Background"</c>, <c>"Foreground"</c>, …) to its <see cref="ThemeBindingApplier.ThemeBindingRecord"/>. Written by
+        /// <c>ApplyThemeBindings</c> each time it installs a
+        /// <see cref="FrameworkElement.SetThemeResourceBinding"/>, so a later render leaves a
+        /// live binding alone and a dropped binding clears only the properties Reactor bound
+        /// (issue #522). Keyed by name rather than by <see cref="DependencyProperty"/> because a
+        /// static DP getter is not guaranteed to hand back the same managed wrapper twice.
+        /// Kept here for the same duplicate-RCW reason as <see cref="ManagedResourceKeys"/>.
+        /// </summary>
+        public Dictionary<string, ThemeBindingApplier.ThemeBindingRecord>? ThemeResourceBindings;
+
+        /// <summary>
         /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last
         /// updated to and whether it realized a control. Updates diff against it (as a templated
         /// ListView diffs against the element tagged on its container) and map logical items to

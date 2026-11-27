@@ -286,6 +286,9 @@ public sealed partial class Reconciler
         ApplyIsEnabledAndCornerRadiusModifiers(fe, oldM, m);
         ApplyBorderModifiers(fe, oldM, m, ownsControl);
         ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate);
+        // An explicit brush modifier owns its property, even over a ThemeRef that an inner
+        // layer sharing this control (a Memo, a flyout target) bound earlier in the pass.
+        ThemeBindingApplier.SuppressModifierOwnedThemeBindings(fe, m);
         ApplyAutomationAndFocusModifiers(fe, oldM, m);
 
         // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
@@ -509,6 +512,10 @@ public sealed partial class Reconciler
             // Keep the active interaction brush while updating what hover-out restores.
             borderTracker.NormalBorderBrush = m.BorderBrush;
             borderTracker.NormalBorderBrushHasLocalValue = m.BorderBrush is not null;
+            borderTracker.NormalBorderBrushThemeBound = false;
+            // A removed modifier hands a theme binding it suppressed back to hover-out's restore.
+            if (m.BorderBrush is null)
+                ThemeBindingApplier.UnsuppressThemeBinding(fe, "BorderBrush");
         }
         else if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
         {
@@ -525,6 +532,7 @@ public sealed partial class Reconciler
             else if (fe is WinUI.Grid bbGrid) bbGrid.ClearValue(WinUI.Grid.BorderBrushProperty);
             else if (fe is WinUI.StackPanel bbStack) bbStack.ClearValue(WinUI.StackPanel.BorderBrushProperty);
             else if (fe is WinUI.RelativePanel bbRelative) bbRelative.ClearValue(WinUI.RelativePanel.BorderBrushProperty);
+            ThemeBindingApplier.RestoreSuppressedThemeBinding(fe, "BorderBrush");
         }
         // Apply physical border thickness, then overlay logical (BiDi-aware) inline border
         var resolvedBorder = m.BorderThickness;
@@ -568,6 +576,7 @@ public sealed partial class Reconciler
             if (fe is WinUI.Panel panel) panel.ClearValue(WinUI.Panel.BackgroundProperty);
             else if (fe is WinUI.Control ctrl2) ctrl2.ClearValue(WinUI.Control.BackgroundProperty);
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
+            ThemeBindingApplier.RestoreSuppressedThemeBinding(fe, "Background");
         }
 
         ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate, this);

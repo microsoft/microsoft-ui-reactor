@@ -1591,16 +1591,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Issue #660 (#86): drop the (key,theme)->Brush cache so ThemeRef
         // resolves re-read the now-current ThemeDictionaries on the next render.
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
-        // Intentionally NOT calling ThemeBindingApplier.ClearStyleCache() here:
-        //   - Cached Styles are content-addressed (BuildCacheKey over the
-        //     bindings dict) and use {ThemeResource} markup that WinUI
-        //     re-resolves live on theme change — no Style regeneration
-        //     needed for correctness.
-        //   - Issue #522: ClearThemeBindings relies on stable Style identity
-        //     to match fe.Style against the cache via ReferenceEquals. Clearing
-        //     the cache here would create a window where a coincident
-        //     ThemeBindings removal in the same render frame would silently
-        //     fail to drop the prior themed Style.
+        // No Reactor-side refresh is needed for ThemeRef bindings: they are live
+        // theme-resource bindings (FrameworkElement.SetThemeResourceBinding) that
+        // WinUI re-resolves on its own when the theme changes.
         RequestRender();
     }
 

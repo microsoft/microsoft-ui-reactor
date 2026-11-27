@@ -13,12 +13,12 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 internal sealed partial class ThemeFixtureFontIcon : WinUI.FontIcon { }
 
 /// <summary>
-/// <see cref="ThemeRef"/> modifiers applied through the synthesized <c>{ThemeResource}</c> Style:
-/// <c>SplitView.PaneBackground</c>, InteractionStates restoring the themed value rather than
-/// pinning a brush, an app's own Style kept as the themed Style's <c>BasedOn</c>, and resource
-/// keys that need quoting in the markup extension. Each scenario uses its own brush key with
-/// distinct Light and Dark values, so a color names exactly which source produced it, and a
-/// native <c>RequestedTheme</c> flip (no Reactor render) proves the value is still live.
+/// <see cref="ThemeRef"/> modifiers bound with <c>SetThemeResourceBinding</c>:
+/// <c>SplitView.PaneBackground</c>, InteractionStates restoring the live binding rather than
+/// pinning a brush, an app's own Style left in place, and resource keys with characters that
+/// are special in markup. Each scenario uses its own brush key with distinct Light and Dark
+/// values, so a color names exactly which source produced it, and a native
+/// <c>RequestedTheme</c> flip (no Reactor render) proves the value is still live.
 /// </summary>
 internal static class ThemeRefStyleFixtures
 {
@@ -260,7 +260,8 @@ internal static class ThemeRefStyleFixtures
             setPhase!(2);
             await Harness.Render();
             H.Check("SharedForeground_RichTextRestoresTypedBrush", ReferenceEquals(rich.Foreground, nextTypedBrush));
-            H.Check("SharedForeground_IconLocalBrushCleared", !HasLocal(icon, WinUI.IconElement.ForegroundProperty));
+            H.Check("SharedForeground_IconLocalBrushCleared",
+                !ReferenceEquals(icon.ReadLocalValue(WinUI.IconElement.ForegroundProperty), modifierBrush));
             H.Check("SharedForeground_IconThemeApplied", ColorOf(icon.Foreground) == LightColor,
                 $"foreground={ColorOf(icon.Foreground)}");
 
@@ -983,11 +984,10 @@ internal static class ThemeRefStyleFixtures
     }
 
     /// <summary>
-    /// <c>SplitView.PaneBackground(ThemeRef)</c> themes the pane background (it had no Style
-    /// mapping and silently did nothing), including when it replaces an explicit
+    /// <c>SplitView.PaneBackground(ThemeRef)</c> themes the pane background (it was not mapped
+    /// and silently did nothing), including when it replaces an explicit
     /// <c>.PaneBackground(brush)</c> on the same control, whose stale local value would hide it.
-    /// Writing the themed Style to the already-loaded SplitView, and taking it off again, must
-    /// not fail: a loaded SplitView rejects a Style not built on its default style.
+    /// Later renders on the loaded SplitView, on the update and the skip arm, keep it themed.
     /// </summary>
     internal sealed class SplitViewPaneBackground(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1000,8 +1000,8 @@ internal static class ThemeRefStyleFixtures
                 var (phase, setter) = ctx.UseState(0);
                 setPhase = setter;
                 // Phase 2 changes the SplitView itself (update arm); phase 3 changes only a sibling,
-                // so the unchanged SplitView takes the skip arm. Both re-apply the themed Style to
-                // the loaded control.
+                // so the unchanged SplitView takes the skip arm. Both re-apply the ThemeRef to the
+                // loaded control.
                 var sv = SplitView(TextBlock("trs-pane"), TextBlock("trs-content")).Height(phase >= 2 ? 81 : 80);
                 return VStack(
                     TextBlock(phase == 3 ? "trs-pane-sibling-3" : "trs-pane-sibling"),
@@ -1020,7 +1020,8 @@ internal static class ThemeRefStyleFixtures
             setPhase!(1);
             await Harness.Render();
             H.Check("ThemeRefStyle_Pane_SameControl", ReferenceEquals(H.FindControl<WinUI.SplitView>(_ => true), sv));
-            H.Check("ThemeRefStyle_Pane_ExplicitCleared", !HasLocal(sv, WinUI.SplitView.PaneBackgroundProperty));
+            H.Check("ThemeRefStyle_Pane_ExplicitCleared",
+                !ReferenceEquals(sv?.ReadLocalValue(WinUI.SplitView.PaneBackgroundProperty), explicitBrush));
             H.Check("ThemeRefStyle_Pane_Themed", ColorOf(sv?.PaneBackground) == LightColor,
                 $"pane={ColorOf(sv?.PaneBackground)}");
             if (sv is null) return;
@@ -1047,8 +1048,8 @@ internal static class ThemeRefStyleFixtures
         });
     }    /// <summary>
     /// InteractionStates writes its hover brush over a ThemeRef Background/Foreground; leaving the
-    /// hover must drop that local value so the {ThemeResource} Style setter applies again, rather
-    /// than write back a brush captured earlier, which would pin the theme it had then.
+    /// hover must take that brush off again so the ThemeRef's binding applies, rather than write
+    /// back a brush captured earlier, which would pin the theme it had then.
     /// </summary>
     internal sealed class InteractionStatesRestoreKeepsThemeLive(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1100,7 +1101,9 @@ internal static class ThemeRefStyleFixtures
                 H.Check($"ThemeRefStyle_Hover_{name}_PressedBrush", ReferenceEquals(control.GetValue(property), pressed));
                 InteractionStateApplier.SimulatePressedForTests(control, isPressed: false);
                 InteractionStateApplier.SimulatePointerOverForTests(control, isOver: false);
-                H.Check($"ThemeRefStyle_Hover_{name}_LocalReleased", !HasLocal(control, property),
+                H.Check($"ThemeRefStyle_Hover_{name}_LocalReleased",
+                    control.ReadLocalValue(property) is var released
+                    && !ReferenceEquals(released, hover) && !ReferenceEquals(released, pressed),
                     $"local={control.ReadLocalValue(property)}");
                 H.Check($"ThemeRefStyle_Hover_{name}_NormalRestored", ColorOf(control.GetValue(property)) == LightColor);
                 H.Check($"ThemeRefStyle_Hover_{name}_ThemeLiveAfterRestore",
@@ -1126,9 +1129,11 @@ internal static class ThemeRefStyleFixtures
             var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trs-opacity" });
             H.Check("ThemeRefStyle_Opacity_NormalIsTheme", ColorOf(border?.Background) == LightColor);
             if (border is null) return;
+            var before = border.ReadLocalValue(WinUI.Border.BackgroundProperty);
             InteractionStateApplier.SimulatePointerOverForTests(border, isOver: true);
             InteractionStateApplier.SimulatePointerOverForTests(border, isOver: false);
-            H.Check("ThemeRefStyle_Opacity_NoLocalBackground", !HasLocal(border, WinUI.Border.BackgroundProperty));
+            H.Check("ThemeRefStyle_Opacity_LocalUnchanged",
+                ReferenceEquals(border.ReadLocalValue(WinUI.Border.BackgroundProperty), before));
             H.Check("ThemeRefStyle_Opacity_ThemeLive",
                 await FlipToDark(border, () => ColorOf(border.Background) == DarkColor),
                 $"bg={ColorOf(border.Background)}");
@@ -1261,8 +1266,8 @@ internal static class ThemeRefStyleFixtures
 
     /// <summary>
     /// A ThemeRef keeps a Style the app set (<c>.Set</c> on every render, <c>.ApplyStyle</c> once at
-    /// mount): the themed Style is built BasedOn it, re-renders don't chain another level, and
-    /// dropping the ThemeRef hands the control back to the app's Style.
+    /// mount): the binding is on the property, so <c>Style</c> stays the app's, and dropping the
+    /// ThemeRef leaves the app's Style in place.
     /// </summary>
     internal sealed class AuthorStyleKept(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1302,29 +1307,22 @@ internal static class ThemeRefStyleFixtures
                         $"fontSize={tb.FontSize}");
                     H.Check($"ThemeRefStyle_Author_{name}_{phase}_Themed", ColorOf(tb.Foreground) == LightColor,
                         $"fg={ColorOf(tb.Foreground)}");
-                    H.Check($"ThemeRefStyle_Author_{name}_{phase}_BasedOnAuthor",
-                        tb.Style is { } themed && !ReferenceEquals(themed, style)
-                        && ReferenceEquals(themed.BasedOn, style) && themed.BasedOn?.BasedOn is null);
+                    H.Check($"ThemeRefStyle_Author_{name}_{phase}_StyleIsAuthor", ReferenceEquals(tb.Style, style));
                 }
             }
 
             CheckThemed("Mount");
-            var mountedThemed = (bySet.Style, byNamed.Style);
             setPhase!(1);
             await Harness.Render();
             H.Check("ThemeRefStyle_Author_Update_SameControls",
                 ReferenceEquals(H.FindText("trs-style-set!"), bySet) && ReferenceEquals(H.FindText("trs-style-named!"), byNamed));
             CheckThemed("Update");
-            // The themed Style built on a base is cached per base: a re-render reuses it rather than
-            // parsing a new one.
-            H.Check("ThemeRefStyle_Author_Update_ThemedStyleReused",
-                ReferenceEquals(bySet.Style, mountedThemed.Item1) && ReferenceEquals(byNamed.Style, mountedThemed.Item2));
 
             setPhase!(2);
             await Harness.Render();
             foreach (var (tb, style, size, name) in new[] { (bySet, setStyle, 31d, "Set"), (byNamed, namedStyle, 33d, "Named") })
             {
-                H.Check($"ThemeRefStyle_Author_{name}_Removed_AuthorStyleRestored", ReferenceEquals(tb.Style, style)
+                H.Check($"ThemeRefStyle_Author_{name}_Removed_AuthorStyleKept", ReferenceEquals(tb.Style, style)
                     && Math.Abs(tb.FontSize - size) < 0.01, $"fontSize={tb.FontSize}");
                 H.Check($"ThemeRefStyle_Author_{name}_Removed_NotThemed", ColorOf(tb.Foreground) != LightColor
                     && !HasLocal(tb, WinUI.TextBlock.ForegroundProperty), $"fg={ColorOf(tb.Foreground)}");
@@ -1377,9 +1375,8 @@ internal static class ThemeRefStyleFixtures
     }
 
     /// <summary>
-    /// BasedOn needs the base's TargetType to be the derived Style's type or a base of it. A
-    /// <c>TargetType=CheckBox</c> author Style must still get its ThemeRef, which the loose
-    /// target mapping (CheckBox → ContentControl) cannot build on.
+    /// A <c>TargetType=CheckBox</c> author Style keeps its setters under a ThemeRef, and the
+    /// ThemeRef still applies (a themed Style built on it had to match its exact TargetType).
     /// </summary>
     internal sealed class AuthorStyleDerivedTargetType(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1401,8 +1398,8 @@ internal static class ThemeRefStyleFixtures
     }
 
     /// <summary>
-    /// Re-applying the themed Style on a re-render must not rebuild a Template the author Style
-    /// sets: stepping through no Style at all would swap the template to the default and back.
+    /// Re-applying a ThemeRef on a re-render must not rebuild a Template the author Style sets:
+    /// the author Style stays on the control, so the template root is the same object.
     /// </summary>
     internal sealed class AuthorTemplateNotRebuilt(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1424,7 +1421,7 @@ internal static class ThemeRefStyleFixtures
 
             var button = H.FindControl<WinUI.Button>(b => b.Content is "trs-template-0");
             var root = button is not null && VisualTreeHelper.GetChildrenCount(button) > 0 ? VisualTreeHelper.GetChild(button, 0) : null;
-            H.Check("ThemeRefStyle_Template_Applied", root is WinUI.Border && ReferenceEquals(button!.Style?.BasedOn, style),
+            H.Check("ThemeRefStyle_Template_Applied", root is WinUI.Border && ReferenceEquals(button!.Style, style),
                 $"root={root?.GetType().Name}");
             H.Check("ThemeRefStyle_Template_Themed", ColorOf(button?.Foreground) == LightColor);
 
@@ -1438,14 +1435,15 @@ internal static class ThemeRefStyleFixtures
     }
 
     /// <summary>
-    /// Resource keys with characters that are special in a markup extension (comma, brace, '=',
-    /// quote, space, backslash) are quoted in the <c>{ThemeResource}</c> setter, so they apply and
-    /// follow the theme instead of failing to parse.
+    /// Resource keys with characters that are special in a markup extension or an XML attribute
+    /// (comma, brace, '=', quotes, space, backslash, tab) bind and follow the theme. The key is
+    /// passed to <c>SetThemeResourceBinding</c> as is, so no character needs quoting.
     /// </summary>
     internal sealed class ThemeRefKeyNeedsQuoting(Harness h) : SelfTestFixtureBase(h)
     {
         private static readonly string[] Keys =
-            ["Trs,Comma", "Trs}Brace", "Trs=Equals", "Trs'Quote", "Trs Space", "Trs\\Slash", "Trs\"DoubleQuote"];
+            ["Trs,Comma", "Trs}Brace", "Trs=Equals", "Trs'Quote", "Trs Space", "Trs\\Slash", "Trs\"DoubleQuote",
+             "Trs'Both\"Quotes", "Trs\tTab"];
 
         public override Task RunAsync() => WithThemeKeys(H, Keys, async (host, _) =>
         {
@@ -1467,34 +1465,16 @@ internal static class ThemeRefStyleFixtures
         });
     }
 
-    private sealed class ThemeWarningListener : global::System.Diagnostics.Tracing.EventListener
-    {
-        private readonly List<string> _messages = new();
-        internal string[] Messages { get { lock (_messages) return _messages.ToArray(); } }
-        protected override void OnEventSourceCreated(global::System.Diagnostics.Tracing.EventSource source)
-        {
-            if (source.Name == "Microsoft-UI-Reactor")
-                EnableEvents(source, global::System.Diagnostics.Tracing.EventLevel.Warning);
-        }
-        protected override void OnEventWritten(global::System.Diagnostics.Tracing.EventWrittenEventArgs args)
-        {
-            if (args.EventName != "Warning" || args.Payload is not { Count: >= 3 }) return;
-            if (Equals(args.Payload[0], "Theme") && Equals(args.Payload[1], "ApplyThemeBindings"))
-                lock (_messages) _messages.Add(args.Payload[2] as string ?? "");
-        }
-    }
-
     /// <summary>
-    /// A ThemeRef key that cannot be written as a <c>{ThemeResource}</c> reference skips only its
-    /// own property (the element's other ThemeRefs still apply) and is reported once, not on every
-    /// render.
+    /// A ThemeRef key WinUI can't find skips only its own property (the element's other ThemeRefs
+    /// still apply), and a key that changes to one WinUI can't find takes the old key's brush
+    /// with it rather than leaving it on as if it were the new key's.
     /// </summary>
-    internal sealed class UnrepresentableKeySkipsOnlyItsProperty(Harness h) : SelfTestFixtureBase(h)
+    internal sealed class MissingKeySkipsOnlyItsProperty(Harness h) : SelfTestFixtureBase(h)
     {
         public override Task RunAsync() => WithThemeKey(H, "TrsGoodBrush", async host =>
         {
-            const string BadKey = "TrsBad\tKey";
-            using var listener = new ThemeWarningListener();
+            const string BadKey = "TrsNoSuchBrushAnywhere";
             Action<int>? setCount = null;
             host.Mount(ctx =>
             {
@@ -1522,30 +1502,17 @@ internal static class ThemeRefStyleFixtures
             await Harness.Render();
             H.Check("ThemeRefStyle_BadKey_ReRenderStillThemed", ColorOf(button?.Foreground) == LightColor);
 
-            // A key that becomes unrepresentable on a later render takes its brush with it: the
-            // themed Style the earlier render applied doesn't keep the old binding alive.
             var switched = H.FindControl<WinUI.Button>(b => b.Content is "trs-bad-switch");
             H.Check("ThemeRefStyle_BadKey_Switch_BadKeyDropsOldBrush",
-                switched is not null && ColorOf(switched.Background) != LightColor,
+                switched is not null && ColorOf(switched.Background) != LightColor
+                && !HasLocal(switched, WinUI.Control.BackgroundProperty),
                 $"bg={ColorOf(switched?.Background)}");
-
-            // EventListener callbacks do not flow under NativeAOT publish; the JIT run covers it.
-            if (global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
-            {
-                var mine = listener.Messages.Where(m => m.Contains("TrsBad\\u0009Key", StringComparison.Ordinal)).ToArray();
-                H.Check("ThemeRefStyle_BadKey_WarnedOnce", mine.Length == 1 && mine[0].Contains("Background", StringComparison.Ordinal),
-                    $"count={mine.Length} all={string.Join(" || ", listener.Messages)}");
-            }
-            else
-            {
-                H.Skip("ThemeRefStyle_BadKey_WarnedOnce", "EventListener callbacks do not flow under NativeAOT publish");
-            }
         });
     }
 
     /// <summary>
-    /// A ThemeRef key WinUI can't find fails to build, which says nothing about the app's Style.
-    /// Once the key is corrected the themed Style must still be built on that Style, not replace it.
+    /// A ThemeRef key WinUI can't find says nothing about the app's Style, which stays. Once the
+    /// key is corrected the property binds, with the app's Style still on the control.
     /// </summary>
     internal sealed class MissingKeyKeepsAuthorBase(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1573,15 +1540,14 @@ internal static class ThemeRefStyleFixtures
             H.Check("ThemeRefStyle_MissingKey_Fixed_Themed", ColorOf(tb?.Foreground) == LightColor,
                 $"fg={ColorOf(tb?.Foreground)}");
             H.Check("ThemeRefStyle_MissingKey_Fixed_AuthorStyleKept",
-                tb is not null && Math.Abs(tb.FontSize - 29) < 0.01 && ReferenceEquals(tb.Style?.BasedOn, style),
+                tb is not null && Math.Abs(tb.FontSize - 29) < 0.01 && ReferenceEquals(tb.Style, style),
                 $"fontSize={tb?.FontSize}");
         });
     }
 
     /// <summary>
-    /// A themed control returned to the pool goes back without the themed Style or Reactor's
-    /// ownership marker for it, so the next renter starts clean and nothing keeps the previous
-    /// renter's Style alive.
+    /// A themed control returned to the pool goes back without the binding Reactor installed,
+    /// so the next renter starts clean instead of showing the previous renter's themed brush.
     /// </summary>
     internal sealed class PoolReturnDropsThemedStyle(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1602,7 +1568,7 @@ internal static class ThemeRefStyleFixtures
             await Harness.Render();
             var themed = H.FindText("trs-pool-themed");
             H.Check("ThemeRefStyle_Pool_Themed", themed is not null && ColorOf(themed.Foreground) == LightColor
-                && ThemeBindingApplier.HasThemeStyleMarkerForTests(themed));
+                && HasLocal(themed, WinUI.TextBlock.ForegroundProperty));
 
             setPhase!(1);
             await Harness.Render();
@@ -1613,14 +1579,14 @@ internal static class ThemeRefStyleFixtures
             H.Check("ThemeRefStyle_Pool_SameInstanceRented", plain is not null && ReferenceEquals(plain, themed));
             H.Check("ThemeRefStyle_Pool_StyleCleared", plain is not null && plain.Style is null && ColorOf(plain.Foreground) != LightColor,
                 $"fg={ColorOf(plain?.Foreground)}");
-            H.Check("ThemeRefStyle_Pool_MarkerCleared", plain is not null && !ThemeBindingApplier.HasThemeStyleMarkerForTests(plain));
+            H.Check("ThemeRefStyle_Pool_BindingCleared", plain is not null && !HasLocal(plain, WinUI.TextBlock.ForegroundProperty));
         });
     }
 
     /// <summary>
-    /// The themed-Style cache key keeps a resource key containing '|' or '=' apart from a
-    /// different binding set that would otherwise spell the same key, so the second element does
-    /// not get the first element's cached Style.
+    /// A resource key containing '|' or '=' that spells another binding set
+    /// (<c>"A|Foreground=B"</c>) binds only the property it is declared on, and an element that
+    /// really declares that other set gets both of its own bindings.
     /// </summary>
     internal sealed class CacheKeyDoesNotCollide(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1634,19 +1600,18 @@ internal static class ThemeRefStyleFixtures
 
             var one = H.FindControl<WinUI.Button>(b => b.Content is "trs-collide-one");
             var two = H.FindControl<WinUI.Button>(b => b.Content is "trs-collide-two");
-            H.Check("ThemeRefStyle_Collide_FirstThemed", ColorOf(one?.Background) == LightColor);
+            H.Check("ThemeRefStyle_Collide_FirstThemed", ColorOf(one?.Background) == LightColor
+                && one is not null && !HasLocal(one, WinUI.Control.ForegroundProperty));
             H.Check("ThemeRefStyle_Collide_SecondHasOwnStyle",
-                two is not null && !ReferenceEquals(two.Style, one?.Style)
-                && ColorOf(two.Background) == LightColor && ColorOf(two.Foreground) == LightColor,
-                $"fg={ColorOf(two?.Foreground)} sameStyle={ReferenceEquals(two?.Style, one?.Style)}");
+                two is not null && ColorOf(two.Background) == LightColor && ColorOf(two.Foreground) == LightColor,
+                $"fg={ColorOf(two?.Foreground)}");
         });
     }
 
     /// <summary>
-    /// A Style for a third-party control type (one that ships XAML metadata) cannot be the
-    /// BasedOn of a themed Style targeting a WinUI type. The ThemeRef must still apply (the themed
-    /// Style replaces the app's, as before Styles were kept), and later renders must reuse that
-    /// result rather than build on the incompatible base again.
+    /// A Style for a third-party control type (one that ships XAML metadata) stays on the control
+    /// under a ThemeRef, and the ThemeRef applies, on mount and on later renders. A themed Style
+    /// could not be built on that Style and had to replace it.
     /// </summary>
     internal sealed class ThirdPartyStyleFallsBack(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1674,7 +1639,9 @@ internal static class ThemeRefStyleFixtures
             H.Check("ThemeRefStyle_ThirdParty_Mounted", control is not null && errorText is null, $"error={errorText}");
             H.Check("ThemeRefStyle_ThirdParty_Themed", ColorOf(control?.Background) == LightColor,
                 $"bg={ColorOf(control?.Background)} styleIsAuthor={ReferenceEquals(control?.Style, style)}");
-            var themed = control?.Style;
+            H.Check("ThemeRefStyle_ThirdParty_AuthorStyleKept", control is not null
+                && ReferenceEquals(control.Style, style) && Math.Abs(control.MinWidth - 177) < 0.01,
+                $"minWidth={control?.MinWidth}");
 
             setCount!(1);
             await Harness.Render();
@@ -1682,7 +1649,7 @@ internal static class ThemeRefStyleFixtures
                 ReferenceEquals(H.FindControl<global::Reactor.AppTests.ThirdPartyControls.ThirdPartyControlWithPrivateDp>(_ => true), control)
                 && H.FindText("trs-third-party-1") is not null);
             H.Check("ThemeRefStyle_ThirdParty_ReRender_Themed", ColorOf(control?.Background) == LightColor);
-            H.Check("ThemeRefStyle_ThirdParty_ReRender_StyleReused", control is not null && ReferenceEquals(control.Style, themed));
+            H.Check("ThemeRefStyle_ThirdParty_ReRender_AuthorStyleKept", control is not null && ReferenceEquals(control.Style, style));
         });
     }
 }

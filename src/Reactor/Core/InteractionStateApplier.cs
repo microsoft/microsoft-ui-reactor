@@ -47,17 +47,20 @@ internal static class InteractionStateApplier
         public InteractionStatesConfig Config = null!;
         // Background/Foreground: the raw local value (DependencyProperty.UnsetValue when there was
         // none) a state restores when it ends, captured when the state first writes over the
-        // property. With no local value the property is cleared, so a {ThemeResource} Style
-        // setter or the default style shows again. Active* is the brush the state wrote:
-        // anything else there when the state ends came from another writer and stands.
+        // property. A Reactor theme binding is captured as UnsetValue: its binding is restored
+        // instead, and if it is gone by then the property is cleared rather than given a brush
+        // the binding once resolved to. Active* is the brush the state wrote: anything else
+        // there when the state ends came from another writer and stands.
         public object? NormalBackground;
         public Brush? ActiveBackground;
         public bool BackgroundOverrideApplied;
         public object? NormalForeground;
         public Brush? ActiveForeground;
         public bool ForegroundOverrideApplied;
+        public Brush? ActiveBorderBrush;
         public Brush? NormalBorderBrush;
         public bool NormalBorderBrushHasLocalValue;
+        public bool NormalBorderBrushThemeBound;
         public bool BorderBrushOverrideApplied;
     }
 
@@ -65,9 +68,8 @@ internal static class InteractionStateApplier
 
     internal static void RestoreInteractionForeground(FrameworkElement element)
     {
-        if (InteractionTrackerOf(element) is { } tracker
-            && ForegroundModifier.GetProperty(element) is { } property)
-            ApplyInteractionBrush(element, property, stateBrush: null,
+        if (InteractionTrackerOf(element) is { } tracker)
+            ApplyInteractionBrush(element, "Foreground", stateBrush: null,
                 ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
     }
 
@@ -258,71 +260,63 @@ internal static class InteractionStateApplier
 
     /// <summary>
     /// Brush properties — direct set. When a state ends, what the property held before the
-    /// state wrote over it comes back: an explicit local brush is restored, and a property
-    /// with no local value is cleared, so a ThemeRef's {ThemeResource} Style setter takes over
-    /// again instead of a brush captured earlier that would pin the theme it had then.
+    /// state wrote over it comes back: an explicit local brush or binding is restored, a
+    /// property Reactor theme-binds gets its binding back, and a property with no local value
+    /// is cleared, instead of a brush captured earlier that would pin the theme it had then.
     /// <paramref name="values"/> null is the Normal state.
     /// </summary>
     private static void ApplyInteractionBrushes(FrameworkElement fe, InteractionStateTracker tracker, InteractionStateValues? values)
     {
-        var backgroundProperty = fe switch
-        {
-            WinUI.Panel => WinUI.Panel.BackgroundProperty,
-            WinUI.Control => WinUI.Control.BackgroundProperty,
-            WinUI.Border => WinUI.Border.BackgroundProperty,
-            _ => null,
-        };
-        if (backgroundProperty is not null)
-            ApplyInteractionBrush(fe, backgroundProperty, values?.Background,
-                ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
+        ApplyInteractionBrush(fe, "Background", values?.Background,
+            ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
+        ApplyInteractionBrush(fe, "Foreground", values?.Foreground,
+            ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
-        if (ForegroundModifier.GetProperty(fe) is { } foregroundProperty)
-            ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
-                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
-
-        var borderProperty = fe switch
+        if (ThemeBindingApplier.GetThemeBindingProperty(fe, "BorderBrush") is not { } borderProperty)
+            return;
+        if (values?.BorderBrush is { } borderBrush)
         {
-            WinUI.Control => WinUI.Control.BorderBrushProperty,
-            WinUI.Border => WinUI.Border.BorderBrushProperty,
-            WinUI.Grid => WinUI.Grid.BorderBrushProperty,
-            WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
-            WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
-            _ => null,
-        };
-        if (borderProperty is not null)
-        {
-            if (values?.BorderBrush is { } borderBrush)
+            if (!tracker.BorderBrushOverrideApplied)
             {
-                if (!tracker.BorderBrushOverrideApplied)
-                {
-                    // Capture the latest normal value before applying an override.
-                    tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
-                    tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
-                    tracker.BorderBrushOverrideApplied = true;
-                }
-                fe.SetValue(borderProperty, borderBrush);
+                // Capture the latest normal value before applying an override.
+                tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
+                tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
+                tracker.NormalBorderBrushThemeBound = ThemeBindingApplier.IsThemeBound(fe, "BorderBrush");
+                tracker.BorderBrushOverrideApplied = true;
             }
-            else if (tracker.BorderBrushOverrideApplied)
+            fe.SetValue(borderProperty, borderBrush);
+            tracker.ActiveBorderBrush = borderBrush;
+        }
+        else if (tracker.BorderBrushOverrideApplied)
+        {
+            // Restore only while the property still holds the state's brush: a value
+            // another writer put there in the meantime stands.
+            bool held = ReferenceEquals(fe.ReadLocalValue(borderProperty), tracker.ActiveBorderBrush);
+            tracker.ActiveBorderBrush = null;
+            if (held && !ThemeBindingApplier.TryRestoreThemeBinding(fe, "BorderBrush"))
             {
-                if (tracker.NormalBorderBrushHasLocalValue)
+                if (tracker.NormalBorderBrushHasLocalValue && !tracker.NormalBorderBrushThemeBound)
                     fe.SetValue(borderProperty, tracker.NormalBorderBrush);
                 else
                     fe.ClearValue(borderProperty);
-                tracker.BorderBrushOverrideApplied = false;
             }
+            tracker.BorderBrushOverrideApplied = false;
         }
     }
 
     /// <summary>
-    /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="dp"/>,
-    /// or, once no state sets it, puts back what the property held when the state took it
-    /// over: the captured local brush, or no local value at all. A property no state touched,
-    /// or one another writer replaced the state's brush on, is left alone.
+    /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="property"/>,
+    /// or, once no state sets it, puts back what the property held when the state took it over:
+    /// Reactor's theme binding, the captured local brush or binding, or no local value at all. A
+    /// property no state touched, or one another writer replaced the state's brush on, is left
+    /// alone, so a pointer transition never overwrites another writer.
     /// </summary>
     private static void ApplyInteractionBrush(
-        FrameworkElement fe, DependencyProperty dp, Brush? stateBrush,
+        FrameworkElement fe, string property, Brush? stateBrush,
         ref object? normalLocal, ref Brush? activeBrush, ref bool overrideApplied)
     {
+        if (ThemeBindingApplier.GetThemeBindingProperty(fe, property) is not { } dp)
+            return;
         if (stateBrush is not null)
         {
             // Capture on the first override, and again if another writer replaced the state's
@@ -330,13 +324,16 @@ internal static class InteractionStateApplier
             // is what the element now carries, so it is what leaving the states puts back.
             if (!overrideApplied || !ReferenceEquals(fe.ReadLocalValue(dp), activeBrush))
             {
-                // A binding is kept as its Binding, read through the typed GetBindingExpression:
-                // the raw local value does not reliably project as a BindingExpression under
-                // NativeAOT, so testing it with `is` would lose the binding there.
+                // A theme binding reads back as the brush it resolved to, which would pin that
+                // theme if restored: it is recorded as no local value and restored as a binding.
+                // An app binding is kept as its Binding, read through the typed
+                // GetBindingExpression: the raw local value does not reliably project as a
+                // BindingExpression under NativeAOT, so testing it with `is` would lose it there.
                 var local = fe.ReadLocalValue(dp);
-                normalLocal = local is null or Brush || ReferenceEquals(local, DependencyProperty.UnsetValue)
-                    ? local
-                    : (object?)fe.GetBindingExpression(dp)?.ParentBinding ?? local;
+                normalLocal = ThemeBindingApplier.IsThemeBound(fe, property) ? DependencyProperty.UnsetValue
+                    : local is null or Brush || ReferenceEquals(local, DependencyProperty.UnsetValue)
+                        ? local
+                        : (object?)fe.GetBindingExpression(dp)?.ParentBinding ?? local;
                 overrideApplied = true;
             }
             fe.SetValue(dp, stateBrush);
@@ -353,6 +350,14 @@ internal static class InteractionStateApplier
         overrideApplied = false;
         if (!ReferenceEquals(fe.ReadLocalValue(dp), active))
             return;
+        if (ThemeBindingApplier.IsThemeBound(fe, property))
+        {
+            // A failed restore (the key is gone) releases the state's brush, so a later render
+            // finds the property unset and retries the binding.
+            if (!ThemeBindingApplier.TryRestoreThemeBinding(fe, property))
+                fe.ClearValue(dp);
+            return;
+        }
         // A local brush (or local null) is written back, and a binding the state wrote over is set
         // again from its Binding, so it keeps following its source. No local value clears the
         // property to what styles supply.

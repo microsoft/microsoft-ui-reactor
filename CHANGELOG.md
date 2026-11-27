@@ -275,6 +275,20 @@ Conventions for contributors:
   now reads `Microsoft.UI.Reactor.Advanced.xml` and its DLL beside the core ones, and a
   `--ci` compile fails if either build is missing (issue #1721).
 
+- **`ThemeRef` modifiers (`.Background(ThemeRef)`, `.Foreground(ThemeRef)`, `.BorderBrush(ThemeRef)`,
+  `.WithBorder(ThemeRef)`, `SplitView(...).PaneBackground(ThemeRef)`) bind each property with
+  `FrameworkElement.SetThemeResourceBinding` instead of a synthesized `{ThemeResource}` Style.**
+  The binding is the code equivalent of `{ThemeResource}`, so it follows Light/Dark, high
+  contrast and an ancestor `RequestedTheme` as before, and the PR #1636 fixes carry over.
+  Reactor no longer writes `Style`, so the app's own Style always stays, including a Style for
+  a third-party control type, which the themed Style used to replace with a warning. A key is
+  passed as is, so one with both quote characters, a tab or a line break now binds instead of
+  being skipped. An explicit brush (`.Background(brush)`, a `.Set` setter, an element property)
+  still wins over the ThemeRef. A key that changes to one WinUI can't find now clears the
+  property instead of keeping the previous key's brush. The bound value is a local value, so
+  `ReadLocalValue` reports the resolved brush where it used to report unset. Requires the
+  experimental Windows App SDK channel, like #1125 (winui3-integration proposal #22, issue #522).
+
 ### Deprecated
 
 ### Removed

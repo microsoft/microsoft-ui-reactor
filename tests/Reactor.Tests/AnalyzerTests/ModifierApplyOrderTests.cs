@@ -35,6 +35,7 @@ public class ModifierApplyOrderTests
         "IsEnabled",
         "CornerRadius", "BorderBrush", "BorderThickness", "BorderInlineStart",
         "Background", "→ForegroundModifier.Apply",
+        "→ThemeBindingApplier.SuppressModifierOwnedThemeBindings",
         "AutomationName", "AutomationId", "IsDragRegion", "ElementSoundMode", "HeadingLevel",
         "IsTabStop", "IsHitTestVisible", "TabIndex", "AccessKey", "XYFocusKeyboardNavigation",
         "Accessibility",

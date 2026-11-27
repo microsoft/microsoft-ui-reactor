@@ -469,11 +469,12 @@ public abstract record Element
     /// child carrying one must decline the skip and route through <c>Update</c>
     /// (its element-level shallow-skip re-resolves the ThemeRef). <c>ThemeBindings</c>
     /// deliberately do NOT block the skip: <c>.Foreground(Theme.X)</c> compiles to a
-    /// <c>{ThemeResource}</c> Style setter that WinUI re-resolves NATIVELY on the
-    /// control's effective-theme change (app theme OR an ancestor <c>RequestedTheme</c>)
+    /// live theme-resource binding (<c>SetThemeResourceBinding</c>, the code equivalent
+    /// of <c>{ThemeResource}</c>) that WinUI re-resolves NATIVELY on the control's
+    /// effective-theme change (app theme OR an ancestor <c>RequestedTheme</c>)
     /// — self-healing whether or not Reactor re-applies it, so re-running
-    /// <c>ApplyThemeBindings</c> on a skipped child is redundant (it re-applies the same
-    /// content-addressed cached Style). The theme predicate is SHARED with
+    /// <c>ApplyThemeBindings</c> on a skipped child is redundant (it finds the same
+    /// binding still in place and does nothing). The theme predicate is SHARED with
     /// <see cref="Core.ChildDiffHints.IsThemeSensitive"/> (the child-diff-hint / container
     /// fast-path gate) so the two arms can never desync.
     /// </remarks>
@@ -1348,7 +1349,7 @@ public abstract record Element
     // remove/change side of the contract. Returning false here routes the element through
     // full Update, where ApplyResourceOverrides(old, new) strips the dropped managed key
     // and applies the new value. This is symmetric with the ThemeBindings transition-away
-    // handling (ShallowEquals catches it + ClearThemeBindings on the Update path). Gated
+    // handling (ShallowEquals catches it + ClearDroppedThemeBindings on the Update path). Gated
     // behind the no-extras fast-path in ShallowEquals, so override-free cells pay nothing.
     // The CanSkipUpdate ThemeRefs gate is still required for the STEADY-STATE case (same
     // overrides, effective theme changed → ShallowEquals stays true → the gate forces the
@@ -4821,7 +4822,7 @@ public partial record SplitViewElement(
         });
         return d
             // Clearing a removed brush (rather than leaving it, as OneWayConditional does) lets a
-            // `.PaneBackground(ThemeRef)` that replaces it show through the themed Style.
+            // `.PaneBackground(ThemeRef)` that replaces it bind the property.
             .OneWay(
                 get:      static e => e.PaneBackground is { } b ? Optional<Brush?>.Of(b) : Optional<Brush?>.Unset,
                 set:      static (c, v) => c.PaneBackground = v!,
