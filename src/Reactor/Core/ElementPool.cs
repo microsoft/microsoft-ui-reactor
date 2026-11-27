@@ -50,53 +50,10 @@ public sealed partial class ElementPool : IDisposable
     /// </summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>
-    /// The exact runtime types <see cref="TryRent(Type, bool)"/> and <see cref="Return"/> recycle.
-    /// Membership is tested with <see cref="HashSet{T}.Contains"/> on
-    /// <see cref="object.GetType"/>, so it is an <em>exact</em>-type set: a subclass of a
-    /// listed type is not poolable. <c>CheckBox</c> and <c>RelativePanel</c> are the cases
-    /// that catch people out — they pass the <c>Control</c> and <c>Panel</c> gates
-    /// <c>ApplyModifiers</c> dispatches on, but they are not here.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This list is mirrored by name in <c>ModifierTable.PoolableTypeNames</c>
-    /// (namespace <c>Microsoft.UI.Reactor.Analyzers</c>, assembly <c>Reactor.Analyzers</c>),
-    /// whose <c>ModifierTable.IsPoolableTypeName</c> membership test <c>PoolResetSetAnalyzer</c>
-    /// uses to decide whether <c>REACTOR_POOL_001</c> (the receiver is recycled, so the write
-    /// is unwound on pool return) or <c>REACTOR_MOD_002</c>
-    /// (the receiver is not recycled, so the write is never unwound — it costs the element's
-    /// structural skip, not the value) describes a <c>.Set</c> write. The analyzer targets
-    /// <c>netstandard2.0</c> and cannot reference this assembly, hence the copy.
-    /// </para>
-    /// <para>
-    /// Adding or removing a type here without updating that mirror fails
-    /// <c>Analyzer_Poolable_Type_Mirror_Matches_ElementPool</c>, and adding one that
-    /// <see cref="CleanElement"/> does not reset fails
-    /// <c>Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement</c>.
-    /// </para>
-    /// </remarks>
-    private static readonly HashSet<Type> PoolableTypes = new()
-    {
-        typeof(TextBlock),
-        typeof(WinUI.RichTextBlock),
-        typeof(WinUI.StackPanel),
-        typeof(WinUI.Grid),
-        typeof(WinUI.Border),
-        typeof(WinUI.ScrollViewer),
-        typeof(WinUI.Canvas),
-        typeof(WinUI.Viewbox),
-        typeof(WinUI.ProgressBar),
-        typeof(WinUI.ProgressRing),
-        typeof(WinUI.Image),
-        typeof(WinUI.InfoBadge),
-        // Interactive controls — safe to pool because the Tag-based event pattern
-        // reads the current element from Tag at invocation time, so recycled controls
-        // automatically dispatch to the new element's callbacks after SetElementTag.
-        typeof(WinUI.Button),
-        typeof(TextBox),
-        typeof(WinUI.ToggleSwitch),
-    };
+    // PoolableTypes, the exact types the pool recycles, is generated into ElementPool.Generated.cs
+    // from ModifierSchema.PoolableTypeNames, which the analyzer reads too. Membership is exact-type:
+    // CheckBox and RelativePanel pass the Control and Panel gates ApplyModifiers dispatches on, but
+    // they aren't pooled. A type added there needs a CleanElement arm for its own content and state.
 
     private readonly Dictionary<Type, Stack<FrameworkElement>> _pools = new();
     private readonly Dictionary<Type, Stack<FrameworkElement>> _visualPools = new();

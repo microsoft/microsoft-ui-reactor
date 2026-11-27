@@ -341,47 +341,52 @@ point of return: stop and ship.
     `<!-- index:<control-id> -->` marker in a SKILL.md, so index and skills cannot drift. Edit the
     marked block, not the JSON; an unclosed/nested marker or an id naming no control fails
     generation. Spec 064.
-- A new common-element modifier touches every seam: the `ElementModifiers` field, the schema
-  slot, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
-  helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
-  gates scan it; since spec 067 layer 3e every row A–D arm is generated into
-  `Reconciler.Modifiers.Generated.cs` instead: put the slot inside the `First`..`Last` range of a
-  `ModifierEmitter.GeneratedHelpers` entry, or add an entry and its call, and a converted field
-  gets its `ModifierConverters` method; hand-coded arms and the composite families' BiDi resolvers stay hand-written, and a composite family in `ModifierEmitter.GeneratedComposites` gets its receiver write, release and reader generated, so a new receiver needs a `ChainNames` entry there), and the fluent extension. Pair a `.HasValue` write
-  with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
-  Declare the field in `ModifierSchema.Slots` (`src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`)
-  at its apply position, with its bucket, receivers, skip-gate comparison and analyzer gates.
-  Skip equality (`ModifierEquality`) and the four `Merge` bodies are generated from the slot into
-  `Element.Modifiers.Generated.cs`, and so are `AppliedModifierMap.Entries` and the ThemeRef rows of
-  `GetDependencyPropertyName`: run `dotnet run --project tools/Reactor.ModifierGen` and add its
-  `ModifierSkipPolicySnapshotTests.Frozen` row (never hand-edit a generated file). A field that
-  writes a property also goes in `ModifierSchema.AppliedReportOrder` (the generator throws without
-  it) and gets an `AppliedModifierMapSnapshotTests.Frozen` row; a non-DP target is declared with
-  `.Report(target: …)`, and a field that writes no property goes in
-  `ReactorDiagnosticsComponentsTests.NotPropertyWrites` instead.
-  `ModifierFieldContractTests` checks `Merge` and both skip-equality modes against it for every
-  headless field, and `ModifierSchemaTests` checks its receivers, order, types and write
-  equality against the reconciler and its fluent names against the public extensions. A simple,
-  converted or attached field also gets a typed probe from the same tool run (a stale generated
-  file fails `ModifierMatrixSchemaAgreementTests`). If the
-  analyzer should map the property's `.Set` form, also add a `Common("<Name>", poolReset: …)` row
-  to `ModifierTable.Properties`, which takes its gates from the slot. A `Brush` or
-  `FontFamily` field runs in the `ModifierFieldContract_BrushAndFont` selftest instead: add it to
-  `ModifierFieldContractSelfTestFields` and a `CheckField` line in `ModifierFieldContractFixture`.
-  Update `ModifierApplyOrderTests.FrozenOrder` where its arm lands (spec 067). Then add the
-  probe's rows to `ModifierMatrixExpectations` and sample values to `ModifierMatrixFixtures.SampleValues`.
-  A gated field (any receiver other than `FrameworkElement`) also needs a `Negatives` entry, with
-  its DP in `ModifierMatrixFixtures.NegativeDp`, or a `NoNegative` reason. A hand-coded field
-  goes in `Excluded` with a reason instead.
-  The matrix is hand-written on purpose so a schema mistake can't certify itself.
-  A receiver on a pooled type is also reset on pool return, by the generated
-  `ElementPool.Reset*Modifiers` helpers (spec 067 layer 5b), so never hand-write its clear in
-  `CleanElement`: place its key in a `ModifierEmitter.PoolResetPhases` entry (usually the end of
-  `ResetStateModifiers`; the generator fails until you do). It defaults to `ClearValue`. A literal write-back is declared `.Pool(type,
-  PoolReset.WriteDefault, reason, poolDefault)`, and a receiver type no pooled type derives from is
-  declared `PoolReset.NotReset` with a reason. Then add its row to `PoolResetExpectations.Resets`
-  (or `NotReset`) and its `Dp`/`Sample` arms in `ModifierPoolResetFixture`. `ModifierPoolResetTests`
-  checks the declaration against the scanned reset and the expectations.
+- **A new common-element modifier is a schema row** (spec 067). The schema in
+  `src/Reactor.Analyzers/Modifiers/ModifierSchema.cs` drives everything generated, and a set of
+  hand-written frozen oracles checks it, so a schema mistake can't certify itself.
+  1. Add the `ElementModifiers` bucket property, its root shim, and the fluent extension.
+  2. Declare the slot in `ModifierSchema.Slots` at its apply position: bucket, receivers, skip and
+     write equality, analyzer gates. A receiver on a pooled type is reset on pool return with
+     `ClearValue` by default; declare `.Pool(type, PoolReset.WriteDefault, reason, poolDefault)`
+     for a literal write-back, or `PoolReset.NotReset` with a reason for a receiver type no pooled
+     type derives from.
+  3. Place it. A row A–D slot goes inside the `First`..`Last` range of a
+     `ModifierEmitter.GeneratedHelpers` entry (or a new entry and its call), and a converted one
+     gets its `ModifierConverters` method. A composite family's new receiver needs a `ChainNames`
+     entry in `GeneratedComposites`. A hand-coded arm goes in the matching
+     `Apply<Family>Modifier(s)` helper in `Reconciler.Modifiers.cs`, keeping the
+     `(fe, oldM, m, …)` signature so the source gates scan it, and pairs a `.HasValue` write with
+     `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling. A pooled receiver's reset key goes in a
+     `ModifierEmitter.PoolResetPhases` entry, usually the end of `ResetStateModifiers`; never
+     hand-write it in `CleanElement`. A slot that writes a property goes in
+     `ModifierSchema.AppliedReportOrder` (a non-DP target declares `.Report(target: …)`, and one
+     that writes none goes in `ReactorDiagnosticsComponentsTests.NotPropertyWrites`). The
+     generator throws for a missing `AppliedReportOrder`, `PoolResetPhases`, `ChainNames` or
+     converter placement; `ModifierSchemaTests` and `ModifierApplyOrderTests` catch a slot no arm
+     writes, and `ReactorDiagnosticsComponentsTests` a missing `NotPropertyWrites` entry.
+  4. Run `dotnet run --project tools/Reactor.ModifierGen`. It writes skip equality and the four
+     `Merge` bodies, `AppliedModifierMap.Entries`, the ThemeRef rows, the row A–D arms, the
+     composite families' receiver write, release and reader (their BiDi resolvers stay
+     hand-written), the typed matrix probes, `ElementPool.PoolableTypes` and the pool resets. Never
+     hand-edit a generated file; a stale one fails `ModifierMatrixSchemaAgreementTests`.
+  5. Update the frozen oracles: `ModifierSkipPolicySnapshotTests.Frozen`,
+     `AppliedModifierMapSnapshotTests.Frozen`, `ModifierApplyOrderTests.FrozenOrder`,
+     `ModifierMatrixExpectations` with `ModifierMatrixFixtures.SampleValues` (a gated slot also
+     needs a `Negatives` entry with its DP in `NegativeDp`, or a `NoNegative` reason; a hand-coded
+     one goes in `Excluded` with a reason), and `PoolResetExpectations.Resets` (or `NotReset`)
+     with its `Dp`/`Sample` arms in `ModifierPoolResetFixture`. A `Brush` or `FontFamily` field
+     runs in the `ModifierFieldContract_BrushAndFont` selftest instead of the headless contract:
+     add it to `ModifierFieldContractSelfTestFields` and a `CheckField` line in
+     `ModifierFieldContractFixture`. If the analyzer should map the property's `.Set` form, add a
+     `Common("<Name>", poolReset: …)` row to `ModifierTable.Properties`, which takes its gates
+     from the slot.
+  `ModifierFieldContractTests`, `ModifierSchemaTests` and `ModifierPoolResetTests` then check the
+  slot against the reconciler, the public extensions and the pool. Pooling a new control type is
+  a schema edit too: add it to `ModifierSchema.PoolableTypeNames` (which generates
+  `ElementPool.PoolableTypes`, and moves `.Set` writes on it from `REACTOR_MOD_002` to
+  `REACTOR_POOL_001`), give it a `CleanElement` arm for its own content and state, revisit any
+  `PoolReset.NotReset` receiver it derives from, regenerate, and add it to
+  `PoolResetExpectations.PooledTypes`.
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via
   `EnforceCodeStyleInBuild`), so an `object` gate fails the Release build. Keep `object` only

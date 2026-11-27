@@ -549,7 +549,15 @@ internal static class ModifierEmitter
         sb.Append("using Microsoft.UI.Xaml;\n");
         sb.Append("using WinUI = Microsoft.UI.Xaml.Controls;\n\n");
         sb.Append("namespace Microsoft.UI.Reactor.Core;\n\n");
-        sb.Append("public sealed partial class ElementPool\n{");
+        sb.Append("public sealed partial class ElementPool\n{\n");
+        sb.Append("    /// <summary>\n");
+        sb.Append("    /// The exact runtime types <see cref=\"TryRent(global::System.Type, bool)\"/> and <see cref=\"Return\"/> recycle, from\n");
+        sb.Append("    /// <c>ModifierSchema.PoolableTypeNames</c>. Membership is exact-type, so a subclass of a listed type is not pooled.\n");
+        sb.Append("    /// </summary>\n");
+        sb.Append("    internal static readonly global::System.Collections.Generic.HashSet<global::System.Type> PoolableTypes = new()\n    {\n");
+        foreach (var name in ModifierSchema.PoolableTypeNames)
+            sb.Append("        typeof(WinUI.").Append(name).Append("),\n");
+        sb.Append("    };\n");
         foreach (var phase in PoolResetPhases)
         {
             sb.Append("\n    /// <summary>").Append(phase.Summary).Append("</summary>\n");

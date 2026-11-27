@@ -72,10 +72,19 @@ internal static class ModifierSchema
     internal static readonly string[] ControlOnly = { "Control" };
 
     /// <summary>
-    /// The exact WinUI control type names <c>ElementPool.PoolableTypes</c> recycles. Mirrored here
-    /// because the analyzer cannot reference Reactor; <c>Analyzer_Poolable_Type_Mirror_Matches_ElementPool</c>
-    /// keeps it honest until layer 5 generates both from this list.
+    /// The exact WinUI control types <c>ElementPool</c> recycles, all in
+    /// <c>Microsoft.UI.Xaml.Controls</c>. <c>tools/Reactor.ModifierGen</c> generates
+    /// <c>ElementPool.PoolableTypes</c> from this list (spec 067 layer 5), and the analyzer reads it
+    /// directly through <c>ModifierTable.IsPoolableTypeName</c>, so the two can't drift.
     /// </summary>
+    /// <remarks>
+    /// Membership is exact-type: a subclass of a listed type is not pooled, so <c>CheckBox</c> and
+    /// <c>RelativePanel</c>, which pass the <c>Control</c> and <c>Panel</c> gates, are not. The
+    /// interactive controls (<c>Button</c>, <c>TextBox</c>, <c>ToggleSwitch</c>) are safe to pool
+    /// because their event trampolines read the current element from attached state when they fire,
+    /// so a recycled control dispatches to its new element's callbacks. Adding a type here also
+    /// needs a <c>CleanElement</c> arm for its own content and state.
+    /// </remarks>
     internal static readonly string[] PoolableTypeNames =
     {
         "TextBlock", "RichTextBlock", "StackPanel", "Grid", "Border", "ScrollViewer",
