@@ -76,6 +76,8 @@ public sealed partial class Reconciler
         // The flyout a .WithFlyout(...) modifier installed, whichever element layer declared it, so a
         // drop or unmount releases that flyout and not one another writer put in the slot (#1753).
         internal WinPrim.FlyoutBase? ModifierFlyout;
+        // The .WithFlyout element of the layer that installed ModifierFlyout, as of its last update.
+        internal Element? ModifierFlyoutSource;
         // What ModifierFlyout replaced in the slot, put back when the modifier is released.
         internal WinPrim.FlyoutBase? ModifierDisplacedFlyout;
         // Composition and animation bookkeeping, allocated by the first composition feature the
@@ -786,6 +788,7 @@ public sealed partial class Reconciler
             // the previous renter's flyout to the next renter's unmount (#1753).
             state.ModifierFlyout = null;
             state.ModifierDisplacedFlyout = null;
+            state.ModifierFlyoutSource = null;
         }
     }
 
@@ -823,6 +826,7 @@ public sealed partial class Reconciler
         state.DeclaredOpacity = default;
         state.ModifierFlyout = null;
         state.ModifierDisplacedFlyout = null;
+        state.ModifierFlyoutSource = null;
         if (state.Composition is { } composition)
         {
             if (composition.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);

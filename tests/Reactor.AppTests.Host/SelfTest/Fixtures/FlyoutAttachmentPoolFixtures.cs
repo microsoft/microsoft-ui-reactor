@@ -334,4 +334,52 @@ public static class FlyoutAttachmentPoolFixtures
             H.Check("WithFlyoutStyled_Phase1_ModifierContentUnmounted", s_cleanupCount == 1);
         }
     }
+
+    // A keyed Memo's .WithFlyout over a body that declares its own: both land on one control. The
+    // body's, installed first, keeps the slot. Dropping the wrapper's while the key holds (the body
+    // isn't re-rendered) leaves the body's in place, and removing the Memo releases it.
+    internal class NestedLayerWithFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static int s_innerUnmounts;
+        private static int s_outerUnmounts;
+
+        public override async Task RunAsync()
+        {
+            s_innerUnmounts = 0;
+            s_outerUnmounts = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                var memo = Memo("flyout-layers", static () => TextBlock("flyout-layers-carrier")
+                    .WithFlyout(TextBlock("flyout-layers-inner").OnUnmount(static _ => s_innerUnmounts++)));
+                return VStack(
+                    Button("DropOuterFlyout", () => set(1)),
+                    Button("RemoveLayeredMemo", () => set(2)),
+                    phase switch
+                    {
+                        0 => memo.WithFlyout(TextBlock("flyout-layers-outer").OnUnmount(static _ => s_outerUnmounts++)),
+                        1 => memo,
+                        _ => Empty(),
+                    });
+            });
+
+            await Harness.Render();
+            var carrier = H.FindText("flyout-layers-carrier");
+            H.Check("NestedFlyout_Phase0_InnerHoldsSlot",
+                carrier is not null && WinPrim.FlyoutBase.GetAttachedFlyout(carrier) is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-layers-inner" } });
+
+            H.ClickButton("DropOuterFlyout");
+            await Harness.Render();
+            H.Check("NestedFlyout_Phase1_SameControl", ReferenceEquals(carrier, H.FindText("flyout-layers-carrier")));
+            H.Check("NestedFlyout_Phase1_InnerKept",
+                carrier is not null && WinPrim.FlyoutBase.GetAttachedFlyout(carrier) is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-layers-inner" } });
+            H.Check("NestedFlyout_Phase1_InnerStillMounted", s_innerUnmounts == 0);
+
+            H.ClickButton("RemoveLayeredMemo");
+            await Harness.Render();
+            H.Check("NestedFlyout_Phase2_InnerReleased", s_innerUnmounts == 1);
+            H.Check("NestedFlyout_Phase2_OuterNeverMounted", s_outerUnmounts == 0);
+        }
+    }
 }

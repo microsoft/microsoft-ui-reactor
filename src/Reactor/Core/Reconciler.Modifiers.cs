@@ -484,7 +484,7 @@ public sealed partial class Reconciler
     {
         if (m.AttachedFlyout is not null)
             ApplyFlyoutAttachment(fe, oldM?.AttachedFlyout, m.AttachedFlyout, requestRerender);
-        else if (oldM?.AttachedFlyout is not null && UnmountFlyoutAttachmentContent(fe, out var displaced))
+        else if (oldM?.AttachedFlyout is not null && UnmountFlyoutAttachmentContent(fe, oldM.AttachedFlyout, out var displaced))
         {
             fe.ClearValue(FlyoutSlotProperty(fe));
             // A button's own flyout: argument the modifier displaced takes the slot back.
