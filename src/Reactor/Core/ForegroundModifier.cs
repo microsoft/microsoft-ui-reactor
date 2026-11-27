@@ -73,7 +73,7 @@ internal static class ForegroundModifier
         return UpdateAction.RemovalHandled;
     }
 
-    internal static void Apply(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, UpdateAction update, bool keepInteractionForeground)
+    internal static void Apply(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, UpdateAction update, Reconciler reconciler)
     {
         var oldForeground = update == UpdateAction.NewTarget ? null : oldM?.Foreground;
         var foreground = m.Foreground;
@@ -86,7 +86,7 @@ internal static class ForegroundModifier
             if (ReferenceEquals(oldForeground, foreground) && update != UpdateAction.Reapply) return;
             // Equivalent normal brushes must not overwrite a foreground still owned by an
             // interaction state (#1727). A genuinely different normal value writes as usual.
-            if (!keepInteractionForeground || !InteractionStateApplier.TryReplaceInteractionForegroundRestoreValue(fe, foreground))
+            if (!InteractionStateApplier.TryReplaceInteractionForegroundRestoreValue(fe, foreground, reconciler))
                 fe.SetValue(property, foreground);
             if (fe is WinUI.RichTextBlock)
             {

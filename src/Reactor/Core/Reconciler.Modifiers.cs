@@ -690,15 +690,22 @@ public sealed partial class Reconciler
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
         }
 
+        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate, this);
+    }
+
+    internal InteractionStatesConfig? FindUpdatingInteractionStates(FrameworkElement fe)
+    {
+        if (ReferenceEquals(ModifierUpdate.Control, fe) && ModifierUpdate.ClearsInteractionStates) return null;
         // Use the new shared-target chain so removing interaction states still writes the
         // normal foreground. A resource-refreshed Memo exposes its rebuilt Flyout during recursion.
         var source = ReferenceEquals(ModifierUpdate.Control, fe) ? ModifierUpdate.Root : _reconcilingElement;
         var interactionStates = FindMountedElementValue(fe, static e => e.InteractionStates, source)
-            ?? (ReferenceEquals(UpdatingFlyout.Target, fe) ? UpdatingFlyout.Decorator?.InteractionStates : null);
+            ?? (ReferenceEquals(UpdatingFlyout.Target, fe)
+                ? FindMountedElementValue(fe, static e => e.InteractionStates, UpdatingFlyout.Decorator) : null);
         // A keyed Memo has no declarative target; its inner update has already installed it.
         if (interactionStates is null && _reconcilingElement is KeyedMemoElement)
             interactionStates = FindMountedElementValue(fe, static e => e.InteractionStates);
-        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate, keepInteractionForeground: interactionStates is not null);
+        return interactionStates;
     }
 
     /// <summary>AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.</summary>

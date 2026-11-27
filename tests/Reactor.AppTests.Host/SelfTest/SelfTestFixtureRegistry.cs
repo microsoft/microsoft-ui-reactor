@@ -384,6 +384,7 @@ internal static class SelfTestFixtureRegistry
         // ThemeRef through the synthesized {ThemeResource} Style: SplitView pane background,
         // InteractionStates restore, an app's own Style kept as BasedOn, quoted keys.
         ("ThemeRefStyle_SharedForegroundLookup", static harness => new ThemeRefStyleFixtures.SharedForegroundLookup(harness)),
+        ("ThemeRefStyle_ForegroundInteractionLookupIsLazy", static harness => new ThemeRefStyleFixtures.ForegroundInteractionLookupIsLazy(harness)),
         ("ThemeRefStyle_ForegroundAppliedAfterBackgroundCallback", static harness => new ThemeRefStyleFixtures.ForegroundAppliedAfterBackgroundCallback(harness)),
         ("ThemeRefStyle_RichTextForegroundRestoredAfterSkippedRender", static harness => new ThemeRefStyleFixtures.RichTextForegroundRestoredAfterSkippedRender(harness)),
         ("ThemeRefStyle_RichTextForegroundRemovedDuringHover", static harness => new ThemeRefStyleFixtures.RichTextForegroundRemovedDuringHover(harness)),
@@ -392,7 +393,7 @@ internal static class SelfTestFixtureRegistry
         ("ThemeRefStyle_FlyoutRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => Factories.Flyout(target, Factories.TextBlock("flyout")))),
         ("ThemeRefStyle_MenuFlyoutRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => Factories.MenuFlyout(target))),
         ("ThemeRefStyle_CommandBarFlyoutRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => Factories.CommandBarFlyout(target))),
-        ("ThemeRefStyle_PlainRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => target)),
+        ("ThemeRefStyle_PlainRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => target, layered: false)),
         ("ThemeRefStyle_NestedFlyoutDoesNotRestoreWithdrawnHoverForeground", static harness => new ThemeRefStyleFixtures.NestedFlyoutDoesNotRestoreWithdrawnHoverForeground(harness)),
         ("ThemeRefStyle_MemoKeepsHoverForegroundDuringFlyoutResourceRefresh", static harness => new ThemeRefStyleFixtures.MemoKeepsHoverForegroundDuringFlyoutResourceRefresh(harness)),
         ("ThemeRefStyle_MemoForegroundUpdateKeepsEquivalentFlyoutHover", static harness => new ThemeRefStyleFixtures.MemoForegroundUpdateKeepsEquivalentFlyoutHover(harness)),
