@@ -86,7 +86,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
     // Issue #1506: follows the content root with the theme listener; see HighContrastProbe.
     private HighContrastProbe? _contrastProbe;
-    // Test-only accessors.
+    // The contrast state of the last disposed probe, handed to the next one.
+    private bool? _renderedHighContrast;
     internal HighContrastProbe? ContrastProbeForTest => _contrastProbe;
     internal int ContrastRefreshCountForTest { get; private set; }
     private volatile bool _disposed;
@@ -1559,13 +1560,17 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (!ReferenceEquals(_contrastProbe?.Owner, fe))
         {
             DetachContrastProbe();
-            _contrastProbe = HighContrastProbe.TryAttach(fe, OnContrastThemeApplied);
+            _contrastProbe = HighContrastProbe.TryAttach(fe, OnContrastThemeApplied, _renderedHighContrast);
         }
     }
 
     private void DetachContrastProbe()
     {
-        _contrastProbe?.Dispose();
+        if (_contrastProbe is null) return;
+        // The next probe starts from this one's state, so a switch it had not reported yet, or
+        // one made while the host had no probe, still refreshes the host.
+        _renderedHighContrast = _contrastProbe.LastHighContrast;
+        _contrastProbe.Dispose();
         _contrastProbe = null;
     }
 

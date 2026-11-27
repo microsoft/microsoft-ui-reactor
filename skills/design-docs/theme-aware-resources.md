@@ -144,7 +144,7 @@ Border(content)
 
 ## High Contrast
 
-In High Contrast mode, WinUI maps theme resources to one of 8 system color brushes. When you use `Theme.*` tokens, HC resolution happens automatically: theme modifiers such as `.Background(Theme.CardBackground)` are native `{ThemeResource}` references, and `.Resources(...)` overrides, `ThemeRef.Resolve(key, isDark)` and validation styling ask WinUI for the brush, which picks the `HighContrast` dictionary while a contrast theme is on, whatever `isDark` says. Those resolved brushes are picked once per render, so each host listens for WinUI applying a contrast theme and re-renders then, memoized subtrees included (issue #1506). It waits for WinUI rather than reacting to `UISettings.ColorValuesChanged`, which Windows raises before WinUI has switched.
+In High Contrast mode, WinUI maps theme resources to one of 8 system color brushes. When you use `Theme.*` tokens, HC resolution happens automatically: theme modifiers such as `.Background(Theme.CardBackground)` are native `{ThemeResource}` references, and `.Resources(...)` overrides, `ThemeRef.Resolve(key, isDark)` and validation styling ask WinUI for the brush, which picks the `HighContrast` dictionary while a contrast theme is on, whatever `isDark` says. Those resolved brushes are picked once per render, so each host listens for WinUI applying a contrast theme and re-renders then, memoized subtrees included (issue #1506). `UISettings.ColorValuesChanged` arrives before WinUI has switched, so a render it triggers can still pick the old brush; the host also waits for WinUI to apply the contrast theme and refreshes then.
 
 **Allowed HC brushes:**
 

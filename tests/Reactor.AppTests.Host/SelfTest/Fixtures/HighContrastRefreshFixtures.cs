@@ -14,8 +14,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// out of a Windows contrast theme. <see cref="HighContrastProbe"/> hears WinUI apply the theme.
 /// A real contrast switch is a desktop-wide setting, so these fixtures never make one: the first
 /// proves WinUI updates the probe when it applies a theme (a Light/Dark switch, the same theme
-/// walk), and the others play what the probe reads (<see cref="HighContrastProbe.ReaderForTest"/>)
-/// and check what each host does with it.
+/// walk), and the others play what the probes read (<see cref="HighContrastProbe.ReaderForTest"/>)
+/// and check what each host does with it. All of them assume the desktop is not in a contrast
+/// theme, and skip when it is.
 /// </summary>
 internal static class HighContrastRefreshFixtures
 {
@@ -29,6 +30,7 @@ internal static class HighContrastRefreshFixtures
     {
         public override async Task RunAsync()
         {
+            if (SkipInContrastTheme(H, "HCProbe_FollowsWinUITheme")) return;
             using var host = new ReactorHostControl();
             host.Mount(_ => TextBlock("contrast-probe"));
             var parent = new Border { RequestedTheme = ElementTheme.Light, Child = host };
@@ -66,14 +68,16 @@ internal static class HighContrastRefreshFixtures
 
     /// <summary>
     /// An embedded <see cref="ReactorHostControl"/>: a contrast switch WinUI applied re-resolves
-    /// <c>.Resources(...)</c> overrides, memoized ones included, once per switch. The app brush
-    /// is edited first without notifying, so "RerenderAloneIsStale" is the negative control: an
-    /// ordinary re-render, and a probe change that is not a contrast switch, leave it stale.
+    /// <c>.Resources(...)</c> overrides, memoized ones included, and <see cref="ThemeRef.Resolve(string, bool)"/>
+    /// in a render, once per switch. The app brush is edited first without notifying, so
+    /// "RerenderAloneIsStale" is the negative control: an ordinary re-render, and a probe change
+    /// that is not a contrast switch, leave both stale.
     /// </summary>
     internal class HostControlRefreshesOnContrastSwitch(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            if (SkipInContrastTheme(H, "HCHostCtrl_RefreshesOnContrastSwitch")) return;
             var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
             Application.Current.Resources.MergedDictionaries.Add(resources);
             ThemeRef.InvalidateResolutionCache();
@@ -84,7 +88,10 @@ internal static class HighContrastRefreshFixtures
             {
                 var (tick, set) = ctx.UseState(0);
                 setTick = set;
-                return VStack(TextBlock($"tick:{tick}"), MemoizedOverride());
+                return VStack(
+                    TextBlock($"tick:{tick}"),
+                    MemoizedOverride(),
+                    TextBlock("RenderResolved").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!));
             });
             H.SetContent(new Border { Child = host });
             try
@@ -93,7 +100,8 @@ internal static class HighContrastRefreshFixtures
                 var probe = host.ContrastProbeForTest;
                 H.Check("HCHostCtrl_ProbeAttached", probe is not null);
                 if (probe is null) return;
-                H.Check("HCHostCtrl_InitialRed", OverrideColor(host.Content) == Colors.Red, $"color={OverrideColor(host.Content)}");
+                H.Check("HCHostCtrl_InitialRed", OverrideColor(host) == Colors.Red && RenderResolvedColor(host) == Colors.Red,
+                    $"override={OverrideColor(host)} resolved={RenderResolvedColor(host)}");
 
                 resources[AppKey] = new SolidColorBrush(Colors.Blue);
                 setTick!(1);
@@ -101,40 +109,41 @@ internal static class HighContrastRefreshFixtures
                 probe.SimulateChangeForTest();   // WinUI changed the probe, still out of contrast
                 await YieldLowAsync();
                 await host.WaitForIdleAsync();
-                H.Check("HCHostCtrl_RerenderAloneIsStale", OverrideColor(host.Content) == Colors.Red
-                    && host.ContrastRefreshCountForTest == 0,
-                    $"color={OverrideColor(host.Content)} refreshes={host.ContrastRefreshCountForTest}");
+                H.Check("HCHostCtrl_RerenderAloneIsStale", OverrideColor(host) == Colors.Red
+                    && RenderResolvedColor(host) == Colors.Red && host.ContrastRefreshCountForTest == 0,
+                    $"override={OverrideColor(host)} resolved={RenderResolvedColor(host)} refreshes={host.ContrastRefreshCountForTest}");
 
-                probe.ReaderForTest = static () => true;
+                int reads = 0;
+                HighContrastProbe.ReaderForTest = () => { reads++; return true; };
                 probe.SimulateChangeForTest();
                 // A second callback in the same theme walk is one check.
                 probe.SimulateChangeForTest();
                 await YieldLowAsync();
                 await host.WaitForIdleAsync();
-                H.Check("HCHostCtrl_ContrastOnRefreshesMemoizedOverride", OverrideColor(host.Content) == Colors.Blue,
-                    $"color={OverrideColor(host.Content)}");
-                H.Check("HCHostCtrl_OneRefreshPerSwitch", host.ContrastRefreshCountForTest == 1,
-                    $"refreshes={host.ContrastRefreshCountForTest}");
+                H.Check("HCHostCtrl_ContrastOnRefreshes", OverrideColor(host) == Colors.Blue && RenderResolvedColor(host) == Colors.Blue,
+                    $"override={OverrideColor(host)} resolved={RenderResolvedColor(host)}");
+                H.Check("HCHostCtrl_OneCheckPerThemeWalk", host.ContrastRefreshCountForTest == 1 && reads == 1,
+                    $"refreshes={host.ContrastRefreshCountForTest} reads={reads}");
 
                 resources[AppKey] = new SolidColorBrush(Colors.Green);
                 probe.SimulateChangeForTest();   // still in contrast: nothing switched
                 await YieldLowAsync();
                 await host.WaitForIdleAsync();
                 H.Check("HCHostCtrl_SameStateDoesNotRefresh", host.ContrastRefreshCountForTest == 1
-                    && OverrideColor(host.Content) == Colors.Blue,
-                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(host.Content)}");
+                    && OverrideColor(host) == Colors.Blue,
+                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(host)}");
 
-                probe.ReaderForTest = static () => false;
+                HighContrastProbe.ReaderForTest = static () => false;
                 probe.SimulateChangeForTest();
                 await YieldLowAsync();
                 await host.WaitForIdleAsync();
                 H.Check("HCHostCtrl_ContrastOffRefreshes", host.ContrastRefreshCountForTest == 2
-                    && OverrideColor(host.Content) == Colors.Green,
-                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(host.Content)}");
+                    && OverrideColor(host) == Colors.Green,
+                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(host)}");
             }
             finally
             {
-                if (host.ContrastProbeForTest is { } p) p.ReaderForTest = null;
+                HighContrastProbe.ReaderForTest = null;
                 H.SetContent(null);
                 Application.Current.Resources.MergedDictionaries.Remove(resources);
                 ThemeRef.InvalidateResolutionCache();
@@ -144,13 +153,16 @@ internal static class HighContrastRefreshFixtures
 
     /// <summary>
     /// A window <see cref="ReactorHost"/> with no chart (issue #1506's second gap: it heard no
-    /// palette change at all). Its probe lives on the content root, follows a root swap, and goes
-    /// with the host.
+    /// palette change at all). Its probe lives on the content root, follows a root swap, goes when
+    /// the host renders nothing, and goes with the host. A switch the old probe could not report
+    /// (its check still queued when the root was swapped, or no probe at all) still refreshes the
+    /// host: the next probe starts from the state the host last rendered with.
     /// </summary>
     internal class WindowHostRefreshesOnContrastSwitch(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            if (SkipInContrastTheme(H, "HCWindow_RefreshesOnContrastSwitch")) return;
             var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
             Application.Current.Resources.MergedDictionaries.Add(resources);
             ThemeRef.InvalidateResolutionCache();
@@ -161,14 +173,17 @@ internal static class HighContrastRefreshFixtures
             try
             {
                 using var host = new ReactorHost(H.Window) { ContentTarget = target };
-                Action<bool>? setGrid = null;
+                Action<int>? setRoot = null;
                 host.Mount(ctx =>
                 {
-                    var (grid, set) = ctx.UseState(false);
-                    setGrid = set;
-                    return grid
-                        ? Border(TextBlock("swapped"))
-                        : VStack(TextBlock("window"), MemoizedOverride());
+                    var (root, set) = ctx.UseState(0);
+                    setRoot = set;
+                    return root switch
+                    {
+                        0 => VStack(TextBlock("window"), MemoizedOverride()),
+                        1 => Border(VStack(TextBlock("swapped"), MemoizedOverride())),
+                        _ => Empty(),
+                    };
                 });
                 await host.WaitForIdleAsync();
 
@@ -179,29 +194,52 @@ internal static class HighContrastRefreshFixtures
                 if (probe is null || root is null) return;
 
                 resources[AppKey] = new SolidColorBrush(Colors.Blue);
-                probe.ReaderForTest = static () => true;
+                HighContrastProbe.ReaderForTest = static () => true;
                 probe.SimulateChangeForTest();
                 await YieldLowAsync();
                 await host.WaitForIdleAsync();
                 H.Check("HCWindow_ContrastOnRefreshesMemoizedOverride", host.ContrastRefreshCountForTest == 1
-                    && OverrideColor(target.Child) == Colors.Blue,
-                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(target.Child)}");
-                probe.ReaderForTest = null;
+                    && OverrideColor(target) == Colors.Blue,
+                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(target)}");
 
-                setGrid!(true);
-                await host.WaitForIdleAsync();
+                // WinUI switches back, and a render swaps the root before the old probe's check
+                // runs (a Normal-priority render goes ahead of the Low-priority check).
+                resources[AppKey] = new SolidColorBrush(Colors.Green);
+                HighContrastProbe.ReaderForTest = static () => false;
+                probe.SimulateChangeForTest();
+                setRoot!(1);
+                await SettleAsync(host);
                 var swapped = target.Child as FrameworkElement;
                 var moved = host.ContrastProbeForTest;
                 H.Check("HCWindow_ProbeFollowsRootSwap", swapped is Border && moved is not null && ReferenceEquals(moved.Owner, swapped)
                     && HoldsProbe(swapped) && !HoldsProbe(root),
                     $"root={swapped?.GetType().Name ?? "none"} owner={moved?.Owner?.GetType().Name ?? "none"} oldHolds={HoldsProbe(root)}");
+                H.Check("HCWindow_SwitchPendingAtRootSwapRefreshes", host.ContrastRefreshCountForTest == 2
+                    && OverrideColor(target) == Colors.Green,
+                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(target)}");
+                if (swapped is null) return;
 
+                setRoot!(2);
+                await host.WaitForIdleAsync();
+                H.Check("HCWindow_EmptyRenderRemovesProbe", host.ContrastProbeForTest is null && !HoldsProbe(swapped));
+
+                // A switch while the host shows nothing reaches the next root.
+                resources[AppKey] = new SolidColorBrush(Colors.Yellow);
+                HighContrastProbe.ReaderForTest = static () => true;
+                setRoot!(0);
+                await SettleAsync(host);
+                H.Check("HCWindow_SwitchWithoutProbeRefreshesNextRoot", host.ContrastRefreshCountForTest == 3
+                    && host.ContrastProbeForTest is not null && OverrideColor(target) == Colors.Yellow,
+                    $"refreshes={host.ContrastRefreshCountForTest} color={OverrideColor(target)}");
+
+                var last = host.ContrastProbeForTest?.Owner;
                 host.Dispose();
                 await YieldLowAsync();
-                H.Check("HCWindow_DisposeRemovesProbe", host.ContrastProbeForTest is null && swapped is not null && !HoldsProbe(swapped));
+                H.Check("HCWindow_DisposeRemovesProbe", host.ContrastProbeForTest is null && last is not null && !HoldsProbe(last));
             }
             finally
             {
+                HighContrastProbe.ReaderForTest = null;
                 ReactorApp.ActiveHostInternal = previousActiveHost;
                 H.SetContent(null);
                 Application.Current.Resources.MergedDictionaries.Remove(resources);
@@ -210,23 +248,54 @@ internal static class HighContrastRefreshFixtures
         }
     }
 
+    // In a Windows contrast theme WinUI ignores RequestedTheme and the probes start in contrast,
+    // so the plays above would not be switches.
+    private static bool SkipInContrastTheme(Harness h, string name)
+    {
+        if (!new global::Windows.UI.ViewManagement.AccessibilitySettings().HighContrast) return false;
+        h.Skip(name, "a Windows contrast theme is on");
+        return true;
+    }
+
     // A reference-equal memoized subtree: an ordinary re-render skips it, so only a
     // resource-refresh pass re-resolves its override.
     private static Element MemoizedOverride()
         => Memo("contrastOverride", () => Border(TextBlock("override"))
             .Resources(r => r.Set("ContrastProbeBrush", Theme.Ref(AppKey))));
 
-    private static global::Windows.UI.Color? OverrideColor(object? content)
-        => content is Panel { Children.Count: > 1 } panel
-           && panel.Children[1] is Border border
-           && border.Resources.TryGetValue("ContrastProbeBrush", out var value)
-           && value is SolidColorBrush brush
+    private static global::Windows.UI.Color? OverrideColor(DependencyObject? node)
+    {
+        if (node is FrameworkElement fe && fe.Resources is { } res
+            && res.TryGetValue("ContrastProbeBrush", out var value) && value is SolidColorBrush brush)
+            return brush.Color;
+        // The element tree, not the visual tree: a host that has not been laid out yet has no
+        // visual children.
+        return node switch
+        {
+            Panel panel => panel.Children.Select(OverrideColor).FirstOrDefault(c => c is not null),
+            Border border => OverrideColor(border.Child),
+            ContentControl content => OverrideColor(content.Content as DependencyObject),
+            _ => null,
+        };
+    }
+
+    private static global::Windows.UI.Color? RenderResolvedColor(ReactorHostControl host)
+        => host.Content is Panel { Children.Count: > 2 } panel
+           && panel.Children[2] is TextBlock { Foreground: SolidColorBrush brush }
             ? brush.Color
             : null;
 
     private static bool HoldsProbe(FrameworkElement element)
         => element.Resources is { } resources
            && resources.MergedDictionaries.Any(d => d.ContainsKey(HighContrastProbe.BrushKey));
+
+    // The new probe's check is queued at Low priority by the render, after the host went idle.
+    private static async Task SettleAsync(ReactorHost host)
+    {
+        await host.WaitForIdleAsync();
+        await YieldLowAsync();
+        await host.WaitForIdleAsync();
+    }
 
     private static Task YieldLowAsync()
     {

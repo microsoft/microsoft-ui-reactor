@@ -59,24 +59,29 @@ internal sealed class HighContrastProbe : IDisposable
     private bool _checkPending;
     private bool _disposed;
 
-    private HighContrastProbe(FrameworkElement owner, ResourceDictionary dictionary, SolidColorBrush brush, Action onContrastChanged)
+    private HighContrastProbe(FrameworkElement owner, ResourceDictionary dictionary, SolidColorBrush brush, Action onContrastChanged, bool? renderedHighContrast)
     {
         _owner = owner;
         _dictionary = dictionary;
         _brush = brush;
         _onContrastChanged = onContrastChanged;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
-        _lastHighContrast = IsHighContrast;
+        _lastHighContrast = renderedHighContrast ?? IsHighContrast;
         _token = brush.RegisterPropertyChangedCallback(SolidColorBrush.ColorProperty, OnColorChanged);
+        // A probe that replaces another starts from what the host last rendered with, and checks
+        // on a later turn: a switch WinUI applied while the old probe could not report it (its
+        // check still queued, or its element off the tree) still refreshes the host.
+        if (renderedHighContrast is not null) ScheduleCheck();
     }
 
     /// <summary>
     /// Merges a probe into <paramref name="owner"/>'s resources, calling
     /// <paramref name="onContrastChanged"/> on the UI thread each time WinUI switches it into or
     /// out of a contrast theme. Returns null, and leaves the element unchanged, when WinUI rejects
-    /// it; the host then does without.
+    /// it; the host then does without. Pass <paramref name="renderedHighContrast"/> when the host
+    /// has rendered before (<see cref="LastHighContrast"/> of the probe this one replaces).
     /// </summary>
-    internal static HighContrastProbe? TryAttach(FrameworkElement owner, Action onContrastChanged)
+    internal static HighContrastProbe? TryAttach(FrameworkElement owner, Action onContrastChanged, bool? renderedHighContrast = null)
     {
         ResourceDictionary? dictionary = null;
         ResourceDictionary? resources = null;
@@ -86,7 +91,7 @@ internal sealed class HighContrastProbe : IDisposable
             resources = owner.Resources ??= new ResourceDictionary();
             resources.MergedDictionaries.Add(dictionary);
             var brush = (SolidColorBrush)dictionary[BrushKey];
-            return new HighContrastProbe(owner, dictionary, brush, onContrastChanged);
+            return new HighContrastProbe(owner, dictionary, brush, onContrastChanged, renderedHighContrast);
         }
         catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException or InvalidCastException or ArgumentException or XamlParseException)
         {
@@ -106,11 +111,15 @@ internal sealed class HighContrastProbe : IDisposable
     /// <summary>Whether WinUI resolves the probe from its <c>HighContrast</c> theme dictionary.</summary>
     internal bool IsHighContrast => ReaderForTest is { } reader ? reader() : _brush.Color == ContrastColor;
 
+    /// <summary>The contrast state the host was last refreshed for.</summary>
+    internal bool LastHighContrast => _lastHighContrast;
+
     /// <summary>
-    /// Test seam: replaces what the probe reads from WinUI, so a selftest can play WinUI applying
-    /// a contrast theme without changing the desktop. <c>null</c> restores the real read.
+    /// Test seam: replaces what every probe reads from WinUI, so a selftest can play WinUI
+    /// applying a contrast theme without changing the desktop. <c>null</c> restores the real read.
+    /// UI thread only.
     /// </summary>
-    internal Func<bool>? ReaderForTest { get; set; }
+    internal static Func<bool>? ReaderForTest { get; set; }
 
     /// <summary>Test seam: the color WinUI resolved, one of the three probe colors.</summary>
     internal global::Windows.UI.Color ColorForTest => _brush.Color;
@@ -124,6 +133,11 @@ internal sealed class HighContrastProbe : IDisposable
     private void OnColorChanged(DependencyObject sender, DependencyProperty property)
     {
         ChangeCountForTest++;
+        ScheduleCheck();
+    }
+
+    private void ScheduleCheck()
+    {
         if (_disposed || _checkPending) return;
         _checkPending = true;
         // WinUI raises the callback while it applies the theme: check on a later turn, once it
