@@ -280,7 +280,7 @@ public sealed partial class Reconciler
         ApplySizeAndAlignmentModifiers(fe, oldM, m);
         ApplyOpacityTransformAndVisibilityModifiers(fe, oldM, m);
         ApplyToolTipAndFlyoutModifiers(fe, oldM, m, requestRerender);
-        ApplyIsEnabledModifier(fe, oldM, m);
+        ApplyIsEnabledAndCornerRadiusModifiers(fe, oldM, m);
         ApplyBorderModifiers(fe, oldM, m, ownsControl);
         ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate);
         ApplyAutomationAndFocusModifiers(fe, oldM, m);
@@ -533,37 +533,9 @@ public sealed partial class Reconciler
             fe.ClearValue(UIElement.ContextFlyoutProperty);
     }
 
-    /// <summary>IsEnabled.</summary>
-    private static void ApplyIsEnabledModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
-    {
-        // IsEnabled (on Control)
-        if (m.IsEnabled.HasValue && m.IsEnabled != oldM?.IsEnabled && fe is WinUI.Control enCtrl)
-            enCtrl.IsEnabled = m.IsEnabled.Value;
-        else if (!m.IsEnabled.HasValue && oldM?.IsEnabled.HasValue == true && fe is WinUI.Control enCtrl2)
-            enCtrl2.ClearValue(WinUI.Control.IsEnabledProperty);
-    }
-
-    /// <summary>CornerRadius, BorderBrush, and BorderThickness with its BiDi-aware inline overlay (BorderInlineStart).</summary>
+    /// <summary>BorderBrush and BorderThickness with its BiDi-aware inline overlay (BorderInlineStart).</summary>
     private void ApplyBorderModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, bool ownsControl)
     {
-        // CornerRadius (on Control, Border, Grid, StackPanel, and RelativePanel)
-        if (m.CornerRadius.HasValue && m.CornerRadius != oldM?.CornerRadius)
-        {
-            if (fe is WinUI.Control crCtrl) crCtrl.CornerRadius = m.CornerRadius.Value;
-            else if (fe is WinUI.Border crBdr) crBdr.CornerRadius = m.CornerRadius.Value;
-            else if (fe is WinUI.Grid crGrid) crGrid.CornerRadius = m.CornerRadius.Value;
-            else if (fe is WinUI.StackPanel crStack) crStack.CornerRadius = m.CornerRadius.Value;
-            else if (fe is WinUI.RelativePanel crRelative) crRelative.CornerRadius = m.CornerRadius.Value;
-        }
-        else if (!m.CornerRadius.HasValue && oldM?.CornerRadius.HasValue == true)
-        {
-            if (fe is WinUI.Control crCtrl) crCtrl.ClearValue(WinUI.Control.CornerRadiusProperty);
-            else if (fe is WinUI.Border crBdr) crBdr.ClearValue(WinUI.Border.CornerRadiusProperty);
-            else if (fe is WinUI.Grid crGrid) crGrid.ClearValue(WinUI.Grid.CornerRadiusProperty);
-            else if (fe is WinUI.StackPanel crStack) crStack.ClearValue(WinUI.StackPanel.CornerRadiusProperty);
-            else if (fe is WinUI.RelativePanel crRelative) crRelative.ClearValue(WinUI.RelativePanel.CornerRadiusProperty);
-        }
-
         // BorderBrush / BorderThickness (Control, Border, and concrete panels)
         if (!ReferenceEquals(m.BorderBrush, oldM?.BorderBrush)
             && _reconcilingElement?.InteractionStates is not null

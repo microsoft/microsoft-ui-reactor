@@ -75,6 +75,13 @@ internal static class ModifierEmitter
                 ["FontSize"] = ["fsCtrl", "fsTb"],
                 ["FontWeight"] = ["fwCtrl", "fwTb"],
             }),
+        new("ApplyIsEnabledAndCornerRadiusModifiers", "IsEnabled and CornerRadius.",
+            First: "IsEnabled", Last: "CornerRadius",
+            InlineGates: new Dictionary<string, (string Set, string Clear)> { ["IsEnabled"] = ("enCtrl", "enCtrl2") },
+            ReceiverChains: new Dictionary<string, string[]>
+            {
+                ["CornerRadius"] = ["crCtrl", "crBdr", "crGrid", "crStack", "crRelative"],
+            }),
     ];
 
     /// <summary>

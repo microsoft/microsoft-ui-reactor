@@ -927,7 +927,12 @@ hold hand-coded arms: `CornerRadius` opens `ApplyBorderModifiers`, `IsVisible` c
 helper `ApplyOpacityTransformAndVisibilityModifiers`, and `ToolTipPlacement` sits inside
 `ApplyToolTipAndFlyoutModifiers`. Whole-helper generation reaches them only once each is moved into a
 helper of its own at the same point in the call sequence, so the apply order does not move. Each of
-those PRs makes that extraction first.
+those PRs makes that extraction first. 3d moves the `CornerRadius` arm out of `ApplyBorderModifiers`
+into the helper that held `IsEnabled`, which is called just before it and whose slot precedes it in
+schema order, and generates that helper whole as `ApplyIsEnabledAndCornerRadiusModifiers`
+(`IsEnabled` through `InlineGates`, `CornerRadius` as a five-receiver chain). The apply order does
+not move, and the generated method is token-identical to the two removed arms once comments are
+ignored. `Foreground` is hand-coded (#1687) and stays in `ApplyBackgroundAndForegroundModifiers`.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
