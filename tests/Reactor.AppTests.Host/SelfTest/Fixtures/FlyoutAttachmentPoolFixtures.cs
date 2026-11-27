@@ -217,4 +217,51 @@ public static class FlyoutAttachmentPoolFixtures
             H.Check("WithFlyoutHandoff_Phase1_ModifierContentUnmounted", s_cleanupCount == 1);
         }
     }
+
+    // The button's own flyout: argument arrives while .WithFlyout stays declared, then the modifier
+    // is dropped. The argument's flyout keeps its content throughout, and the modifier's content
+    // is released only when the modifier goes.
+    internal class WithFlyoutKeptBesideButtonFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static Element ModifierContent(string text) =>
+            TextBlock(text).OnUnmount(static _ => global::System.Threading.Interlocked.Increment(ref s_cleanupCount));
+
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return VStack(
+                    Button("AddOwnFlyout", () => set(1)),
+                    Button("DropModifierFlyout", () => set(2)),
+                    phase switch
+                    {
+                        // The modifier's content changes as the argument arrives, so patching the
+                        // slot's flyout instead of the modifier's own would overwrite the argument's.
+                        0 => DropDownButton("flyout-beside").WithFlyout(ModifierContent("flyout-beside-mod-0")),
+                        1 => DropDownButton("flyout-beside", TextBlock("flyout-beside-own")).WithFlyout(ModifierContent("flyout-beside-mod-1")),
+                        _ => DropDownButton("flyout-beside", TextBlock("flyout-beside-own")),
+                    });
+            });
+
+            await Harness.Render();
+            var dropDown = H.FindButton("flyout-beside");
+            H.Check("WithFlyoutBeside_Phase0_ModifierFlyout", dropDown?.Flyout is WinUI.Flyout);
+
+            H.ClickButton("AddOwnFlyout");
+            await Harness.Render();
+            H.Check("WithFlyoutBeside_Phase1_OwnFlyoutInstalled",
+                dropDown?.Flyout is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-beside-own" } });
+            H.Check("WithFlyoutBeside_Phase1_ModifierContentStillMounted", s_cleanupCount == 0);
+
+            H.ClickButton("DropModifierFlyout");
+            await Harness.Render();
+            H.Check("WithFlyoutBeside_Phase2_SameControl", ReferenceEquals(dropDown, H.FindButton("flyout-beside")));
+            H.Check("WithFlyoutBeside_Phase2_OwnFlyoutKept",
+                dropDown?.Flyout is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-beside-own" } });
+            H.Check("WithFlyoutBeside_Phase2_ModifierContentUnmounted", s_cleanupCount == 1);
+        }
+    }
 }

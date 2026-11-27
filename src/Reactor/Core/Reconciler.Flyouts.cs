@@ -30,13 +30,12 @@ public sealed partial class Reconciler
     /// </summary>
     private void ApplyFlyoutAttachment(FrameworkElement fe, Element? oldFlyoutEl, Element newFlyoutEl, Action requestRerender)
     {
-        // Read the existing flyout from whichever slot SetFlyoutOnControl writes to.
-        var existingFlyout = GetFlyoutOnControl(fe);
-
-        // If we have an existing flyout and old element, try to update in place
-        if (oldFlyoutEl is not null && existingFlyout is not null)
+        // Patch the flyout this modifier installed, even when another writer (a button's own
+        // flyout: argument, a flyout decorator) has since taken the slot. That writer's flyout is
+        // left alone, and the modifier's content stays reconciled until it is released (#1753).
+        if (oldFlyoutEl is not null && TryGetReactorState(fe, out var state) && state.ModifierFlyout is { } installed)
         {
-            UpdateFlyoutInPlace(existingFlyout, oldFlyoutEl, newFlyoutEl, requestRerender);
+            UpdateFlyoutInPlace(installed, oldFlyoutEl, newFlyoutEl, requestRerender);
             return;
         }
 
@@ -202,7 +201,7 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Unmount counterpart of the <c>.WithFlyout(...)</c> unset arm in
-    /// <c>ApplyToolTipAndFlyoutModifiers</c>: a control leaving the tree takes its modifier
+    /// <c>ApplyFlyoutModifiers</c>: a control leaving the tree takes its modifier
     /// flyout's content with it, so the content's components run their cleanups and a pooled
     /// control holds no flyout from its previous renter (issue #1753).
     /// </summary>
