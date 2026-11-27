@@ -84,22 +84,27 @@ describe("legacy home-page fragments", () => {
     return page;
   };
 
-  test("a section the home page lacks goes to the same section on /get-started", () => {
+  test("a section that moved to another page goes to that page", () => {
     const page = tab({ hash: "#minimal-project-setup", search: "?q=1" });
-    assert.equal(page.went, `${BASE}/get-started?q=1#minimal-project-setup`);
+    assert.equal(page.went, `${BASE}/get-started/install?q=1#minimal-project-setup`);
+  });
+
+  test("a renamed section keeps the new name on /get-started", () => {
+    assert.equal(tab({ hash: "#quick-look" }).went, `${BASE}/get-started#a-first-look`);
   });
 
   test("the home page's own anchors and a bare root stay put", () => {
     assert.equal(tab({ hash: "#guides-title", ids: ["guides-title"] }).went, null);
     assert.equal(tab({ hash: "" }).went, null);
-    assert.equal(tab({ pathname: BASE, hash: "#why-reactor" }).went, `${BASE}/get-started#why-reactor`);
+    assert.equal(tab({ pathname: BASE, hash: "#why-reactor" }).went, `${BASE}/get-started#why-pick-reactor`);
+    assert.equal(tab({ hash: "#how-it-works" }).went, `${BASE}/get-started#how-it-works`);
   });
 
   test("a fragment set after the page loaded is forwarded too", () => {
     const page = tab();
     page.location.hash = "#why-reactor";
     page.fire("hashchange");
-    assert.equal(page.went, `${BASE}/get-started#why-reactor`);
+    assert.equal(page.went, `${BASE}/get-started#why-pick-reactor`);
   });
 
   test("home, then a guide, then a legacy home link through the client router", () => {
@@ -116,7 +121,7 @@ describe("legacy home-page fragments", () => {
     page.ids = [];
     page.run(); // the router skips an inline script that already ran; this must stay a no-op
     page.fire("astro:page-load");
-    assert.equal(page.went, `${BASE}/get-started#minimal-project-setup`);
+    assert.equal(page.went, `${BASE}/get-started/install#minimal-project-setup`);
     assert.equal(page.listeners.hashchange.length, 1, "listeners are registered once");
   });
 });
