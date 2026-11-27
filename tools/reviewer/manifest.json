@@ -55,7 +55,8 @@
         "src/Reactor/Core/RenderContext.cs",
         "src/Reactor/Core/Element.cs",
         "src/Reactor/Core/Component.cs",
-        "src/Reactor/Core/ElementPool.cs"
+        "src/Reactor/Core/ElementPool.cs",
+        "src/Reactor/Core/ElementPool.Generated.cs"
       ],
       "description": "Core reconciler and render loop \u2014 shared mutable state, tree diffing, pooling"
     },
@@ -149,6 +150,7 @@
         "src/Reactor/Core/ContextExtensions.cs",
         "src/Reactor/Core/ChildCollection.cs",
         "src/Reactor/Core/ElementPool.cs",
+        "src/Reactor/Core/ElementPool.Generated.cs",
         "src/Reactor/Core/ElementFactory.cs",
         "src/Reactor/Core/ObservableTreeTracker.cs",
         "src/Reactor/Core/PersistedStateCache.cs"
@@ -912,7 +914,8 @@
         "src/Reactor/Core/RenderContext.cs",
         "src/Reactor/Core/Element.cs",
         "src/Reactor/Core/Component.cs",
-        "src/Reactor/Core/ElementPool.cs"
+        "src/Reactor/Core/ElementPool.cs",
+        "src/Reactor/Core/ElementPool.Generated.cs"
       ],
       "description": "Core reconciler and element infrastructure"
     },

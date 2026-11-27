@@ -71,9 +71,9 @@ internal readonly record struct CleanElementReset(
 }
 
 /// <summary>
-/// Reads <em>every</em> property reset in <c>ElementPool.CleanElement</c> — the FE-common block
-/// <b>and</b> the type-specific dispatch below it — and attributes each to the receiver type it
-/// runs on.
+/// Reads <em>every</em> property reset in <c>ElementPool.CleanElement</c> — its method-scope
+/// resets, the type-specific dispatch, and the generated <c>Reset*Modifiers</c> helpers it calls
+/// (spec 067 layer 5) spliced in at their calls — and attributes each to the receiver type it runs on.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -198,15 +198,30 @@ internal static class CleanElementScan
             [parameterName] = RootReceiver,
         };
 
-        // A DeclarationPatternSyntax is both `fe is Control c` and `case WinUI.Panel panel:`, so
-        // one walk collects the FE-common narrowing chain (including the nested Grid / StackPanel
-        // arms) and the type dispatch.
+        // Spec 067 layer 5: the modifier-backed resets are generated into helpers CleanElement
+        // calls. Each helper's body is spliced in right after its call, so a reset there keeps its
+        // place in source order, and its FrameworkElement parameter binds like CleanElement's own.
+        var helpers = ReadGeneratedResetHelpers(method, parameterName);
+        foreach (var helper in helpers.Values)
+            Bind(bindings, helper.ParameterList.Parameters[0].Identifier.Text, RootReceiver);
+        var nodes = new List<(Microsoft.CodeAnalysis.SyntaxNode Node, int Position)>();
+        foreach (var node in method.DescendantNodes())
+        {
+            nodes.Add((node, nodes.Count));
+            if (helpers.TryGetValue(node, out var inlined))
+                foreach (var helperNode in inlined.DescendantNodes())
+                    nodes.Add((helperNode, nodes.Count));
+        }
+
+        // A DeclarationPatternSyntax is both `fe is WinUI.Control poolControl` and
+        // `case WinUI.Panel panel:`, so one walk collects the generated helpers' per-receiver blocks
+        // and CleanElement's own type dispatch.
         //
         // The Where is the filter, not a formality: a discard designation (`fe is Control _`)
         // introduces no local, so it can never be a reset's receiver and must not reach Bind.
         // Filtering there rather than inside the body keeps the enumerated sequence exactly the
         // set of bindings this loop records.
-        var declaredReceivers = method.DescendantNodes()
+        var declaredReceivers = nodes.Select(entry => entry.Node)
             .OfType<DeclarationPatternSyntax>()
             .Where(pattern => pattern.Designation is SingleVariableDesignationSyntax);
 
@@ -233,7 +248,7 @@ internal static class CleanElementScan
         var totalClearValueCalls = 0;
         var recognizedClearValueCalls = 0;
 
-        foreach (var node in method.DescendantNodes())
+        foreach (var (node, position) in nodes)
         {
             switch (node)
             {
@@ -250,7 +265,7 @@ internal static class CleanElementScan
                         Name: { } assignedProperty,
                     },
                 } assignment:
-                    Add(assignment.SpanStart, assignReceiver.Identifier.Text, owner: null,
+                    Add(position, assignReceiver.Identifier.Text, owner: null,
                         assignedProperty.Identifier.Text, ResetShape.Assignment, assignment.Right.ToString());
                     break;
 
@@ -273,7 +288,7 @@ internal static class CleanElementScan
                         {
                             recognizedClearValueCalls++;
                             var dependencyProperty = dp.Name.Identifier.Text;
-                            Add(invocation.SpanStart, clearReceiver.Identifier.Text,
+                            Add(position, clearReceiver.Identifier.Text,
                                 SimpleTypeName(dp.Expression),
                                 dependencyProperty.Substring(0, dependencyProperty.Length - "Property".Length),
                                 ResetShape.ClearValue);
@@ -287,7 +302,7 @@ internal static class CleanElementScan
                                  Expression: IdentifierNameSyntax collectionReceiver,
                              } collection)
                     {
-                        Add(invocation.SpanStart, collectionReceiver.Identifier.Text, owner: null,
+                        Add(position, collectionReceiver.Identifier.Text, owner: null,
                             collection.Name.Identifier.Text, ResetShape.CollectionClear);
                     }
 
@@ -358,6 +373,50 @@ internal static class CleanElementScan
         bindings[name] = type;
     }
 
+    /// <summary>
+    /// The generated helpers <paramref name="cleanElement"/> calls with its parameter, keyed by the
+    /// call, parsed from <c>ElementPool.Generated.cs</c> (spec 067 layer 5).
+    /// </summary>
+    /// <remarks>
+    /// A helper declared there but never called would put resets in the scan that never run, so
+    /// every one must be called exactly once, as a statement of its own.
+    /// </remarks>
+    private static Dictionary<Microsoft.CodeAnalysis.SyntaxNode, MethodDeclarationSyntax> ReadGeneratedResetHelpers(
+        MethodDeclarationSyntax cleanElement, string parameterName)
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+        var path = Path.Join(root!, "src", "Reactor", "Core", "ElementPool.Generated.cs");
+        Assert.True(File.Exists(path), $"ElementPool.Generated.cs not found at {path}");
+
+        var declared = CSharpSyntaxTree.ParseText(File.ReadAllText(path))
+            .GetRoot()
+            .DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .ToList();
+        Assert.NotEmpty(declared);
+
+        var helpers = new Dictionary<Microsoft.CodeAnalysis.SyntaxNode, MethodDeclarationSyntax>();
+        foreach (var method in declared)
+        {
+            var calls = cleanElement.DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Where(call => call.Expression is IdentifierNameSyntax name
+                    && name.Identifier.Text == method.Identifier.Text
+                    && call.ArgumentList.Arguments.Count == 1
+                    && call.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax argument
+                    && argument.Identifier.Text == parameterName
+                    && call.Parent is ExpressionStatementSyntax)
+                .ToList();
+            Assert.True(
+                calls.Count == 1,
+                $"ElementPool.Generated.cs declares {method.Identifier.Text}, which CleanElement calls with its " +
+                $"parameter, as a statement, {calls.Count} time(s), not once. Its resets are scanned as part of " +
+                "CleanElement, so it must run there exactly once.");
+            helpers.Add(calls[0], method);
+        }
+        return helpers;
+    }
     /// <summary>
     /// <c>CleanElement</c>'s declaration, parsed from <c>ElementPool.cs</c>.
     /// </summary>
@@ -446,9 +505,9 @@ internal static class CleanElementScan
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Issue #985: CleanElement's FE-common block clears the Padding / CornerRadius /
-    /// BorderThickness / BorderBrush / Background family through a Control | Border |
-    /// Panel/Grid/StackPanel | TextBlock chain that mirrors ApplyModifiers' receivers.
+    /// Issue #985: the pool clears the Padding / CornerRadius / BorderThickness / BorderBrush /
+    /// Background family on each receiver ApplyModifiers writes it to (Control, Border, Panel, Grid,
+    /// StackPanel, TextBlock), now through the generated <c>ResetStateModifiers</c>.
     /// <c>Border.PaddingProperty</c> and friends are ordinary instance properties; without them
     /// here the attached scan would claim them and
     /// <c>Every_Reset_Attached_Property_Is_Classified</c> would fail on owners that have no

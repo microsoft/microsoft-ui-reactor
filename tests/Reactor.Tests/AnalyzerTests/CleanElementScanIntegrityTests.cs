@@ -23,28 +23,30 @@ public class CleanElementScanIntegrityTests
     /// <summary>
     /// The receiver/property pairs this scan exists to see, one per structural feature it has to
     /// get right. Each was measured to disappear from <see cref="CleanElementScan.Resets"/> when
-    /// its line is deleted from <c>ElementPool.CleanElement</c>.
+    /// its line is deleted from <c>ElementPool.CleanElement</c> or, since spec 067 layer 5, from the
+    /// generated helper it calls.
     /// </summary>
     [Theory]
     // Method scope, ClearValue — the shape the old FE-common-only scan already saw.
     [InlineData("FrameworkElement", "Margin")]
     // Method scope, direct assignment. The old scan matched assignments too, but only here.
     [InlineData("FrameworkElement", "Tag")]
-    // Braceless single-statement `if (fe is Control c) c.ClearValue(...)` — the shape a
-    // region-parsing scan gets wrong. IsEnabled is now the only property clearing this way.
+    // A generated helper's `if (fe is WinUI.Control poolControl)` block, reached only by splicing
+    // the helper in at its call (spec 067 layer 5).
     [InlineData("Control", "IsEnabled")]
-    // Ungated clears for the two properties #162 added. IsTabStop moved OUT of the `is Control`
-    // arm as part of this change (a pooled TextBlock was keeping a stale tab stop), so
+    // Ungated clears for the two properties #162 added. IsTabStop is cleared on the element, not
+    // under an `is Control` test (a pooled TextBlock was keeping a stale tab stop), so
     // FrameworkElement — not Control — is the receiver that must be found.
     [InlineData("FrameworkElement", "IsHitTestVisible")]
     [InlineData("FrameworkElement", "IsTabStop")]
-    // `else if` arm of the FE-common narrowing chain.
+    // A typed block of its own in the generated helper.
     [InlineData("Border", "BorderBrush")]
-    // Nested `if` inside the Panel arm — two levels of pattern binding.
+    // Grid and StackPanel blocks that follow the Panel block, each bound to its own type.
     [InlineData("Grid", "Padding")]
     [InlineData("StackPanel", "CornerRadius")]
     // Past the `switch (fe)` boundary the old scan stopped at. These seven are issue #1193's
-    // headline misses: every one is reset here and none was visible to any invariant.
+    // headline misses: every one is reset there and none was visible to any invariant. The two
+    // TextBlock fonts are now reset by generated helpers called inside the TextBlock arm.
     [InlineData("TextBlock", "FontFamily")]
     [InlineData("TextBlock", "FontSize")]
     [InlineData("TextBlock", "TextWrapping")]
@@ -191,8 +193,8 @@ public class CleanElementScanIntegrityTests
     /// bound for it, not to the enclosing arm.
     /// </summary>
     /// <remarks>
-    /// <c>Grid</c> and <c>StackPanel</c> are bound inside the <c>else if (fe is Panel resetPanel)</c>
-    /// arm, so their clears sit two pattern-bindings deep. Attributing them to <c>Panel</c> would
+    /// <c>Grid</c> and <c>StackPanel</c> get their own blocks next to the <c>Panel</c> block in the
+    /// generated <c>ResetStateModifiers</c>, and a <c>Grid</c> passes both tests. Attributing them to <c>Panel</c> would
     /// widen <c>Padding</c>'s and <c>CornerRadius</c>'s derived <c>poolResetGate</c> to every panel
     /// — including <c>Canvas</c>, which is poolable and declares neither property — and turn a
     /// correct MOD_002 into a false POOL_001 Warning. The <c>Panel</c> row is the control: it must

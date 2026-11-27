@@ -110,8 +110,7 @@ public class ModifierUnsetClearValueTests
         };
 
     /// <summary>
-    /// Direct <c>fe.PROP = …</c> writes allowed to remain in <c>CleanElement</c>'s FE-common
-    /// block, with the reason each one is not a styled-DP restore.
+    /// Direct <c>fe.PROP = …</c> writes allowed to remain in <c>CleanElement</c>, with the reason each one is not a styled-DP restore.
     /// </summary>
     private static readonly Dictionary<string, string> CleanElementAssignmentExceptions =
         new(StringComparer.Ordinal)
@@ -698,7 +697,8 @@ public class ModifierUnsetClearValueTests
     }
 
     /// <summary>
-    /// Dependency properties <c>CleanElement</c>'s FE-common block must release. Absence of a
+    /// Dependency properties <c>CleanElement</c> must release, directly or through its generated
+    /// <c>Reset*Modifiers</c> helpers. Absence of a
     /// default-value assignment is not enough on its own: deleting a <c>ClearValue</c> line
     /// outright leaves no offender to find, so the block is also pinned positively. Every
     /// entry corresponds to a common modifier whose <c>ApplyModifiers</c> unset arm clears
@@ -725,7 +725,7 @@ public class ModifierUnsetClearValueTests
         "FrameworkElement.FlowDirection",
         // Issue #1717 — the one modifier-backed FrameworkElement DP the pool used to miss.
         "FrameworkElement.RequestedTheme",
-        // Issue #985 — the receiver-gated chain that mirrors ApplyModifiers' Padding /
+        // Issue #985 — the per-receiver resets of ApplyModifiers' Padding /
         // CornerRadius / BorderThickness / BorderBrush / Background / IsEnabled writes.
         // Pinned per receiver, not per property: dropping only the Border or only the Panel
         // arm would leave the Control arm to satisfy a property-name-keyed list, and the leak
@@ -793,7 +793,7 @@ public class ModifierUnsetClearValueTests
 
         Assert.True(
             offenders.Count == 0,
-            "ElementPool.CleanElement's FE-common block resets these properties by assigning a " +
+            "ElementPool.CleanElement resets these properties by assigning a " +
             "default instead of calling ClearValue. A pooled control handed back with a local " +
             "value can never show its default style's value for that property, which defeats the " +
             $"pool's 'indistinguishable from a fresh control' contract (issue #952): [{string.Join(", ", offenders)}]");
@@ -873,7 +873,7 @@ public class ModifierUnsetClearValueTests
 
         Assert.True(
             missing.Count == 0,
-            "ElementPool.CleanElement's FE-common block no longer releases these dependency " +
+            "ElementPool.CleanElement (with its generated Reset*Modifiers helpers) no longer releases these dependency " +
             "properties, so a recycled control carries the previous renter's local value into " +
             $"its next mount (issue #952): [{string.Join(", ", missing)}]. If a reset was moved " +
             "or intentionally dropped, update CleanElementRequiredClears with the reason.");
@@ -973,14 +973,15 @@ public class ModifierUnsetClearValueTests
             "ElementPool.CleanElement does not release these dependency properties, even though " +
             "ModifierTable's control gate writes each one to a receiver the pool recycles — so " +
             "the next renter inherits the previous renter's local value, which outranks every " +
-            $"Style setter (issue #985): [{string.Join(", ", missing)}]. Add the ClearValue to " +
-            "CleanElement's FE-common block. This obligation is derived from the gate and the " +
+            $"Style setter (issue #985): [{string.Join(", ", missing)}]. Declare the receiver in ModifierSchema " +
+            "(its pool reset defaults to ClearValue) and run tools/Reactor.ModifierGen, which generates the " +
+            "clear into ElementPool.Generated.cs. Never hand-write it in CleanElement. This obligation is derived from the gate and the " +
             "poolable set, so it cannot be silenced by editing a list.");
     }
 
     /// <summary>
     /// Every modifier <c>ModifierTable</c> declares <c>poolReset: true</c> must be released
-    /// somewhere in <c>CleanElement</c>'s FE-common block. Derived from the table, so it has no
+    /// somewhere in <c>CleanElement</c> or its generated <c>Reset*Modifiers</c> helpers. Derived from the table, so it has no
     /// list to edit and cannot be silenced by deleting a row.
     /// </summary>
     /// <remarks>
@@ -1036,9 +1037,9 @@ public class ModifierUnsetClearValueTests
 
         Assert.True(
             missing.Count == 0,
-            "ModifierTable declares these modifiers pool-reset, but CleanElement's FE-common " +
-            $"block never releases them: [{string.Join(", ", missing)}]. Either add the " +
-            "ClearValue, or drop poolReset from the row — REACTOR_POOL_001 tells users the value " +
+            "ModifierTable declares these modifiers pool-reset, but CleanElement and its generated " +
+            $"Reset*Modifiers helpers never release them: [{string.Join(", ", missing)}]. Either fix the " +
+            "receiver's .Pool(...) in ModifierSchema and run tools/Reactor.ModifierGen, or drop poolReset from the row — REACTOR_POOL_001 tells users the value " +
             "is reset on pool return, so leaving them disagreeing makes the analyzer state " +
             "something false about the pool.");
     }

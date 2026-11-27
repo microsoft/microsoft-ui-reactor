@@ -228,9 +228,10 @@ class C
             Assert.True(
                 resetAttached.Contains(key),
                 $"'{key}' is in ModifierTable.AttachedProperties but is NOT cleared in " +
-                "ElementPool.CleanElement's FE-common block. REACTOR_POOL_001 claims the " +
-                "write is lost on pool return; if it isn't, the diagnostic is wrong. Either " +
-                "drop the entry or add the ClearValue for it in CleanElement.");
+                "ElementPool.CleanElement or its generated Reset*Modifiers helpers. REACTOR_POOL_001 " +
+                "claims the write is lost on pool return; if it isn't, the diagnostic is wrong. Either " +
+                "drop the entry, or declare the modifier's receiver in ModifierSchema and run " +
+                "tools/Reactor.ModifierGen (a property no modifier writes gets a hand-written clear in CleanElement).");
         }
     }
 
