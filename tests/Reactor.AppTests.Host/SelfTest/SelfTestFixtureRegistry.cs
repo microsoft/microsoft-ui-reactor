@@ -2402,6 +2402,7 @@ internal static class SelfTestFixtureRegistry
         ("ModifierMatrix_Automation", static harness => new ModifierMatrixFixtures.Execution(harness, "Automation")),
         ("ModifierMatrix_Accessibility", static harness => new ModifierMatrixFixtures.Execution(harness, "Accessibility")),
         ("ModifierMatrix_Negatives", static harness => new ModifierMatrixFixtures.Negatives(harness)),
+        ("ModifierPoolReset", static harness => new ModifierPoolResetFixture(harness)),
         ("OptionalEchoStrandRegression", static harness => new OptionalEchoStrandRegressionFixture.Execution(harness)),
         ("AutoSuggestBoxCollectedStateTick", static harness => new AutoSuggestBoxCollectedStateTickFixture.Execution(harness)),
         ("OptionalThemeInteraction", static harness => new OptionalThemeInteractionFixture.Execution(harness)),

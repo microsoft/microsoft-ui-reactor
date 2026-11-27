@@ -100,12 +100,21 @@ internal static class ModifierSchema
     private static ModifierSlot BoxReceivers(ModifierSlot slot, string property, bool text, ReceiverRole roles = ReceiverRole.Apply)
     {
         slot.On(roles, Control, property).On(roles, Border, property);
-        return text
+        (text
             ? slot.On(roles, StackPanel, property).On(roles, Grid, property)
                 .On(roles, RelativePanel, property).On(roles, TextBlock, property)
             : slot.On(roles, Grid, property).On(roles, StackPanel, property)
-                .On(roles, RelativePanel, property);
+                .On(roles, RelativePanel, property)).Pool(RelativePanel, PoolReset.NotReset, NeverPooled);
+        return slot;
     }
+
+    // Spec 067 §6.2: every receiver's pool reset defaults to ClearValue. These are the exceptions,
+    // each copied from what ElementPool.CleanElement does today.
+    private const string NeverPooled =
+        "ElementPool never recycles this type (it is not in PoolableTypes), so no renter can inherit the value.";
+    private const string TextBlockFontSizeInherits =
+        "TextBlock.FontSize inherits, so a clear would let a recycled TextBlock pick up an ancestor's size; "
+        + "CleanElement writes the WinUI default instead (spec 067 §6.2).";
 
     private static ModifierSlot Automation(string name, string property, ModifierBucket bucket, string clrType)
         => S(name, bucket, clrType, bucket == ModifierBucket.Accessibility ? ModifierFamily.Accessibility : ModifierFamily.Automation, ApplyShape.Attached)
@@ -231,6 +240,7 @@ internal static class ModifierSchema
             .Method("ForegroundModifier.Apply")
             .On(ReceiverRole.Apply | ReceiverRole.Theme, Control).On(ReceiverRole.Apply | ReceiverRole.Theme, TextBlock)
             .On(ReceiverRole.Apply | ReceiverRole.Theme, RichTextBlock).On(ReceiverRole.Apply | ReceiverRole.Theme, IconElement)
+            .Pool(IconElement, PoolReset.NotReset, NeverPooled)
             .Equality(SkipEquality.BrushValue, WriteEquality.Reference)
             .Analyzer(controlGate: ForegroundControlGate),
 
@@ -278,7 +288,8 @@ internal static class ModifierSchema
             .Equality(SkipEquality.FontFamilyValue, WriteEquality.Reference)
             .Analyzer(controlGate: ControlOrTextBlock),
         S("FontSize", ModifierBucket.Root, "double", ModifierFamily.Typography)
-            .On(ReceiverRole.Apply, Control).On(ReceiverRole.Apply, TextBlock).Analyzer(controlGate: ControlOrTextBlock),
+            .On(ReceiverRole.Apply, Control).On(ReceiverRole.Apply, TextBlock).Analyzer(controlGate: ControlOrTextBlock)
+            .Pool(TextBlock, PoolReset.WriteDefault, TextBlockFontSizeInherits, poolDefault: "14"),
         S("FontWeight", ModifierBucket.Root, "Windows.UI.Text.FontWeight", ModifierFamily.Typography)
             .On(ReceiverRole.Apply, Control).On(ReceiverRole.Apply, TextBlock).Analyzer(controlGate: ControlOrTextBlock),
 

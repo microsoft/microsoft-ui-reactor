@@ -72,6 +72,8 @@
     <!-- Spec 067 §10.2: the frozen matrix the selftest runs, linked so
          ModifierMatrixSchemaAgreementTests can check schema and matrix agree headlessly. -->
     <Compile Include="..\Reactor.AppTests.Host\SelfTest\ModifierMatrix\ModifierMatrixExpectations.cs" Link="ModifierMatrixExpectations.cs" />
+    <!-- Spec 067 layer 5: the frozen pool resets the ModifierPoolReset selftest runs. -->
+    <Compile Include="..\Reactor.AppTests.Host\SelfTest\ModifierMatrix\PoolResetExpectations.cs" Link="PoolResetExpectations.cs" />
   </ItemGroup>
 
   <!--

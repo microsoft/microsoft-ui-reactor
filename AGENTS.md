@@ -374,6 +374,12 @@ point of return: stop and ship.
   its DP in `ModifierMatrixFixtures.NegativeDp`, or a `NoNegative` reason. A hand-coded field
   goes in `Excluded` with a reason instead.
   The matrix is hand-written on purpose so a schema mistake can't certify itself.
+  A receiver on a pooled type also needs `ElementPool.CleanElement` to reset its DP. It defaults to
+  `ClearValue`. A literal write-back is declared `.Pool(type, PoolReset.WriteDefault, reason,
+  poolDefault)`, and a receiver type no pooled type derives from is declared `PoolReset.NotReset` with a reason.
+  Then add its row to `PoolResetExpectations.Resets` (or `NotReset`) and its `Dp`/`Sample` arms
+  in `ModifierPoolResetFixture`. `ModifierPoolResetTests` checks the declaration against
+  `CleanElement` and the expectations.
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via
   `EnforceCodeStyleInBuild`), so an `object` gate fails the Release build. Keep `object` only

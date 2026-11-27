@@ -62,6 +62,17 @@ internal enum SkipEquality
 /// <summary>How the apply arm decides a field changed (spec 067 §6.6).</summary>
 internal enum WriteEquality { Value, Reference }
 
+/// <summary>What <c>ElementPool.CleanElement</c> does to a receiver's DP on pool return (spec 067 §6.2).</summary>
+internal enum PoolReset
+{
+    /// <summary><c>ClearValue</c>, so a renter sees the control's default or styled value.</summary>
+    ClearValue,
+    /// <summary>A literal written back as a local value. Requires <see cref="ModifierReceiver.PoolDefault"/> and a reason.</summary>
+    WriteDefault,
+    /// <summary>Nothing. Requires a reason, e.g. the pool never recycles the receiver type.</summary>
+    NotReset,
+}
+
 /// <summary>Which consumers a receiver row feeds (spec 067 §4.2).</summary>
 [Flags]
 internal enum ReceiverRole
@@ -94,6 +105,22 @@ internal sealed class ModifierReceiver
     public string DpOwner { get; }
 
     public ReceiverRole Roles { get; }
+
+    /// <summary>What the pool does to this DP on this receiver. Defaults to <see cref="PoolReset.ClearValue"/>.</summary>
+    public PoolReset Pool { get; private set; } = PoolReset.ClearValue;
+
+    /// <summary>The C# literal a <see cref="PoolReset.WriteDefault"/> writes, e.g. <c>14</c>.</summary>
+    public string? PoolDefault { get; private set; }
+
+    /// <summary>Why the receiver is not cleared: required for <see cref="PoolReset.WriteDefault"/> and <see cref="PoolReset.NotReset"/>.</summary>
+    public string? PoolReason { get; private set; }
+
+    internal void SetPool(PoolReset pool, string reason, string? poolDefault = null)
+    {
+        Pool = pool;
+        PoolReason = reason;
+        PoolDefault = poolDefault;
+    }
 
     /// <summary>The receiver's simple type name, the form the analyzer's gates use.</summary>
     public string SimpleType => Type.Substring(Type.LastIndexOf('.') + 1);
@@ -214,6 +241,24 @@ internal sealed class ModifierSlot
     }
 
     internal ModifierSlot Converted(string converter) { Converter = converter; return this; }
+
+    /// <summary>Declares a non-default pool reset for this slot's receiver of <paramref name="type"/>.</summary>
+    internal ModifierSlot Pool(string type, PoolReset pool, string reason, string? poolDefault = null)
+    {
+        if ((pool == PoolReset.WriteDefault) != (poolDefault is not null))
+            throw new System.InvalidOperationException(pool == PoolReset.WriteDefault
+                ? $"{Name}: {type} is WriteDefault, so it needs the poolDefault literal CleanElement writes back."
+                : $"{Name}: {type} is {pool}, so it takes no poolDefault.");
+        var found = false;
+        foreach (var receiver in _receivers)
+        {
+            if (receiver.Type != type) continue;
+            receiver.SetPool(pool, reason, poolDefault);
+            found = true;
+        }
+        if (!found) throw new System.InvalidOperationException($"{Name}: no receiver of type {type} to declare a pool reset on.");
+        return this;
+    }
 
     internal ModifierSlot Composite(string family, string method) { CompositeFamily = family; HandCodedMethod = method; return this; }
 
