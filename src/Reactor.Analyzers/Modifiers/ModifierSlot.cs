@@ -250,9 +250,8 @@ internal sealed class ModifierSlot
                 ? $"{Name}: {type} is WriteDefault, so it needs the poolDefault literal CleanElement writes back."
                 : $"{Name}: {type} is {pool}, so it takes no poolDefault.");
         var found = false;
-        foreach (var receiver in _receivers)
+        foreach (var receiver in _receivers.Where(r => r.Type == type))
         {
-            if (receiver.Type != type) continue;
             receiver.SetPool(pool, reason, poolDefault);
             found = true;
         }
