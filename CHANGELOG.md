@@ -297,6 +297,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- Theme brushes that Reactor resolves itself now follow a Windows contrast theme being turned
+  on or off while the app runs: `.Resources(...)` overrides with `Theme` tokens,
+  `ThemeRef.Resolve` in a render, and validation styling, memoized subtrees included. Each
+  `ReactorHost` and `ReactorHostControl` now hears WinUI apply the contrast theme and
+  re-renders then. Before, a window without a chart never re-rendered for it, and an embedded
+  host re-rendered on the system notification, before WinUI had switched (#1506).
+
 - Rebuilding an equivalent normal foreground brush preserves an unchanged active interaction
   foreground on Flyout targets while its tracker survives the update, and updates the brush
   restored when the state ends (#1727).
