@@ -340,6 +340,9 @@ Conventions for contributors:
   read as stale and the CLI deleted its lockfile. These clients now connect directly, and only to
   loopback.
 
+- A second DevTools launch for the same project now exits with code `3` while the first
+  HTTP session is active, preserving the first session's lockfile (issue #1743).
+
 - `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
   support common `.Foreground(brush)` modifiers and interaction-state foreground
   overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and

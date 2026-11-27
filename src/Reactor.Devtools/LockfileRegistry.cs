@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -219,7 +220,7 @@ internal static class LockfileRegistry
 
     /// <summary>
     /// A lockfile is live iff its pid names a running process AND — for HTTP
-    /// transport — a <c>GET /mcp</c> returns the expected schema tag. Stdio
+    /// transport — an authenticated <c>GET /mcp</c> returns the expected schema tag. Stdio
     /// sessions are considered live on pid match alone because the HTTP probe
     /// doesn't apply; the CLI refuses to use them anyway.
     /// </summary>
@@ -229,7 +230,7 @@ internal static class LockfileRegistry
         if (!PidAlive(entry.Pid)) return false;
         if (string.Equals(entry.Transport, "stdio", StringComparison.OrdinalIgnoreCase))
             return true;
-        return HttpProbe(entry.Endpoint);
+        return HttpProbe(entry.Endpoint, entry.Token);
     }
 
     private static bool PidAlive(int pid)
@@ -244,7 +245,7 @@ internal static class LockfileRegistry
         catch { return false; }
     }
 
-    private static bool HttpProbe(string endpoint)
+    private static bool HttpProbe(string endpoint, string token)
     {
         // The probe client skips the system proxy, so it only ever talks to loopback.
         // TryRead checks this for "http" entries only; any other non-stdio transport
@@ -253,7 +254,10 @@ internal static class LockfileRegistry
         try
         {
             using var http = LoopbackHttpClient.Create(TimeSpan.FromMilliseconds(500));
-            var resp = http.GetAsync(endpoint).GetAwaiter().GetResult();
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var resp = http.SendAsync(request).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode) return false;
             var body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             using var doc = JsonDocument.Parse(body);

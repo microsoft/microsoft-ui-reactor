@@ -37,8 +37,6 @@ public sealed class LoopbackHttpClientProxyTests : IDisposable
     [Fact]
     public void DevtoolsLockfileProbe_BypassesSystemProxy()
     {
-        // No bearer check here: LockfileRegistry's probe sends none. Against the real server
-        // that is a 401, a separate pre-existing problem this test does not cover.
         using var server = new CannedHttpServer("200 OK", $"{{\"schema\":\"{LockfileRegistry.McpSchemaTag}\"}}");
         var entry = new DevtoolsLockfileEntry
         {
@@ -46,6 +44,7 @@ public sealed class LoopbackHttpClientProxyTests : IDisposable
             Transport = "http",
             Port = server.Port,
             Endpoint = $"http://127.0.0.1:{server.Port}/mcp",
+            Token = "token",
         };
 
         Assert.True(LockfileRegistry.IsLive(entry));

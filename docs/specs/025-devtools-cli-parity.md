@@ -131,7 +131,8 @@ There is **no environment variable**. Explicit decision: a single-terminal flow 
   "pid": 18432,
   "buildTag": "2026-04-19T14:22:09Z",
   "project": "C:\\Users\\me\\MyApp\\MyApp.csproj",
-  "startedAt": "2026-04-19T14:22:11Z"
+  "startedAt": "2026-04-19T14:22:11Z",
+  "token": "example-per-launch-token"
 }
 ```
 
@@ -143,7 +144,7 @@ There is **no environment variable**. Explicit decision: a single-terminal flow 
 - Removed from `DevtoolsMcpServer.Dispose()` on clean shutdown. Also removed at the end of the reload sentinel path before the new process writes a fresh one.
 - On crash or force-kill, the file is left behind. Readers pid-probe and skip dead entries (§7). The file gets cleaned up lazily by the next successful launch of the same project, or explicitly by `mur devtools session clean`.
 
-**Liveness probe.** A reader considers a lockfile live iff the `pid` corresponds to a running process **and** a `GET <endpoint>` returns `schema: "reactor-devtools-mcp/1"`. Pid-only is not enough — Windows reuses pids, and an unrelated process could collide. The HTTP probe is cheap (loopback, one round-trip) and confirms we're talking to the right server.
+**Liveness probe.** For HTTP, the `pid` must correspond to a running process and a `GET <endpoint>` must return `schema: "reactor-devtools-mcp/1"`. The probe sends the lockfile's `token` as `Authorization: Bearer <token>`. For stdio, the application checks PID liveness alone.
 
 ## 6. Single-Instance Enforcement
 
@@ -152,7 +153,7 @@ There is **no environment variable**. Explicit decision: a single-terminal flow 
 **Mechanism.** On startup, before the MCP listener binds, the server:
 
 1. Computes the project's lockfile path.
-2. If a lockfile exists and is live (§5): refuse to start devtools. Emit a single stderr line: `[devtools] another session for this project is active at <endpoint> (pid N); stop it first`. Exit with code `3` (reserved for this condition). The app itself may continue to run if the user wants devtools-less — but the way `--devtools run` is invoked today means the whole process exits; that's fine.
+2. If a lockfile exists and is live (§5): preserve it and refuse to start devtools. Emit a single stderr line: `[devtools] another session for this project is active at <endpoint> (pid N); stop it first`. The second `--devtools run` process exits with code `3`.
 3. If a lockfile exists but is not live: treat as stale, delete, continue.
 4. Bind the listener, write a fresh lockfile atomically (write to `<hash>.json.tmp`, fsync, rename).
 
@@ -247,8 +248,7 @@ Codes 2–5 are distinct so `if/elif` shell flows can branch without parsing JSO
 Inherits spec 024 §14 entirely. The CLI does not widen the attack surface:
 
 - The MCP server still binds loopback only.
-- The lockfile lives under `%TEMP%` with default user permissions. Any local process can read it. This is not a regression — any local process can already probe `127.0.0.1` and hit the MCP server; the lockfile just saves it a port scan.
-- The lockfile holds no secrets. The endpoint, pid, and project path are the most sensitive fields, all already discoverable by a local observer.
+- The lockfile lives under the user's `%TEMP%` directory with default user permissions. It contains the per-launch bearer token required by `GET` and `POST` requests to `/mcp`, including the liveness probe.
 - `fire` authority via the CLI is identical to `fire` authority via MCP. Devtools mode is the gate; how you reach it doesn't matter.
 
 If spec 024's "localhost-only, devtools opt-in" model is ever weakened (cross-machine MCP, always-on in Release), this spec's security implications need a revisit in the same breath.
