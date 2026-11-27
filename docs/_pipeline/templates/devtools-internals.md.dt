@@ -126,18 +126,16 @@ endpoint URL, the per-launch bearer token, the pid (for liveness
 probing), the build tag, the transport (`http` or `stdio`), and the
 project path. The path hash is a truncated SHA-256 of the
 canonicalized `.csproj` path — `C:\foo\bar.csproj` and
-`c:/foo/bar.csproj` collide deliberately, so re-launching the same
-project from a different shell finds the existing session rather
-than starting a second one. The `mur devtools` supervisor
-checks for a live lockfile before binding a new port; if one exists
-and the process is still alive, the second invocation exits with the
-running session's information instead of starting a new server.
+`c:/foo/bar.csproj` resolve to the same lockfile. Before binding a new
+MCP port, the application checks whether the project already has a live
+session. If it does, the second launch reports the existing endpoint and
+PID, exits with code `3`, and preserves the first session's lockfile.
 
-A lockfile is *stale* when the recorded pid doesn't match a running
-process. The CLI deletes stale lockfiles on read; the running server
-doesn't proactively re-write its lockfile, but it also doesn't need
-to — the file's `pid` field is the only check that matters, and the
-pid doesn't change for the life of the session.
+An HTTP lockfile is live when its PID belongs to a running process and
+`GET /mcp` returns the expected schema tag. The probe sends the
+lockfile's token as `Authorization: Bearer <token>`. The application
+uses PID liveness alone for stdio sessions. A failed check marks the
+lockfile as stale so startup can clear it and continue.
 
 ## Tool dispatch — the UI-thread hop
 
