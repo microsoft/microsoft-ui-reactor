@@ -140,6 +140,42 @@ internal static class RenderErrorDispatch
         return true;
     }
 
+    private static Action<RenderError>? s_observer;
+
+    /// <summary>
+    /// Process-wide observer told about every render error that replaces content: each call
+    /// of <see cref="BuildInTreeFallback"/> or <see cref="BuildHostFallback"/>, whatever the
+    /// app's handler then shows. A host-level cleanup failure (deferred root retirement) is
+    /// included because it does replace the content; report-only disposal failures
+    /// (<see cref="ReportCleanup"/>) are not. Called on the rendering thread before the
+    /// handler runs; an observer that throws is ignored.
+    /// </summary>
+    /// <remarks>
+    /// Set by the devtools preview host so the docs screenshot pipeline can refuse a frame
+    /// that shows an error panel instead of the requested component. Exceptions caught by an
+    /// <c>ErrorBoundary</c> never get here, so a sample that demonstrates one is unaffected.
+    /// </remarks>
+    internal static Action<RenderError>? Observer
+    {
+        get => global::System.Threading.Volatile.Read(ref s_observer);
+        set => global::System.Threading.Volatile.Write(ref s_observer, value);
+    }
+
+    private static void NotifyObserver(RenderError error)
+    {
+        var observer = Observer;
+        if (observer is null) return;
+        try
+        {
+            observer(error);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Reactor] Render error observer threw ({ex.GetType().Name}: {ex.Message}); ignored.");
+        }
+    }
+
     /// <summary>
     /// Invokes <paramref name="handler"/> and classifies the result. A handler that throws is
     /// logged, any <see cref="RenderError.Propagate"/> it requested is cancelled, and the
@@ -175,6 +211,7 @@ internal static class RenderErrorDispatch
     /// </summary>
     internal static Element BuildInTreeFallback(RenderErrorHandler? handler, RenderError error, ILogger? logger)
     {
+        NotifyObserver(error);
         switch (InvokeHandler(handler, error, logger, out var appElement))
         {
             case Outcome.AppElement:
@@ -223,6 +260,7 @@ internal static class RenderErrorDispatch
         RenderErrorHandler? handler, RenderError error, ILogger? logger,
         Func<Element, UIElement?> install, Action releaseCurrent, bool currentIsAppFallback)
     {
+        NotifyObserver(error);
         switch (InvokeHandler(handler, error, logger, out var appElement))
         {
             case Outcome.AppElement:

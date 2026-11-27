@@ -297,6 +297,19 @@ Conventions for contributors:
 
 ### Fixed
 
+- Replacing a `Win2DCanvas`, `Win2DAnimatedCanvas` or `Win2DVirtualCanvas` with an
+  element of another type no longer removes the following sibling, or throws
+  `ArgumentOutOfRangeException` when the canvas was the last child. This covers a
+  direct child, a `Flyout` target, and a component whose root changes type. The
+  Win2D unmount detaches the control from its panel, and the reconciler then
+  replaced by a stale index.
+
+- The docs screenshot pipeline no longer writes a frame that shows Reactor's
+  render-error panel. The preview host reports, on `/status` (`renderError`), the
+  first render error since the last component switch, or that the switch has not
+  rendered yet. Capture then fails with `REACTOR_DOC_SHOT_003`, leaving the
+  existing image untouched.
+
 - **A pooled control no longer keeps the previous renter's `.RequestedTheme(...)` (issue #1717).**
   The pool never cleared `RequestedTheme` when a control returned to it, and a mount doesn't clear
   modifiers the new element doesn't declare. So a control that had rendered with

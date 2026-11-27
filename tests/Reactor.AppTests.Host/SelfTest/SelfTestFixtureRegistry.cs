@@ -583,6 +583,7 @@ internal static class SelfTestFixtureRegistry
         ("Win2D_AnimatedCanvas_InitialPausedResumes", static harness => new Win2DCanvasFixtures.AnimatedCanvasInitialPausedResumes(harness)),
         ("Win2D_Canvas_SameRedrawKeyNoExtraDraws", static harness => new Win2DCanvasFixtures.CanvasSameRedrawKeyNoExtraDraws(harness)),
         ("Win2D_AnimatedCanvas_SharedDeviceResourceDraws", static harness => new Win2DCanvasFixtures.AnimatedCanvasSharedDeviceResourceDraws(harness)),
+        ("Win2D_Canvas_ReplacedByOtherTypeKeepsSiblings", static harness => new Win2DCanvasFixtures.CanvasReplacedByOtherTypeKeepsSiblings(harness)),
         // PR #324 review fixes — heterogeneous rows, RefreshRealizedItems
         // sync, and ItemsRepeater unmount cleanup.
         ("EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking", static harness => new ElementFactoryRecyclingFixtures.Factory_ReplacementOnRootTypeChange_DropsOldControlTracking(harness)),

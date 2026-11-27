@@ -34,6 +34,24 @@ internal interface IChildCollection
     }
 }
 
+internal static class ChildCollectionExtensions
+{
+    /// <summary>
+    /// Puts <paramref name="newControl"/> in the slot <paramref name="oldControl"/> held at
+    /// <paramref name="index"/>, after <paramref name="oldControl"/> was unmounted. An unmount
+    /// can detach the control itself (Win2D's <c>RemoveFromVisualTree</c> does), and replacing
+    /// by index would then remove the next sibling, or throw when it was last, so this inserts
+    /// into the gap instead.
+    /// </summary>
+    internal static void ReplaceUnmounted(this IChildCollection children, int index, UIElement oldControl, UIElement newControl)
+    {
+        if (index < children.Count && ReferenceEquals(children.Get(index), oldControl))
+            children.Replace(index, newControl);
+        else
+            children.Insert(index, newControl);
+    }
+}
+
 /// <summary>
 /// Wraps Panel.Children (StackPanel, Grid, Canvas, etc.).
 /// </summary>
