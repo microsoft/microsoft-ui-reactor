@@ -288,8 +288,8 @@ Conventions for contributors:
 
 ### Fixed
 
-- Flyout targets keep their hover foreground when a render rebuilds an
-  equivalent brush while updating the target's normal foreground (#1727).
+- Rebuilding an equivalent normal foreground brush preserves the active interaction
+  foreground on Flyout targets and updates the brush restored when the state ends (#1727).
 
 - **A pooled control no longer keeps the previous renter's `.RequestedTheme(...)` (issue #1717).**
   The pool never cleared `RequestedTheme` when a control returned to it, and a mount doesn't clear

@@ -29,8 +29,6 @@ public sealed partial class Reconciler
     private int _implicitSlot;
     // Set when a layer of the control being updated deferred an implicit key's restore.
     private bool _implicitDeferred;
-    // A Flyout can retain a foreground on the native control it shares with its wrappers.
-    private InteractionStateApplier.ForegroundOverride? _deferredInteractionForeground;
     // Mount frames are numbered as they start, so a frame nested in another has a higher number.
     // A control whose claims were made by a deeper frame was forwarded to this layer by its
     // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
@@ -251,14 +249,9 @@ public sealed partial class Reconciler
         var previousImplicitSlot = _implicitSlot;
         _implicitSlot = implicitSlot;
         var previousUpdateStagger = _updateStagger;
-        // Each control's outermost layer scopes the deferred work of its whole chain.
+        // Each control's outermost layer scopes the deferred releases of its whole chain.
         var previousImplicitDeferred = _implicitDeferred;
-        var previousDeferredInteractionForeground = _deferredInteractionForeground;
-        if (modifierParent is null)
-        {
-            _implicitDeferred = false;
-            _deferredInteractionForeground = null;
-        }
+        if (modifierParent is null) _implicitDeferred = false;
 
         UIElement? result;
         bool registeredType = false;
@@ -354,7 +347,6 @@ public sealed partial class Reconciler
             && control.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoWrapsDecorator: true };
 
         var foregroundUpdate = ForegroundModifier.UpdateAction.None;
-        InteractionStateApplier.ForegroundOverride? retainedInteractionForeground = null;
         // V1 Update returns the UIElement to install in the parent's
         // slot. Standard handlers always return `control` unchanged
         // (§13 Q12 — no substitution on the public author surface);
@@ -364,13 +356,6 @@ public sealed partial class Reconciler
         // `control`, return null so callers preserve identity.
         UIElement? UpdateWithV1Handler(IV1HandlerEntry entry)
         {
-            // Capture before the handler writes the target's normal foreground.
-            // Replay checks the effective configuration after every wrapper has updated.
-            if (entry.PreservesTargetTag
-                && oldEl.InteractionStates is not null
-                && newEl.InteractionStates is not null)
-                retainedInteractionForeground = InteractionStateApplier.CaptureForegroundOverride(control);
-
             var oldForeground = oldModifiers?.Foreground;
             var foreground = modifiers?.Foreground;
             if (oldForeground is not null || foreground is not null)
@@ -623,13 +608,6 @@ public sealed partial class Reconciler
         if (newEl.StaggerConfig is not null)
             ApplyStaggerDelays(target, newEl.StaggerConfig);
 
-        // Wait until every layer sharing the control has written its normal foreground
-        // and the effective interaction states have been installed.
-        if (!replacedControl && retainedInteractionForeground is { } foregroundOverride)
-            _deferredInteractionForeground = foregroundOverride;
-        if (modifierParent is null && !replacedControl && _deferredInteractionForeground is { } deferredForeground)
-            InteractionStateApplier.ReapplyForegroundOverride(target, deferredForeground);
-
         }
         finally
         {
@@ -638,7 +616,6 @@ public sealed partial class Reconciler
             _updateStagger = previousUpdateStagger;
             if (modifierParent is null)
             {
-                _deferredInteractionForeground = previousDeferredInteractionForeground;
                 // An update that threw after a deferred release still restores the keys it held
                 // back, or a later claim on them would wait for a flush that never comes.
                 if (_implicitDeferred)
