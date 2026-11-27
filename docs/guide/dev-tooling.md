@@ -10,7 +10,7 @@ one stage at a time. Each stage links to a page with the full details.
 | Tool | What it does | Where you get it | Details |
 |---|---|---|---|
 | Project templates | Create a new Reactor app | Windows App SDK template pack, through `winapp new` or `dotnet new` | [Install Reactor](install.md) |
-| `mur` CLI | Create, check, inspect, and localize from the terminal | .NET tool `Microsoft.UI.Reactor.Cli`, or the skill kit zip | [mur CLI](mur-cli.md) |
+| `mur` CLI | Create, check, inspect, and localize from the terminal | Skill kit zip from GitHub Releases, or `./bootstrap.ps1` in a Reactor checkout | [mur CLI](mur-cli.md) |
 | Hot reload | Apply code edits to a running app and keep its state | Built into `Microsoft.UI.Reactor`; run with `dotnet watch` | [Hot reload](hot-reload.md) |
 | Devtools | In-app dev menu, overlays, and a local MCP server | NuGet package `Microsoft.UI.Reactor.Devtools` | [Devtools](devtools.md) |
 | Visual Studio extension | Live preview inside Visual Studio 2026 | `Reactor.VsExtension.vsix` on the GitHub release | [Extensions](vs-extension.md) |

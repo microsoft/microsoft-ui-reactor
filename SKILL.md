@@ -34,23 +34,26 @@ this SKILL.md). Two paths:
 
 | Mode | How to detect | Bootstrap |
 |---|---|---|
-| **Selfhost** — you're in a Reactor source clone (`src/Reactor/Reactor.csproj` exists) | The repo's `local-nupkgs/` folder is the package source — see `nuget.config` at repo root. | Build `mur` once, then **`mur pack-local`** to populate `local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg`. Re-run after framework changes. |
+| **Selfhost** — you're in a Reactor source clone (`src/Reactor/Reactor.csproj` exists) | The repo's `local-nupkgs/` folder is the package source — see `nuget.config` at repo root. | [Run bootstrap](#bootstrap-selfhost-fresh-clone) in a fresh clone. After framework changes, run `mur pack-local` to refresh the local packages. |
 | **Consumer** — you're in an app that depends on Microsoft.UI.Reactor | No `src/Reactor/` next to your project. | Nothing extra — the package already carries the analyzers and agent kit. If `mur` is on PATH, `mur --skill` and `mur --api` print the embedded docs. Otherwise read `<package-cache>/microsoft.ui.reactor/<version>/agentkit/`. |
-
-If you're in selfhost and `local-nupkgs/` is empty, restore will fail with
-"package Microsoft.UI.Reactor 0.0.0-local was not found." Run `mur pack-local`
-to fix it.
 
 ### Bootstrap (selfhost, fresh clone)
 
-```powershell
-# Build the CLI; on first build the SignaturesGen project also writes
-# skills/reactor.api.txt as part of its AfterBuild target.
-dotnet build src/Reactor.Cli -p:Platform=ARM64
+If a release kit's `mur` is already on PATH, put the .NET global tool directory
+first in the current PowerShell session before running bootstrap.
 
-# `mur` mirrors itself to <repo>/bin/<arch>/. Add that to PATH or invoke directly.
-.\bin\arm64\mur.exe pack-local
+```powershell
+$env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
 ```
+
+Run `./bootstrap.ps1` from the repository root. Bootstrap installs `mur` as a
+.NET global tool and populates `local-nupkgs/`.
+Once `mur` is installed, `mur pack-local` refreshes the framework packages and
+restores a missing `Microsoft.UI.Reactor.0.0.0-local.nupkg`.
+
+If bootstrap reports a `mur` revision mismatch after installing prerequisites,
+prepend the global tool directory again and rerun bootstrap. `Get-Command mur`
+shows which executable your shell resolves.
 
 After this, any project under the clone resolves
 `Microsoft.UI.Reactor 0.0.0-local` from `local-nupkgs/` automatically (the
@@ -58,16 +61,33 @@ repo-level `nuget.config` configures it). A consumer **outside** the clone
 needs a project-local `nuget.config` pointing at the absolute path of
 `<repo>/local-nupkgs/`.
 
+## Install `mur`
+
+For a released version of Reactor, download `reactor-skill-kit-<version>.zip`
+from [GitHub Releases](https://github.com/microsoft/microsoft-ui-reactor/releases).
+The installer replaces the entire destination directory if it already exists.
+Back up local edits before reinstalling, or pass `-Path <new-folder>` to use a
+fresh destination. Install the .NET 10 runtime and ensure `dotnet.exe` is on
+PATH before running the script.
+
+Extract the ZIP and run `.\install-skill-kit.ps1` from the extracted `reactor/`
+directory. The default destination is `~/.claude/skills/reactor`. The script adds
+the matching Windows x64 or Arm64 `bin/<arch>` directory to your user PATH.
+Open a new terminal and use `Get-Command mur` to confirm it resolves to the
+kit, then run `mur --version`.
+
+If you contribute to Reactor, follow the [bootstrap steps for a source clone](#bootstrap-selfhost-fresh-clone).
+
 ## Where to find docs (`mur --skill`, `mur --api`)
 
-The `mur` CLI ships these embedded — works from any directory:
+The `mur` CLI embeds the skill and API index and works from any directory.
 
 | Command | What it prints | Source |
 |---|---|---|
 | `mur --skill` | This SKILL.md | embedded in `mur` |
 | `mur --api`   | The signatures index (≈70K tokens: every factory/modifier/hook/Theme token/enum, plus ctors/properties/methods/events on every public type — including static classes like `ControlRegistry` and `ReactorApp`) | embedded in `mur` |
 | `mur --regen-api` | Rebuilds `skills/reactor.api.txt` from a freshly-built `Microsoft.UI.Reactor.dll` (selfhost only) | rebuilds `tools/Reactor.SignaturesGen` |
-| `mur check <path>` | **Is** the build (same exit code as `dotnet build`); adds one-line diagnostics with skill pointers for known REACTOR_* IDs and `→ try:` did-you-mean suggestions | wraps MSBuild |
+| `mur check <path>` | Runs `dotnet build` and adds one-line diagnostics with skill pointers for known `REACTOR_*` IDs and `→ try:` did-you-mean suggestions | wraps MSBuild |
 
 A consumer who doesn't have `mur` can read the same files directly from the
 NuGet cache:
@@ -131,12 +151,15 @@ lifecycle, diagnostics, and a gallery of worked examples — is in the
 `agentkit/plugins/reactor/skills/reactor-wrapping/` in the nupkg). Spec:
 `docs/specs/058-control-wrapper-generator.md`.
 
-## `mur check` — fast feedback with skill pointers
+## Build with `mur check`
 
-**`mur check` is the build, not a separate check step.** It runs `dotnet build`
-under the hood and returns the same exit code. When `mur check` exits 0, the
-build is green — **do not re-run `dotnet build` to confirm**. They're the same
-compilation; a redundant `dotnet build` afterwards is wasted work.
+Prefer `mur check` when it is on PATH. It runs `dotnet build` and returns its
+exit code, so an exit code of 0 verifies the build. If `mur` is unavailable,
+use `dotnet build MyApp.csproj -p:Platform=x64` for an x64 project or set
+`-p:Platform=ARM64` for an Arm64 project. For a single-file app, use
+`dotnet build App.cs`. A self-contained single-file app with
+`#:property WindowsAppSDKSelfContained=true` also needs `-r win-x64` or
+`-r win-arm64`.
 
 Two enrichments over raw `dotnet build`:
 
@@ -242,15 +265,12 @@ with `dotnet run`* below). If `dotnet new` rejects `--packaging` or can't find
 `reactor-singlefile`, the installed pack predates them;
 `winapp new --list --template-version latest` updates it.
 
-**Verify your edits with `mur check`** before declaring done. From the
-project directory: `mur check` (no arguments) runs `dotnet build` and
-emits one compressed line per diagnostic with a `→ try:` suggestion
-when the engine recognizes the mistake; `mur check --final` is the
-explicit "I am done iterating" sweep that emits the full diagnostic
-set including suppressed iteration-mode warnings. For anything more
-involved than the build/fix loop — strict-mode failures, custom
-diagnostic gating, MSBuild passthrough flags — load the
-`reactor-build-and-check` skill.
+**Build to verify your edits.** In a `.csproj` directory, use `mur check`
+when available or `dotnet build -p:Platform=x64` for an x64 project. Set
+`-p:Platform=ARM64` for an Arm64 project. In a single-file app's directory,
+use `mur check <Name>.cs` when available or `dotnet build <Name>.cs` otherwise.
+See [Build with `mur check`](#build-with-mur-check) for options and the
+runtime flag for self-contained single-file apps.
 
 ### nuget.config (selfhost only — sibling of the .csproj)
 

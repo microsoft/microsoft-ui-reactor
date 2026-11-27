@@ -13,28 +13,30 @@ which version you have.
 
 **From a release.** Download `reactor-skill-kit-<version>.zip` from the
 [GitHub releases](https://github.com/microsoft/microsoft-ui-reactor/releases).
-It contains the agent skills and `mur` builds for x64 and Arm64. Extract it,
-then run:
+It contains the agent skills and `mur` builds for x64 and Arm64. The installer
+replaces the entire destination directory if it already exists. Back up local
+edits before reinstalling, or pass `-Path <new-folder>` to use a fresh
+destination. Before running the script, make sure `dotnet.exe` is on PATH
+and the .NET 10 runtime is installed (`winget install Microsoft.DotNet.Runtime.10`).
+Extract the ZIP and run the installer.
 
 ```powershell
 cd reactor
 .\install-skill-kit.ps1
 ```
 
-The script copies the kit to `~/.claude/skills/reactor` and adds the
-`bin\<arch>` folder to your user `PATH`. Pass `-Path <folder>` to install
-somewhere else, or `-SkipPath` to leave `PATH` alone. This `mur` needs the
-.NET 10 runtime. If you don't have it, install it with
-`winget install Microsoft.DotNet.Runtime.10`. Open a new terminal, then check:
-
-```powershell
-mur --version
-```
+The default destination is `~/.claude/skills/reactor`. The script adds the
+`bin\<arch>` folder to your user `PATH`. Pass `-SkipPath` to leave `PATH` alone.
+To verify the kit, open its installed `bin\<arch>` folder and run
+`.\mur.exe --version`. If you let the installer configure PATH, open a new
+terminal and check that `Get-Command mur` points to the same folder.
 
 **From source.** In a clone of the repository, run `./bootstrap.ps1`. It packs
 the CLI into `local-nupkgs/` and installs it as a .NET global tool
 (`Microsoft.UI.Reactor.Cli`). Pass `-SkipMurInstall` to pack it without
-installing it. The manual steps are in
+installing it. If the release kit's `mur` is already on PATH, see the
+[bootstrap steps for a source clone](https://github.com/microsoft/microsoft-ui-reactor/blob/main/SKILL.md#bootstrap-selfhost-fresh-clone)
+to give the source CLI precedence. The manual steps are in
 [CONTRIBUTING.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/CONTRIBUTING.md#manual-setup).
 
 ## Create a project

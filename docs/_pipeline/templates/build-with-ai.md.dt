@@ -137,22 +137,26 @@ The skill kit is for agents that can't load plugins. It contains:
    [releases page](https://github.com/microsoft/microsoft-ui-reactor/releases)
    and extract it.
 
-2. **Run the install script.** Run it from the extracted folder:
+2. **Run the install script.** The script replaces the entire destination
+   directory if it already exists. Back up local edits before reinstalling,
+   or pass `-Path <new-folder>` to use a fresh destination. Install the
+   .NET 10 runtime and ensure `dotnet.exe` is on PATH before running the
+   script from the extracted folder.
 
    ```powershell
    cd reactor
    .\install-skill-kit.ps1
    ```
 
-   The script copies the kit to `~/.claude/skills/reactor` and adds the
-   matching `bin\<arch>` folder to your user `PATH`. Pass `-Path <folder>` to
-   install somewhere else, or `-SkipPath` to leave `PATH` alone. `mur` needs
-   the .NET 10 runtime. The script warns you if it is missing.
+   The default destination is `~/.claude/skills/reactor`. The script adds
+   the matching `bin\<arch>` folder to your user `PATH`. Pass `-SkipPath` to
+   leave `PATH` alone.
 
 <!-- /steps -->
 
-The same files ship in the `Microsoft.UI.Reactor` package under `agentkit/`.
-If `mur` is on your `PATH`, these commands print them:
+The `Microsoft.UI.Reactor` package includes the skill files and API index
+under `agentkit/`. If `mur` is on your PATH, these commands print the main
+skill and API index.
 
 ```shell
 mur --skill
