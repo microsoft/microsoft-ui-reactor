@@ -142,7 +142,7 @@ public static class FlyoutAttachmentPoolFixtures
             await Harness.Render();
             H.Check("WithFlyoutUnset_Phase1_SameControls",
                 ReferenceEquals(text, H.FindText("flyout-unset-text"))
-                && ReferenceEquals(button, H.FindButton("flyout-unset-button"))
+                && button == H.FindButton("flyout-unset-button")
                 && ReferenceEquals(menu, H.FindText("flyout-unset-menu")));
             H.Check("WithFlyoutUnset_Phase1_TextFlyoutCleared",
                 text is not null && text.ReadLocalValue(WinPrim.FlyoutBase.AttachedFlyoutProperty) == DependencyProperty.UnsetValue);
@@ -211,7 +211,7 @@ public static class FlyoutAttachmentPoolFixtures
 
             H.ClickButton("SwapFlyoutSource");
             await Harness.Render();
-            H.Check("WithFlyoutHandoff_Phase1_SameControl", ReferenceEquals(dropDown, H.FindButton("flyout-handoff")));
+            H.Check("WithFlyoutHandoff_Phase1_SameControl", dropDown == H.FindButton("flyout-handoff"));
             H.Check("WithFlyoutHandoff_Phase1_OwnFlyoutKept",
                 dropDown?.Flyout is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-handoff-own" } });
             H.Check("WithFlyoutHandoff_Phase1_ModifierContentUnmounted", s_cleanupCount == 1);
@@ -258,10 +258,44 @@ public static class FlyoutAttachmentPoolFixtures
 
             H.ClickButton("DropModifierFlyout");
             await Harness.Render();
-            H.Check("WithFlyoutBeside_Phase2_SameControl", ReferenceEquals(dropDown, H.FindButton("flyout-beside")));
+            H.Check("WithFlyoutBeside_Phase2_SameControl", dropDown == H.FindButton("flyout-beside"));
             H.Check("WithFlyoutBeside_Phase2_OwnFlyoutKept",
                 dropDown?.Flyout is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-beside-own" } });
             H.Check("WithFlyoutBeside_Phase2_ModifierContentUnmounted", s_cleanupCount == 1);
+        }
+    }
+
+    // The modifier is dropped while the button's own flyout: argument stays the same instance, so
+    // the descriptor doesn't write it again. The flyout the modifier displaced takes the slot back.
+    internal class WithFlyoutDroppedBesideUnchangedButtonFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static readonly Element s_own = TextBlock("flyout-unchanged-own");
+
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (dropped, set) = ctx.UseState(false);
+                Element dropDown = DropDownButton("flyout-unchanged", s_own);
+                return VStack(
+                    Button("DropModifierBesideOwn", () => set(true)),
+                    dropped ? dropDown : dropDown.WithFlyout(Component<CleanupChild>()));
+            });
+
+            await Harness.Render();
+            var dropDown = H.FindButton("flyout-unchanged");
+            // The modifier is applied after the descriptor's argument, so it holds the slot.
+            H.Check("WithFlyoutUnchangedOwn_Phase0_ModifierFlyout",
+                dropDown?.Flyout is WinUI.Flyout { Content: not WinUI.TextBlock { Text: "flyout-unchanged-own" } });
+
+            H.ClickButton("DropModifierBesideOwn");
+            await Harness.Render();
+            H.Check("WithFlyoutUnchangedOwn_Phase1_SameControl", dropDown == H.FindButton("flyout-unchanged"));
+            H.Check("WithFlyoutUnchangedOwn_Phase1_OwnFlyoutRestored",
+                dropDown?.Flyout is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-unchanged-own" } });
+            H.Check("WithFlyoutUnchangedOwn_Phase1_ModifierContentUnmounted", s_cleanupCount == 1);
         }
     }
 }

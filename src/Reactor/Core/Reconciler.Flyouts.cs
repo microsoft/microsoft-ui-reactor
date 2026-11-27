@@ -41,12 +41,19 @@ public sealed partial class Reconciler
 
         // First mount — create new flyout
         var flyout = CreateFlyoutFromElement(newFlyoutEl, requestRerender);
-        // A flyout this modifier installed earlier is being replaced, so its content goes now.
-        if (UnmountFlyoutAttachmentContent(fe) && flyout is null) fe.ClearValue(FlyoutSlotProperty(fe));
-        if (flyout is null) return;
+        // A flyout this modifier installed earlier is being replaced, so its content goes now, and
+        // what it displaced stays the slot's fallback.
+        var displaced = UnmountFlyoutAttachmentContent(fe, out var earlier) ? earlier : GetFlyoutOnControl(fe);
+        if (flyout is null)
+        {
+            RestoreFlyoutSlot(fe, displaced);
+            return;
+        }
 
         SetFlyoutOnControl(fe, flyout);
-        GetOrCreateReactorState(fe).ModifierFlyout = flyout;
+        var installedState = GetOrCreateReactorState(fe);
+        installedState.ModifierFlyout = flyout;
+        installedState.ModifierDisplacedFlyout = displaced;
     }
 
     /// <summary>
@@ -187,16 +194,28 @@ public sealed partial class Reconciler
     /// <summary>
     /// Releases the flyout a <c>.WithFlyout(...)</c> modifier installed on
     /// <paramref name="fe"/> (issue #1753): unmounts its content and forgets it. Returns true
-    /// when that flyout still occupies the slot, which the caller then clears. Another writer,
-    /// such as a flyout decorator or a button's own <c>flyout:</c> argument set in the same
-    /// update, may have replaced it, and its flyout is left alone.
+    /// when that flyout still occupies the slot, which the caller then hands back to
+    /// <paramref name="displaced"/>, the flyout the modifier replaced there (a button's own
+    /// <c>flyout:</c> argument, which its descriptor won't write again while it is unchanged).
+    /// Another writer, such as a flyout decorator or a changed <c>flyout:</c> argument, may have
+    /// replaced the modifier's flyout, and that writer's flyout is left alone.
     /// </summary>
-    private bool UnmountFlyoutAttachmentContent(FrameworkElement fe)
+    private bool UnmountFlyoutAttachmentContent(FrameworkElement fe, out WinPrim.FlyoutBase? displaced)
     {
+        displaced = null;
         if (!TryGetReactorState(fe, out var state) || state.ModifierFlyout is not { } flyout) return false;
+        displaced = state.ModifierDisplacedFlyout;
         state.ModifierFlyout = null;
+        state.ModifierDisplacedFlyout = null;
         if (flyout is WinUI.Flyout contentFlyout) UnmountFlyoutContent(contentFlyout);
         return ReferenceEquals(GetFlyoutOnControl(fe), flyout);
+    }
+
+    /// <summary>Puts <paramref name="displaced"/> back in the slot, or clears it when there is none.</summary>
+    private void RestoreFlyoutSlot(FrameworkElement fe, WinPrim.FlyoutBase? displaced)
+    {
+        if (displaced is null) fe.ClearValue(FlyoutSlotProperty(fe));
+        else SetFlyoutOnControl(fe, displaced);
     }
 
     /// <summary>
@@ -207,7 +226,7 @@ public sealed partial class Reconciler
     /// </summary>
     private void ReleaseFlyoutAttachment(FrameworkElement fe)
     {
-        if (UnmountFlyoutAttachmentContent(fe)) fe.ClearValue(FlyoutSlotProperty(fe));
+        if (UnmountFlyoutAttachmentContent(fe, out var displaced)) RestoreFlyoutSlot(fe, displaced);
     }
 
     /// <summary>
