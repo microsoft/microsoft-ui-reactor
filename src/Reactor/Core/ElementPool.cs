@@ -350,6 +350,10 @@ public sealed class ElementPool : IDisposable
         // A context flyout is a live object graph owned by the previous renter's component.
         // Without this, right-clicking a recycled control shows the *previous* element's menu.
         fe.ClearValue(UIElement.ContextFlyoutProperty);
+        // Issue #1753: .WithFlyout(...) on a non-Button target writes this attached slot (the
+        // Button arm below resets Button.Flyout). The reconciler unmounts the flyout's content
+        // when the control unmounts; this drops the flyout itself, whatever path returned it.
+        fe.ClearValue(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.AttachedFlyoutProperty);
         // Issue #1662: only user code writes Clip, and no renter's mount writes it back, so a
         // .Set(c => c.Clip = …) would otherwise clip the next renter too, in either lane.
         fe.ClearValue(UIElement.ClipProperty);

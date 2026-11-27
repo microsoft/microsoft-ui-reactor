@@ -498,8 +498,7 @@ internal static class OverlayLifecycle
         flyout.ClearValue(FlyoutOwnerProperty);
         if (flyout is WinUI.Flyout contentFlyout)
         {
-            if (contentFlyout.Content is UIElement content) reconciler.UnmountChild(content);
-            contentFlyout.Content = null;
+            reconciler.UnmountFlyoutContent(contentFlyout);
             if (contentFlyout.OverlayInputPassThroughElement is UIElement passThrough) reconciler.UnmountChild(passThrough);
             contentFlyout.OverlayInputPassThroughElement = null;
         }

@@ -30,13 +30,16 @@ public sealed partial class Reconciler
     /// </summary>
     private void ApplyFlyoutAttachment(FrameworkElement fe, Element? oldFlyoutEl, Element newFlyoutEl, Action requestRerender)
     {
-        // Read the existing flyout from whichever slot SetFlyoutOnControl writes to.
-        var existingFlyout = GetFlyoutOnControl(fe);
-
-        // If we have an existing flyout and old element, try to update in place
-        if (oldFlyoutEl is not null && existingFlyout is not null)
+        if (TryGetReactorState(fe, out var state) && state.ModifierFlyout is { } installed)
         {
-            UpdateFlyoutInPlace(existingFlyout, oldFlyoutEl, newFlyoutEl, requestRerender);
+            // One .WithFlyout layer owns the control's modifier flyout: the first to install it.
+            // Another layer on the same control (a keyed Memo's modifiers over its body's) yields.
+            if (!OwnsModifierFlyout(state, oldFlyoutEl)) return;
+            // Patch the flyout this layer installed, even when another writer (a button's own
+            // flyout: argument, a flyout decorator) has since taken the slot. That writer's flyout
+            // is left alone, and this content stays reconciled until it is released (#1753).
+            UpdateFlyoutInPlace(installed, oldFlyoutEl!, newFlyoutEl, requestRerender);
+            state.ModifierFlyoutSource = newFlyoutEl;
             return;
         }
 
@@ -44,8 +47,25 @@ public sealed partial class Reconciler
         var flyout = CreateFlyoutFromElement(newFlyoutEl, requestRerender);
         if (flyout is null) return;
 
+        // What this replaces is the slot's fallback once the modifier is dropped. Only a local
+        // value is kept: a Style-supplied flyout comes back by itself when the slot is cleared,
+        // and restoring it locally would pin it.
+        var displaced = fe.ReadLocalValue(FlyoutSlotProperty(fe)) as WinPrim.FlyoutBase;
         SetFlyoutOnControl(fe, flyout);
+        var installedState = GetOrCreateReactorState(fe);
+        installedState.ModifierFlyout = flyout;
+        installedState.ModifierFlyoutSource = newFlyoutEl;
+        installedState.ModifierDisplacedFlyout = displaced;
     }
+
+    /// <summary>
+    /// Whether the <c>.WithFlyout(...)</c> layer whose previous declaration was
+    /// <paramref name="declared"/> installed the tracked modifier flyout. Compared by value, since a
+    /// skipped render may hand back an equal element instance rather than the one recorded.
+    /// </summary>
+    private static bool OwnsModifierFlyout(ReactorState state, Element? declared) =>
+        declared is not null
+        && (ReferenceEquals(state.ModifierFlyoutSource, declared) || Equals(state.ModifierFlyoutSource, declared));
 
     /// <summary>
     /// Updates the content inside an existing flyout without replacing the flyout object.
@@ -161,6 +181,67 @@ public sealed partial class Reconciler
             case FlyoutSlot.Button: ((WinUI.Button)fe).Flyout = null; break;
             default: WinPrim.FlyoutBase.SetAttachedFlyout(fe, null); break;
         }
+    }
+
+    /// <summary>The dependency property behind <paramref name="fe"/>'s flyout slot.</summary>
+    internal static DependencyProperty FlyoutSlotProperty(FrameworkElement fe) =>
+        ResolveFlyoutSlot(fe.GetType()) switch
+        {
+            FlyoutSlot.SplitButton => WinUI.SplitButton.FlyoutProperty,
+            FlyoutSlot.Button => WinUI.Button.FlyoutProperty,
+            _ => WinPrim.FlyoutBase.AttachedFlyoutProperty,
+        };
+
+    /// <summary>
+    /// Unmounts and detaches a flyout's Reactor-mounted content. Shared by the
+    /// <c>.WithFlyout(...)</c> release and <c>OverlayLifecycle.ReleaseFlyout</c>.
+    /// </summary>
+    internal void UnmountFlyoutContent(WinUI.Flyout flyout)
+    {
+        if (flyout.Content is UIElement content) UnmountChild(content);
+        flyout.Content = null;
+    }
+
+    /// <summary>
+    /// Releases the flyout a <c>.WithFlyout(...)</c> modifier installed on
+    /// <paramref name="fe"/> (issue #1753), when <paramref name="dropped"/> is null or is the
+    /// layer that installed it: unmounts its content and forgets it. Returns true
+    /// when that flyout still occupies the slot, which the caller then hands back to
+    /// <paramref name="displaced"/>, the flyout the modifier replaced there (a button's own
+    /// <c>flyout:</c> argument, which its descriptor won't write again while it is unchanged).
+    /// Another writer, such as a flyout decorator or a changed <c>flyout:</c> argument, may have
+    /// replaced the modifier's flyout, and that writer's flyout is left alone.
+    /// </summary>
+    private bool UnmountFlyoutAttachmentContent(FrameworkElement fe, Element? dropped, out WinPrim.FlyoutBase? displaced)
+    {
+        displaced = null;
+        if (!TryGetReactorState(fe, out var state) || state.ModifierFlyout is not { } flyout) return false;
+        // A drop releases only what that layer installed; an unmount (no layer) releases it all.
+        if (dropped is not null && !OwnsModifierFlyout(state, dropped)) return false;
+        displaced = state.ModifierDisplacedFlyout;
+        state.ModifierFlyout = null;
+        state.ModifierFlyoutSource = null;
+        state.ModifierDisplacedFlyout = null;
+        if (flyout is WinUI.Flyout contentFlyout) UnmountFlyoutContent(contentFlyout);
+        return ReferenceEquals(GetFlyoutOnControl(fe), flyout);
+    }
+
+    /// <summary>Puts <paramref name="displaced"/> back in the slot, or clears it when there is none.</summary>
+    private void RestoreFlyoutSlot(FrameworkElement fe, WinPrim.FlyoutBase? displaced)
+    {
+        if (displaced is null) fe.ClearValue(FlyoutSlotProperty(fe));
+        else SetFlyoutOnControl(fe, displaced);
+    }
+
+    /// <summary>
+    /// Unmount counterpart of the <c>.WithFlyout(...)</c> unset arm in
+    /// <c>ApplyFlyoutModifiers</c>: a control leaving the tree takes its modifier
+    /// flyout's content with it, so the content's components run their cleanups and a pooled
+    /// control holds no flyout from its previous renter (issue #1753).
+    /// </summary>
+    private void ReleaseFlyoutAttachment(FrameworkElement fe)
+    {
+        if (UnmountFlyoutAttachmentContent(fe, dropped: null, out var displaced)) RestoreFlyoutSlot(fe, displaced);
     }
 
     /// <summary>

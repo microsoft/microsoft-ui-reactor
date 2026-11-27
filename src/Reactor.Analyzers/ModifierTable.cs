@@ -149,7 +149,8 @@ internal sealed class AttachedModifierInfo
         string? setter = null,
         string? fixValueType = null,
         string? modifierUsage = null,
-        string[]? receiverConflicts = null)
+        string[]? receiverConflicts = null,
+        string[]? excludedReceivers = null)
     {
         Owner = owner;
         OwnerNamespace = ownerNamespace;
@@ -160,6 +161,7 @@ internal sealed class AttachedModifierInfo
         FixValueType = fixValueType;
         ModifierUsage = modifierUsage ?? "." + modifier + "(...)";
         ReceiverConflicts = receiverConflicts;
+        ExcludedReceivers = excludedReceivers;
     }
 
     /// <summary>Simple name of the type declaring the attached property.</summary>
@@ -234,6 +236,17 @@ internal sealed class AttachedModifierInfo
     /// <c>.AccessibilityHidden()</c> is shorthand for <c>.AccessibilityView(Raw)</c>.
     /// </remarks>
     public string[]? ReceiverConflicts { get; }
+
+    /// <summary>
+    /// Simple names of <c>Microsoft.UI.Xaml.Controls</c> receiver types, including their subclasses,
+    /// where the modifier writes a different property than this setter, so suggesting it would
+    /// change behaviour. The write is not reported on them.
+    /// </summary>
+    /// <remarks>
+    /// <c>.WithFlyout</c> puts the flyout in <c>Button.Flyout</c> on a Button, which opens on click,
+    /// not in <c>FlyoutBase.AttachedFlyout</c>, which only <c>ShowAttachedFlyout</c> opens.
+    /// </remarks>
+    public string[]? ExcludedReceivers { get; }
 
     /// <summary>Table key / diagnostic message subject, e.g. <c>AutomationProperties.Name</c>.</summary>
     public string Key => Owner + "." + Property;
@@ -760,6 +773,7 @@ internal static class ModifierTable
     // user type sharing the simple name cannot trigger the rule.
     private const string AutomationNs = "Microsoft.UI.Xaml.Automation";
     private const string ControlsNs = "Microsoft.UI.Xaml.Controls";
+    private const string PrimitivesNs = "Microsoft.UI.Xaml.Controls.Primitives";
     private const string LayoutNs = "Microsoft.UI.Reactor.Layout";
 
     /// <summary>
@@ -830,6 +844,14 @@ internal static class ModifierTable
 
             // ── TitleBar (spec 059) ──────────────────────────────────────────
             new AttachedModifierInfo("TitleBar", ControlsNs, "IsDragRegion", "IsDragRegion"),
+
+            // ── FlyoutBase (issue #1753) ─────────────────────────────────────
+            // Diagnostic only: SetAttachedFlyout takes a FlyoutBase; .WithFlyout takes the
+            // Reactor element to show in it. Not reported on Button-family receivers, where
+            // .WithFlyout fills the control's own Flyout slot instead (Reconciler.ResolveFlyoutSlot).
+            new AttachedModifierInfo("FlyoutBase", PrimitivesNs, "AttachedFlyout", "WithFlyout",
+                autoFix: false, modifierUsage: ".WithFlyout(element)",
+                excludedReceivers: new[] { "Button", "SplitButton" }),
 
             // ── FlexPanel — all eleven funnel into one .Flex(...) ────────────
             // Diagnostic only: .Flex(...) is a single SetAttached(FlexAttached) that replaces

@@ -320,6 +320,12 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             if (!ModifierTable.AttachedBySetter.TryGetValue(id, out var info))
                 continue;
 
+            if (info.ExcludedReceivers is { } excluded && IsExcludedReceiver(context, lambdaParam, excluded))
+            {
+                unfixableIds.Add(id);
+                continue;
+            }
+
             if (!IsReactorSet())
                 return;
 
@@ -506,6 +512,25 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
         return controlType is not null
             && ModifierTable.IsPoolableTypeName(controlType.Name)
             && controlType.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Xaml.Controls";
+    }
+
+    /// <summary>
+    /// True when the <c>.Set</c> lambda's parameter is one of <paramref name="excluded"/>'s
+    /// <c>Microsoft.UI.Xaml.Controls</c> types or derives from one (see
+    /// <see cref="AttachedModifierInfo.ExcludedReceivers"/>).
+    /// </summary>
+    private static bool IsExcludedReceiver(
+        SyntaxNodeAnalysisContext context,
+        ParameterSyntax lambdaParam,
+        string[] excluded)
+    {
+        var type = context.SemanticModel.GetDeclaredSymbol(lambdaParam, context.CancellationToken)?.Type;
+        foreach (var name in excluded)
+        {
+            if (SetLambdaHelpers.InheritsFrom(type, name, "Microsoft.UI.Xaml.Controls"))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
