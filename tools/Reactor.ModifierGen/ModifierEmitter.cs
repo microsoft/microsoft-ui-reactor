@@ -44,9 +44,15 @@ internal static class ModifierEmitter
     /// are declared rather than derived so the output stays token-identical to the hand-written
     /// arms it replaces, which is what reviewers diff it against.
     /// </param>
+    /// <param name="ReceiverChains">
+    /// Slots written to several receivers, tried in apply order inside the set and the reset arm:
+    /// <c>if (fe is T1 v1) … else if (fe is T2 v2) …</c>. Each is declared with one pattern-variable
+    /// name per Apply receiver, in schema order.
+    /// </param>
     internal sealed record GeneratedHelper(string Name, string Summary, string First, string Last,
         (string Variable, string[] Slots)? SharedGate = null,
-        IReadOnlyDictionary<string, (string Set, string Clear)>? InlineGates = null);
+        IReadOnlyDictionary<string, (string Set, string Clear)>? InlineGates = null,
+        IReadOnlyDictionary<string, string[]>? ReceiverChains = null);
 
     /// <summary>The helpers layer 3 generates (spec 067 §11 3a–3e), one family PR at a time.</summary>
     internal static readonly GeneratedHelper[] GeneratedHelpers =
@@ -61,16 +67,24 @@ internal static class ModifierEmitter
                 ["ElementSoundMode"] = ("ctrl", "ctrlSnd"),
                 ["TabIndex"] = ("tabIdxCtrl", "tabIdxCtrl2"),
             }),
+        new("ApplyTypographyModifiers", "FontFamily, FontSize, and FontWeight.",
+            First: "FontFamily", Last: "FontWeight",
+            ReceiverChains: new Dictionary<string, string[]>
+            {
+                ["FontFamily"] = ["ffCtrl", "ffTb"],
+                ["FontSize"] = ["fsCtrl", "fsTb"],
+                ["FontWeight"] = ["fwCtrl", "fwTb"],
+            }),
     ];
 
     /// <summary>
     /// Spec 067 §11 layer 3: the row A, B and D apply arms, in today's shape (§7): an ungated
     /// set/unset pair on <c>fe</c> (a property write, or an attached owner's <c>SetX</c>), a declared
-    /// <see cref="GeneratedHelper.SharedGate"/> run inside one <c>if (fe is T x) { … }</c> block, or a
-    /// declared <see cref="GeneratedHelper.InlineGates"/> arm. Anything else (converted, a receiver
-    /// chain, a reference-compared field, or a gated slot declared in neither) throws, so a family
-    /// whose arms look different today gets its emitter support in its own PR instead of being
-    /// silently reshaped.
+    /// <see cref="GeneratedHelper.SharedGate"/> run inside one <c>if (fe is T x) { … }</c> block, a
+    /// declared <see cref="GeneratedHelper.InlineGates"/> arm, or a declared
+    /// <see cref="GeneratedHelper.ReceiverChains"/> arm. Anything else (converted, hand-coded, or a
+    /// gated slot or chain left undeclared) throws, so a family whose arms look different today gets
+    /// its emitter support in its own PR instead of being silently reshaped.
     /// </summary>
     internal static string EmitReconcilerModifiers() => EmitReconcilerModifiers(GeneratedHelpers);
 
@@ -96,23 +110,32 @@ internal static class ModifierEmitter
             var slots = ModifierSchema.Slots.Skip(first).Take(last - first + 1).ToList();
             var shared = helper.SharedGate?.Slots ?? [];
             var inline = helper.InlineGates ?? new Dictionary<string, (string Set, string Clear)>();
+            var chains = helper.ReceiverChains ?? new Dictionary<string, string[]>();
             foreach (var slot in slots)
             {
                 if (slot.Shape is not (ApplyShape.Simple or ApplyShape.Attached))
                     throw new InvalidOperationException($"{helper.Name}: {slot.Name} is {slot.Shape}, and only Simple and Attached slots are emitted so far. "
                         + "Add its shape to EmitReconcilerModifiers in the PR that generates it, or end the helper's slot range before it.");
-                if (slot.Write != WriteEquality.Value)
-                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} compares by reference (WriteEquality.{slot.Write}), which is not emitted yet. "
-                        + "Add the reference-compared guard to Guards in the PR that generates it, or end the helper's slot range before it.");
-                if (slot.ReceiversWith(ReceiverRole.Apply).ToList() is not [var receiver])
-                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} has a receiver chain, which is not emitted yet.");
+                if (slot.Write == WriteEquality.Reference && !ReferenceTypes.Contains(slot.ClrType))
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} compares by reference, but {slot.ClrType} is not in ReferenceTypes. "
+                        + "Add it there if it is a reference type.");
+                var receivers = slot.ReceiversWith(ReceiverRole.Apply).ToList();
+                var inGate = shared.Contains(slot.Name) || inline.ContainsKey(slot.Name);
+                if (receivers.Count > 1 || chains.ContainsKey(slot.Name))
+                {
+                    if (!chains.TryGetValue(slot.Name, out var names) || names.Length != receivers.Count || receivers.Count < 2 || inGate)
+                        throw new InvalidOperationException($"{helper.Name}: {slot.Name} has {receivers.Count} Apply receiver{(receivers.Count == 1 ? "" : "s")} ({string.Join(", ", receivers.Select(r => r.SimpleType))}). "
+                            + "A chain of two or more is declared in ReceiverChains only, with one pattern-variable name per receiver in schema order.");
+                    continue;
+                }
+                var receiver = receivers.Single();
                 var declared = (shared.Contains(slot.Name) ? 1 : 0) + (inline.ContainsKey(slot.Name) ? 1 : 0);
                 if ((receiver.Type == ModifierSchema.FrameworkElement) != (declared == 0) || declared > 1)
                     throw new InvalidOperationException(receiver.Type == ModifierSchema.FrameworkElement
                         ? $"{helper.Name}: {slot.Name} is ungated, so it cannot be in SharedGate or InlineGates."
                         : $"{helper.Name}: {slot.Name} is gated on {receiver.SimpleType}; declare its arm shape in exactly one of SharedGate or InlineGates.");
             }
-            foreach (var name in shared.Concat(inline.Keys))
+            foreach (var name in shared.Concat(inline.Keys).Concat(chains.Keys))
                 if (!slots.Any(s => s.Name == name))
                     throw new InvalidOperationException($"{helper.Name}: '{name}' is declared as gated but is not in the helper's slot range.");
 
@@ -122,10 +145,20 @@ internal static class ModifierEmitter
             {
                 if (i > 0) sb.Append('\n');
                 var slot = slots[i];
-                var receiver = slot.ReceiversWith(ReceiverRole.Apply).Single();
                 var (set, unset, value) = Guards(slot);
                 var indent = "        ";
                 var armSeparator = "\n" + indent + "    ";
+                if (chains.TryGetValue(slot.Name, out var chainNames))
+                {
+                    var chain = slot.ReceiversWith(ReceiverRole.Apply).ToList();
+                    sb.Append(indent).Append("if (").Append(set).Append(")\n");
+                    AppendChain(sb, indent, chain, chainNames, (r, v) => $"{v}.{r.Property} = {value}");
+                    sb.Append(indent).Append("else if (").Append(unset).Append(")\n");
+                    AppendChain(sb, indent, chain, chainNames, (r, v) => Clear(r, r.Type, v));
+                    i++;
+                    continue;
+                }
+                var receiver = slot.ReceiversWith(ReceiverRole.Apply).Single();
                 if (receiver.Type == ModifierSchema.FrameworkElement)
                 {
                     sb.Append(indent).Append("if (").Append(set).Append(')').Append(armSeparator).Append(Write(slot, receiver, "fe", value)).Append(";\n");
@@ -173,12 +206,26 @@ internal static class ModifierEmitter
     private static readonly HashSet<string> ReferenceTypes = new(StringComparer.Ordinal) { "string", "Microsoft.UI.Xaml.Media.FontFamily" };
 
     // The changed / released guards and the value expression of a set/unset pair (spec 067 §6.6).
+    // A reference-compared field (WriteEquality.Reference) is changed when it is a different instance.
     private static (string Set, string Unset, string Value) Guards(ModifierSlot slot)
     {
         var x = slot.Name;
-        return ReferenceTypes.Contains(slot.ClrType)
-            ? ($"m.{x} is not null && m.{x} != oldM?.{x}", $"m.{x} is null && oldM?.{x} is not null", $"m.{x}")
-            : ($"m.{x}.HasValue && m.{x} != oldM?.{x}", $"!m.{x}.HasValue && oldM?.{x}.HasValue == true", $"m.{x}.Value");
+        if (!ReferenceTypes.Contains(slot.ClrType))
+            return ($"m.{x}.HasValue && m.{x} != oldM?.{x}", $"!m.{x}.HasValue && oldM?.{x}.HasValue == true", $"m.{x}.Value");
+        var changed = slot.Write == WriteEquality.Reference ? $"!ReferenceEquals(m.{x}, oldM?.{x})" : $"m.{x} != oldM?.{x}";
+        return ($"m.{x} is not null && {changed}", $"m.{x} is null && oldM?.{x} is not null", $"m.{x}");
+    }
+
+    // One arm body of a receiver chain: the first receiver the element is wins.
+    private static void AppendChain(StringBuilder sb, string indent, List<ModifierReceiver> chain, string[] names, Func<ModifierReceiver, string, string> body)
+    {
+        sb.Append(indent).Append("{\n");
+        for (var k = 0; k < chain.Count; k++)
+        {
+            sb.Append(indent).Append("    ").Append(k > 0 ? "else if (fe is " : "if (fe is ").Append(TypeRef(chain[k].Type)).Append(' ').Append(names[k]).Append(") ")
+                .Append(body(chain[k], names[k])).Append(";\n");
+        }
+        sb.Append(indent).Append("}\n");
     }
 
     private static string Write(ModifierSlot slot, ModifierReceiver receiver, string target, string value) =>

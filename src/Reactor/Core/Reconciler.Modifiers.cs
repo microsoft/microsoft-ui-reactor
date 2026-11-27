@@ -676,42 +676,6 @@ public sealed partial class Reconciler
         return interactionStates;
     }
 
-    /// <summary>FontFamily, FontSize, and FontWeight.</summary>
-    private static void ApplyTypographyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
-    {
-        // ── Typography (FontFamily, FontSize, FontWeight) ──────────
-        if (m.FontFamily is not null && !ReferenceEquals(m.FontFamily, oldM?.FontFamily))
-        {
-            if (fe is WinUI.Control ffCtrl) ffCtrl.FontFamily = m.FontFamily;
-            else if (fe is TextBlock ffTb) ffTb.FontFamily = m.FontFamily;
-        }
-        else if (m.FontFamily is null && oldM?.FontFamily is not null)
-        {
-            if (fe is WinUI.Control ffCtrl) ffCtrl.ClearValue(WinUI.Control.FontFamilyProperty);
-            else if (fe is TextBlock ffTb) ffTb.ClearValue(TextBlock.FontFamilyProperty);
-        }
-        if (m.FontSize.HasValue && m.FontSize != oldM?.FontSize)
-        {
-            if (fe is WinUI.Control fsCtrl) fsCtrl.FontSize = m.FontSize.Value;
-            else if (fe is TextBlock fsTb) fsTb.FontSize = m.FontSize.Value;
-        }
-        else if (!m.FontSize.HasValue && oldM?.FontSize.HasValue == true)
-        {
-            if (fe is WinUI.Control fsCtrl) fsCtrl.ClearValue(WinUI.Control.FontSizeProperty);
-            else if (fe is TextBlock fsTb) fsTb.ClearValue(TextBlock.FontSizeProperty);
-        }
-        if (m.FontWeight.HasValue && m.FontWeight != oldM?.FontWeight)
-        {
-            if (fe is WinUI.Control fwCtrl) fwCtrl.FontWeight = m.FontWeight.Value;
-            else if (fe is TextBlock fwTb) fwTb.FontWeight = m.FontWeight.Value;
-        }
-        else if (!m.FontWeight.HasValue && oldM?.FontWeight.HasValue == true)
-        {
-            if (fe is WinUI.Control fwCtrl) fwCtrl.ClearValue(WinUI.Control.FontWeightProperty);
-            else if (fe is TextBlock fwTb) fwTb.ClearValue(TextBlock.FontWeightProperty);
-        }
-    }
-
     /// <summary>OnMount, OnUpdate, and OnUnmount callbacks.</summary>
     private void ApplyLifecycleCallbackModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
