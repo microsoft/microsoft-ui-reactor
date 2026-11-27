@@ -1347,6 +1347,7 @@
       "agent": "general",
       "files": [
         "src/Reactor/Core/Reconciler.Modifiers.cs",
+        "src/Reactor/Core/Reconciler.Modifiers.Generated.cs",
         "src/Reactor/Core/ModifierEvents.cs",
         "src/Reactor/Core/ThemeBindingApplier.cs",
         "src/Reactor/Core/ThemeBindingApplier.Generated.cs",

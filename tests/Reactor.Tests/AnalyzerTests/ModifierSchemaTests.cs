@@ -14,7 +14,9 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// <summary>
 /// Spec 067 §10.1, layer 1: the invariants <c>ModifierSchema</c> keeps about itself, each checked
 /// against an independent source (reflection over the records and WinUI, or a Roslyn read of the
-/// hand-written reconciler) rather than against another copy of the schema.
+/// reconciler) rather than against another copy of the schema. For the helpers listed in
+/// <c>ModifierEmitter.GeneratedHelpers</c> (spec 067 layer 3) the Roslyn read sees generated code, so
+/// the independent receiver and unset oracle there is the frozen §10.2 <c>ModifierMatrix_*</c> selftest.
 /// </summary>
 /// <remarks>
 /// Completeness, skip equality and merge are checked by <see cref="ModifierFieldContractTests"/>,
@@ -269,6 +271,19 @@ public class ModifierSchemaTests
             .Select(s => s.Name)
             .ToList();
         Assert.True(unpinned.Count == 0, "Property slots with no position in a frozen apply order: " + string.Join(", ", unpinned));
+    }
+
+    [Fact]
+    public void Every_HandCoded_Method_Owner_Is_A_Reconciler_Method()
+    {
+        // A dotted owner is a handoff (checked above); an undotted one names the reconciler helper
+        // that owns the arm, so a helper rename has to carry the schema rows with it.
+        var owners = ModifierSchema.Slots.Where(s => s.HandCodedMethod is { } m && !m.Contains('.'))
+            .Select(s => (s.Name, Method: s.HandCodedMethod!)).ToList();
+        Assert.NotEmpty(owners);
+        var missing = owners.Where(o => ReconcilerSource.Methods(o.Method).Count == 0).ToList();
+        Assert.True(missing.Count == 0,
+            "Schema .Method owners that name no reconciler method: " + string.Join(", ", missing.Select(o => $"{o.Name} → {o.Method}")));
     }
 
     // ── Receivers ───────────────────────────────────────────────────────

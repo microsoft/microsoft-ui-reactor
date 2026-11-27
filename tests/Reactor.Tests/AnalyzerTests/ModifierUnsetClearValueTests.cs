@@ -460,7 +460,8 @@ public class ModifierUnsetClearValueTests
             "stays pinned on the control forever once the modifier is dropped from the chain " +
             $"(issue #986): [{string.Join(", ", unreleased)}]. Restore the unset arm. If you " +
             "reached this after resolving a Reconciler.Modifiers.cs merge conflict, the resolution dropped " +
-            "the whole arm — reapply it rather than deleting the write.");
+            "the whole arm — reapply it rather than deleting the write. An arm in Reconciler.Modifiers.Generated.cs " +
+            "is fixed in tools/Reactor.ModifierGen (or its ModifierSchema slot) and regenerated, never edited.");
 
         Assert.True(
             offenders.Count == 0,
@@ -471,7 +472,8 @@ public class ModifierUnsetClearValueTests
             "`else if (fe is WinUI.<Type> v) v.ClearValue(WinUI.<Type>.<Prop>Property);` " +
             "branch to the unset arm. If you reached this after resolving a Reconciler.Modifiers.cs " +
             "merge conflict, the conflict resolution dropped the clear branch — reapply it " +
-            "rather than deleting the write.");
+            "rather than deleting the write. An arm in Reconciler.Modifiers.Generated.cs is fixed in " +
+            "tools/Reactor.ModifierGen (or its ModifierSchema slot) and regenerated, never edited.");
     }
 
     /// <summary>

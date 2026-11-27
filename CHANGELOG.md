@@ -307,6 +307,10 @@ Conventions for contributors:
   recycle). Builds using `TreatWarningsAsErrors` may need to move those writes to
   `.WithFlyout(...)` (issue #1753).
 
+- Rebuilding an equivalent normal foreground brush preserves an unchanged active interaction
+  foreground on Flyout targets while its tracker survives the update, and updates the brush
+  restored when the state ends (#1727).
+
 - Dropping `.Padding(x)` and `.PaddingInlineStart(y)` or `.PaddingInlineEnd(y)` in
   the same render now releases the padding. Before, the control kept `x` as a
   local value, so a `Button` never got its themed padding back (issue #1749).

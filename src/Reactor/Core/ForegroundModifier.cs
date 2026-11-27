@@ -9,8 +9,8 @@ internal static class ForegroundModifier
 {
     internal enum UpdateAction { None, Reapply, RemovalHandled, NewTarget }
 
-    // A skipped render can declare a new equivalent brush. The native control retains the
-    // instance the common modifier actually wrote, even if WinRT projects a new wrapper.
+    // A skipped render can declare a new equivalent brush. Remember the instance the common
+    // modifier applied (or stored for interaction-state restoration), even if WinRT projects a new wrapper.
     private static DependencyProperty? s_appliedForegroundProperty;
 
     internal static DependencyProperty? GetProperty(FrameworkElement fe) => fe switch
@@ -73,7 +73,7 @@ internal static class ForegroundModifier
         return UpdateAction.RemovalHandled;
     }
 
-    internal static void Apply(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, UpdateAction update)
+    internal static void Apply(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, UpdateAction update, Reconciler reconciler)
     {
         var oldForeground = update == UpdateAction.NewTarget ? null : oldM?.Foreground;
         var foreground = m.Foreground;
@@ -84,7 +84,10 @@ internal static class ForegroundModifier
         if (foreground is not null)
         {
             if (ReferenceEquals(oldForeground, foreground) && update != UpdateAction.Reapply) return;
-            fe.SetValue(property, foreground);
+            // Equivalent normal brushes must not overwrite a foreground still owned by an
+            // interaction state (#1727). A genuinely different normal value writes as usual.
+            if (!InteractionStateApplier.TryReplaceInteractionForegroundRestoreValue(fe, foreground, reconciler))
+                fe.SetValue(property, foreground);
             if (fe is WinUI.RichTextBlock)
             {
                 var appliedProperty = s_appliedForegroundProperty ??= DependencyProperty.RegisterAttached(
