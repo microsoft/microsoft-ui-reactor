@@ -42,8 +42,11 @@ public sealed partial class Reconciler
         // First mount — create new flyout
         var flyout = CreateFlyoutFromElement(newFlyoutEl, requestRerender);
         // A flyout this modifier installed earlier is being replaced, so its content goes now, and
-        // what it displaced stays the slot's fallback.
-        var displaced = UnmountFlyoutAttachmentContent(fe, out var earlier) ? earlier : GetFlyoutOnControl(fe);
+        // what it displaced stays the slot's fallback. Only a local value is kept: a Style-supplied
+        // flyout comes back by itself when the slot is cleared, and restoring it locally would pin it.
+        var displaced = UnmountFlyoutAttachmentContent(fe, out var earlier)
+            ? earlier
+            : fe.ReadLocalValue(FlyoutSlotProperty(fe)) as WinPrim.FlyoutBase;
         if (flyout is null)
         {
             RestoreFlyoutSlot(fe, displaced);

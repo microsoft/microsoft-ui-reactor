@@ -298,4 +298,40 @@ public static class FlyoutAttachmentPoolFixtures
             H.Check("WithFlyoutUnchangedOwn_Phase1_ModifierContentUnmounted", s_cleanupCount == 1);
         }
     }
+
+    // A flyout a Style supplies is not a local value, so dropping .WithFlyout clears the slot and
+    // the Style's flyout shows through again. Restoring it as a local value would pin it.
+    internal class WithFlyoutDroppedOverStyledFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var styledFlyout = new WinUI.Flyout { Content = new WinUI.TextBlock { Text = "flyout-styled" } };
+            var style = new Style(typeof(WinUI.Button));
+            style.Setters.Add(new Setter(WinUI.Button.FlyoutProperty, styledFlyout));
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (dropped, set) = ctx.UseState(false);
+                Element button = Button("flyout-styled-button", () => { }).Set(b => b.Style = style);
+                return VStack(
+                    Button("DropModifierOverStyle", () => set(true)),
+                    dropped ? button : button.WithFlyout(Component<CleanupChild>()));
+            });
+
+            await Harness.Render();
+            var button = H.FindButton("flyout-styled-button");
+            H.Check("WithFlyoutStyled_Phase0_ModifierFlyout",
+                button is not null && button.Flyout is WinUI.Flyout && !ReferenceEquals(button.Flyout, styledFlyout));
+
+            H.ClickButton("DropModifierOverStyle");
+            await Harness.Render();
+            H.Check("WithFlyoutStyled_Phase1_SameControl", button == H.FindButton("flyout-styled-button"));
+            H.Check("WithFlyoutStyled_Phase1_NoLocalFlyout",
+                button is not null && button.ReadLocalValue(WinUI.Button.FlyoutProperty) == DependencyProperty.UnsetValue);
+            H.Check("WithFlyoutStyled_Phase1_StyledFlyoutShows",
+                button is not null && ReferenceEquals(button.Flyout, styledFlyout));
+            H.Check("WithFlyoutStyled_Phase1_ModifierContentUnmounted", s_cleanupCount == 1);
+        }
+    }
 }

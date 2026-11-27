@@ -780,6 +780,7 @@ internal static class SelfTestFixtureRegistry
         ("FlyoutAttachment_WithFlyoutHandsOffToButtonFlyout", static harness => new FlyoutAttachmentPoolFixtures.WithFlyoutHandsOffToButtonFlyout(harness)),
         ("FlyoutAttachment_WithFlyoutKeptBesideButtonFlyout", static harness => new FlyoutAttachmentPoolFixtures.WithFlyoutKeptBesideButtonFlyout(harness)),
         ("FlyoutAttachment_WithFlyoutDroppedBesideUnchangedButtonFlyout", static harness => new FlyoutAttachmentPoolFixtures.WithFlyoutDroppedBesideUnchangedButtonFlyout(harness)),
+        ("FlyoutAttachment_WithFlyoutDroppedOverStyledFlyout", static harness => new FlyoutAttachmentPoolFixtures.WithFlyoutDroppedOverStyledFlyout(harness)),
         ("ModifierEvent_InlineMarginCarryForward", static harness => new ModifierEventFixtures.ModifierInlineMarginCarryForward(harness)),
         ("ModifierEvent_InlineDropRestoresPhysical", static harness => new ModifierEventFixtures.ModifierInlineDropRestoresPhysical(harness)),
         ("ModifierEvent_AccessibilityClearResets", static harness => new ModifierEventFixtures.AccessibilityModifierClearResets(harness)),
