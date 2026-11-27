@@ -53,7 +53,21 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ## Setting up a source checkout
 
-Clone the repository and run the bootstrap script once. The last line starts the script in the PowerShell you are using now and bypasses the execution policy for this one run:
+If you installed both the release skill kit and the source-built `mur`, put
+the .NET global-tool directory ahead of the kit's `bin\<arch>` in PATH. Run
+these commands in the same PowerShell session you will use to start bootstrap.
+
+```powershell
+$env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
+Get-Command mur
+```
+
+`Get-Command mur` should resolve to `~/.dotnet/tools/mur.exe`. This PATH change
+applies to the current session and the bootstrap process it starts.
+
+Clone the repository and run the bootstrap script once. The bootstrap command
+runs it in a child PowerShell process with an execution-policy override for
+that run.
 
 ```powershell
 git clone https://github.com/microsoft/microsoft-ui-reactor.git
@@ -61,12 +75,17 @@ cd microsoft-ui-reactor
 & (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
 ```
 
+If bootstrap reports a `mur` revision mismatch after installing prerequisites,
+the prerequisite install may have refreshed PATH from Windows settings.
+Prepend the global-tool directory again, check `Get-Command mur`, and rerun
+bootstrap.
+
 You can run the script again at any time. It keeps the tools and the template pack you already have, and repacks `mur` and the framework.
 
 `bootstrap.ps1` does these steps, in order:
 
 1. Checks for the .NET 11 SDK and the .NET 10 Desktop runtime, and installs them with winget if they are missing. It also checks the Windows App Runtime and the `winapp` CLI that the E2E tests use.
-2. Packs the `mur` CLI (`src/Reactor.Cli`) and installs it as a `dotnet tool` global tool, so `mur` is on PATH in every shell.
+2. Packs the `mur` CLI (`src/Reactor.Cli`) and installs it as a .NET global tool in `~/.dotnet/tools`.
 3. Runs `mur pack-local`, which packs the framework from your working tree into `local-nupkgs/`.
 4. Installs the Windows App SDK template pack (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), which provides `dotnet new reactor`.
 5. Installs the Reactor agent plugin under `~/.claude/plugins/reactor` (a symlink when allowed, a copy otherwise). Skip it with `-SkipPlugin`.

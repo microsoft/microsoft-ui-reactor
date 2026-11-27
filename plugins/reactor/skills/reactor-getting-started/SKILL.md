@@ -52,7 +52,7 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 
 `dotnet new reactor -n <Name>` scaffolds the canonical shape: `App.cs` (entry point + initial component, with the `using` block at the top) plus `<Name>.csproj`. Richer shells: `reactor-mvu`, `reactor-navview`, `reactor-tabview`. See the anti-probe + `mur check` notes under "Use a `.csproj` …" below for what comes out of the scaffold.
 
-For a single-file `dotnet run App.cs` demo (no `.csproj`), `dotnet new reactor-singlefile -n <Name>` scaffolds `<Name>/<Name>.cs` with the file-level `#:package` / `#:property` header already in place. Keep all the code in that file, because a file-based app compiles only that one file. Check it with `mur check <Name>.cs` from its folder; a bare `mur check` builds the current directory, which needs a project file. To add the header to an existing file instead, see `reactor-build-and-check`'s single-file-scripts section.
+For a single-file `dotnet run App.cs` demo (no `.csproj`), `dotnet new reactor-singlefile -n <Name>` scaffolds `<Name>/<Name>.cs` with the file-level `#:package` / `#:property` header already in place. Keep all the code in that file, because a file-based app compiles only that one file. From its folder, run `mur check <Name>.cs` when available or `dotnet build <Name>.cs` otherwise. For self-contained builds or help with the file header, see the single-file section of `reactor-build-and-check`.
 
 If `dotnet new` rejects `--packaging` or can't find `reactor-singlefile`, the installed pack predates them; `winapp new --list --template-version latest` updates it.
 
@@ -87,7 +87,14 @@ including the explicit-`MSIX` form.
 
 **The scaffolded csproj ships a Debug-only ItemGroup that adds `Microsoft.UI.Reactor.Devtools` + `Reactor.DevtoolsSupport=true`.** That makes devtools available without turning them on. For the in-app dev menu, run `dotnet run -- --devtools app` and make sure the app renders `DevtoolsMenu(...)`, e.g. in its title bar — the flag alone draws nothing. `dotnet run` hands everything after `--` to the app, and a packaged scaffold still receives it when it launches with package identity. Keep the `app`: a bare `--devtools` is read as `--devtools run`, the heavier session behind `mur devtools` that also starts an MCP endpoint. `Properties/launchSettings.json` depends on the packaging. A packaged scaffold lists a **Package** profile first, Visual Studio's F5 default, and an **Unpackaged** profile second. `dotnet run` can't apply MSIX profiles, so it picks **Unpackaged**, but WinApp still launches the app with package identity. WinApp also supplies its own run arguments, so `dotnet run` ignores profile arguments there; pass `-- --devtools app` yourself. In Visual Studio, keep **Package**: choosing **Unpackaged** there starts the exe without identity, and it fails at startup with `REGDB_E_CLASSNOTREG`. A `--packaging Unpackaged` scaffold has an **Unpackaged** profile plus an **Unpackaged, Devtools** profile that passes `--devtools app`. Release builds drop the devtools package and host-config switch so trim / AOT analyzers stay quiet — see the `packaging` guide for the full rationale before flipping either knob.
 
-**Verify your edits with `mur check`** before declaring done. From the project directory: `mur check` (no arguments) runs `dotnet build` and emits one compressed line per diagnostic with a `→ try:` suggestion when the engine recognizes the mistake; `mur check --final` is the explicit "I am done iterating" sweep that emits the full diagnostic set including suppressed iteration-mode warnings. For anything more involved than the build/fix loop — strict-mode failures, custom diagnostic gating, MSBuild passthrough flags — load the `reactor-build-and-check` skill.
+**Build to verify your edits.** From the project directory, run
+`mur check -- -p:Platform=x64` for an x64 build, or use
+`dotnet build -p:Platform=x64` if `mur` is unavailable. Set
+`-p:Platform=ARM64` in either command to target Arm64. `mur check`
+emits one line per diagnostic with a `→ try:` suggestion when the engine
+recognizes the mistake. `mur check --final` is an optional sweep that includes
+suppressed iteration-mode warnings. For strict mode or MSBuild passthrough
+flags, load the `reactor-build-and-check` skill.
 
 ## Required imports
 
@@ -608,6 +615,5 @@ Full API index (every factory, modifier, hook, theme token, with parameter lists
 
 ## Build output
 
-`dotnet run` exits with code 1 on build failure. **Always read the output** — don't assume success. After non-trivial edits, run `mur check <path>` for one-line diagnostics with skill-file pointers (see `reactor-build-and-check`).
-
-> Remember: always pass `-p:Platform=x64` (or `ARM64`). Without it, the first build always fails.
+Read the build output after non-trivial edits. For build commands that work
+with or without `mur`, see `reactor-build-and-check`.

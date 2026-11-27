@@ -1,24 +1,26 @@
 ---
 name: reactor-build-and-check
-description: "Building Reactor apps and reading diagnostics — `mur check <path>` is the build (same exit code as `dotnet build`, never re-run to confirm) with one-line diagnostics, skill pointers, and `→ try:` did-you-mean suggestions to use verbatim. Covers iteration vs `--final` workflow, the common-build-errors cheat table mapping `REACTOR_HOOKS_*` / `REACTOR_DSL_*` / `REACTOR_THEME_*` / `REACTOR_A11Y_*` / `REACTOR_OPT_*` / `CS*` IDs to fixes, when single-file vs `.csproj` matters for analyzer coverage, build prerequisites. Use when a build fails, you see an analyzer warning, or you want a structured diagnostic stream instead of raw MSBuild output."
+description: "Building Reactor apps and reading diagnostics. Prefer `mur check <path>` when available. It runs `dotnet build`, preserves its exit code, and adds one-line diagnostics, skill pointers, and `→ try:` did-you-mean suggestions to use verbatim. Use `dotnet build` when `mur` is unavailable. Covers iteration vs `--final` workflow, the common-build-errors cheat table mapping `REACTOR_HOOKS_*` / `REACTOR_DSL_*` / `REACTOR_THEME_*` / `REACTOR_A11Y_*` / `REACTOR_OPT_*` / `CS*` IDs to fixes, when single-file vs `.csproj` matters for analyzer coverage, build prerequisites. Use when a build fails, you see an analyzer warning, or you want a structured diagnostic stream instead of raw MSBuild output."
 ---
 
 ## Build & verify
 
-Run after every non-trivial edit. **Read the output** — `dotnet run` exits with code 1 on build failure; silent ≠ success.
+Build after every non-trivial edit. Prefer `mur check` when it is on PATH. If it is unavailable, use the `dotnet build` commands below and read the diagnostics directly.
 
 ### Single-file `.cs` (default for new apps)
 
 ```powershell
-dotnet run App.cs
+dotnet build App.cs
 ```
+
+Use `dotnet run App.cs` to build and launch the app.
 
 The file header needs `#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0`,
 which launches the app packaged (needs Developer Mode), or
 `#:property WindowsPackageType=None`, which runs it unpackaged. With neither,
-the app builds, then dies at startup with `REGDB_E_CLASSNOTREG`. No
-`-p:Platform` is needed — only a self-contained app
-(`#:property WindowsAppSDKSelfContained=true`) needs an architecture. The
+the app builds, then dies at startup with `REGDB_E_CLASSNOTREG`. The framework-dependent build needs no platform flag. For a self-contained
+file (`#:property WindowsAppSDKSelfContained=true`), add `-r win-x64` or
+`-r win-arm64` to the `dotnet build App.cs` command. The
 [Installation guide](https://microsoft.github.io/microsoft-ui-reactor/latest/get-started/install/#one-file-no-project)
 documents the packaged header.
 
@@ -31,8 +33,11 @@ Single-file builds **do not load analyzers**. You'll catch CS errors but not the
 
 ### `.csproj` (multi-file, analyzer coverage)
 
+Pass the platform that matches the app's target architecture.
+
 ```powershell
-dotnet build MyApp.csproj -p:Platform=ARM64
+dotnet build MyApp.csproj -p:Platform=x64    # x64
+dotnet build MyApp.csproj -p:Platform=ARM64  # Arm64
 ```
 
 Analyzers are bundled in the `Microsoft.UI.Reactor` package and load automatically.
@@ -44,7 +49,7 @@ mur check MyApp.csproj                       # iteration mode (default)
 mur check --final MyApp.csproj               # once iteration is clean — pre-merge sweep
 ```
 
-**`mur check` is the build, not a separate check step.** It runs `dotnet build` under the hood and returns the same exit code. When `mur check` exits 0, the build is green — **do not re-run `dotnet build` to confirm**. They're the same compilation; a redundant `dotnet build` after a green `mur check` is wasted work.
+`mur check` runs `dotnet build` and returns its exit code. An exit code of 0 verifies the build.
 
 Two enrichments over raw `dotnet build`:
 
@@ -59,8 +64,6 @@ C:\path\Program.cs:34:16  E  CS1061  'ButtonElement' does not contain a definiti
 ```
 
 `<path>` defaults to `.` and accepts a `.csproj`, a directory, or a single `.cs` file. Skill pointers fire only for known `REACTOR_*` IDs — vanilla `CS` errors come through with severity + code + message, plus the `→ try:` suggestion when the suggester has a high-confidence candidate.
-
-If `mur` isn't on PATH, fall back to `dotnet build` and read the output directly. Don't spelunk the package cache for it — `mur` is published with the framework but is a separate install.
 
 #### `→ try:` suggestions — trust them
 
@@ -163,10 +166,9 @@ If a `REACTOR_*` ID isn't in this table, the bundled analyzer DLL has more docs.
 
 ## Iteration discipline
 
-- **`mur check` is the build.** Same exit code as `dotnet build`. Don't re-run `dotnet build` to confirm a green `mur check` — it's redundant work on the same compilation.
 - **Trust `→ try:` suggestions directly.** They're precomputed against the actual Reactor surface for the exact diagnostic. Use the suggested name verbatim; don't grep adjacent or sibling names. If it's wrong, the next `mur check` will say so — that's the self-correcting loop.
 - **Batch fixes.** Read every error/warning in one pass, fix them all, then re-build. Don't re-build after each single fix.
-- **`mur check` in the loop. When it exits 0, you are done.** Iteration mode suppresses cosmetic noise so the real blocker doesn't scroll off attention. `mur check --final` is an optional pre-merge sweep for human review / CI gates — not a task-completion requirement; skipping it is fine.
+- **Use `mur check` in the loop when available.** Iteration mode suppresses cosmetic noise so the real blocker doesn't scroll off attention. `mur check --final` is an optional pre-merge sweep for human review / CI gates — not a task-completion requirement; skipping it is fine.
 - **Don't introspect via `[System.Reflection]`.** Enumerating Reactor types or members at runtime to "discover" the API is unnecessary and slow. This cheat table plus `mur check`'s did-you-mean suggestions plus `reactor-dsl/references/reactor.api.txt` cover the surface.
 - **Trust the analyzer over your memory.** If `REACTOR_DSL_001` says "missing `.WithKey`", add `.WithKey(...)` — the analyzer is right.
 - **Don't bypass.** Avoid `#pragma warning disable REACTOR_*` unless you have a specific known reason. The analyzers exist because the runtime symptoms are subtle (focus loss, identity drift, refetch storms).
@@ -186,5 +188,32 @@ Consumer-facing MSBuild properties the package honours.
 | Requirement | Minimum | Install |
 |---|---|---|
 | .NET SDK | 10.0 | `winget install Microsoft.DotNet.SDK.10` |
-| `mur` (optional) | latest | Build from source: `dotnet build src/Reactor.Cli`. Selfhost only today. |
-| Microsoft.UI.Reactor | 0.0.0-local (selfhost) or a published version | Selfhost: `mur pack-local`. Consumer: `<PackageReference>` in `.csproj`. |
+| `mur` (optional) | — | See [Install `mur`](#install-mur). |
+| Microsoft.UI.Reactor | 0.0.0-local (selfhost) or a published version | In a Reactor checkout, refresh local framework packages with `mur pack-local` after initial setup. In a consumer project, add a `<PackageReference>` in the `.csproj` or a `#:package` directive in a single-file app. |
+
+### Install `mur`
+
+- **Using a release.** Download `reactor-skill-kit-<version>.zip` from
+  [GitHub Releases](https://github.com/microsoft/microsoft-ui-reactor/releases).
+  The installer replaces the entire destination directory if it already exists.
+  Back up local edits before reinstalling, or pass `-Path <new-folder>` to use
+  a fresh destination. Install the .NET 10 runtime and ensure `dotnet.exe`
+  is on PATH before running the script. Extract the ZIP and run
+  `.\install-skill-kit.ps1` from the extracted `reactor/` directory. The
+  default destination is `~/.claude/skills/reactor`. The script adds the
+  matching Windows x64 or Arm64 `bin/<arch>` directory to your user PATH.
+  Open a new terminal and use `Get-Command mur` to confirm it resolves to the
+  kit, then run `mur --version`.
+- **Contributing to Reactor.** Run `./bootstrap.ps1` from the repository root
+  for initial setup or to update the CLI. It packs and installs the CLI from
+  the checkout as a .NET global tool. If a release kit's `mur` is already on
+  PATH, prepend the global tool directory before running bootstrap so it
+  resolves the source CLI in this PowerShell session.
+
+  ```powershell
+  $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
+  ```
+
+  If bootstrap reports a `mur` revision mismatch after installing prerequisites,
+  prepend the global tool directory again and rerun bootstrap. `Get-Command mur`
+  shows which executable your shell resolves.
