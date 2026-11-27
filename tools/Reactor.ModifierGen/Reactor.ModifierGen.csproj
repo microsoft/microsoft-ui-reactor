@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Spec 067 §4.3: reads ModifierSchema (compiled into Reactor.Analyzers, the schema's one home)
+         and emits checked-in C#. Plain net10.0: it never loads a WinUI type, only strings from the
+         schema, so it stays headless. Reactor.Tests runs the same emitter in-process and
+         byte-compares its output with the checked-in files. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.UI.Reactor.ModifierGen</RootNamespace>
+    <AssemblyName>Reactor.ModifierGen</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reactor.Tests" />
+  </ItemGroup>
+
+</Project>

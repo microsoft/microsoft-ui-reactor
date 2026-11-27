@@ -42,6 +42,8 @@ Modifiers that only some controls have, grouped by the area of those controls.
 | [Status and info](status-and-info.md) | Modifiers that only the controls in the Status and info area have. |
 | [Forms](forms.md) | Modifiers that only the controls in the Forms area have. |
 | [Interop](interop.md) | Modifiers that only the controls in the Interop area have. |
+| [Docking](docking.md) | Modifiers that only the controls in the Docking area have. |
+| [Win2D canvas](win2d.md) | Modifiers that only the controls in the Win2D canvas area have. |
 
 ## Types
 

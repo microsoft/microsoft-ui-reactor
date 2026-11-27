@@ -29,6 +29,26 @@ public sealed class PreviewCaptureServer_EmbedTests
     }
 
     [Fact]
+    public async Task Status_ReportsRenderError_AsNullWhenNoneAndTheDescriptionWhenShown()
+    {
+        using var h = ServerHarness.Start(embedMode: false);
+        string? current = null;
+        h.Server.GetRenderError = () => current;
+
+        using (var clean = await h.Client.GetAsync("/status", TestContext.Current.CancellationToken))
+        using (var json = await ReadJson(clean))
+        {
+            // Present-and-null, not absent: the docs pipeline fails closed on a missing field.
+            Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("renderError").ValueKind);
+        }
+
+        current = "RootRender in Alert: NullReferenceException: boom";
+        using var failed = await h.Client.GetAsync("/status", TestContext.Current.CancellationToken);
+        using var failedJson = await ReadJson(failed);
+        Assert.Equal(current, failedJson.RootElement.GetProperty("renderError").GetString());
+    }
+
+    [Fact]
     public async Task Hwnd_RequiresBearerToken()
     {
         using var h = ServerHarness.Start();

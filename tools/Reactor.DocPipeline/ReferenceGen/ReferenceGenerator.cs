@@ -20,6 +20,9 @@ internal sealed record RefGenFinding(
 /// </summary>
 internal sealed record RefLocation(string RelativePath, string? Anchor, string Label);
 
+/// <summary>One documented assembly: its XML doc file and the DLL built beside it.</summary>
+internal sealed record ReferenceInput(string XmlPath, string DllPath);
+
 /// <summary>One generated reference page.</summary>
 internal sealed record ReferencePage(
     string RelativePath,
@@ -56,9 +59,11 @@ internal sealed record ReferenceGenResult(
 /// Builds the API reference:
 ///
 /// <list type="number">
-/// <item>Reads <c>Microsoft.UI.Reactor.xml</c>, and the public surface from <c>Microsoft.UI.Reactor.dll</c>
-///   when it sits next to the XML file (<see cref="ApiModel.FromAssembly"/>).
-///   Without the assembly the surface is taken from the XML file alone.</item>
+/// <item>Reads the XML doc files of every documented assembly (<c>Microsoft.UI.Reactor</c>
+///   and <c>Microsoft.UI.Reactor.Advanced</c>), and the public surface from the DLL
+///   next to each (<see cref="ApiModel.FromAssembly"/>), merged into one model
+///   (<see cref="ApiModel.Merge"/>). Without an assembly the surface is taken
+///   from the XML file alone.</item>
 /// <item>Assigns every type and member to a page with
 ///   <see cref="ReferencePlanner"/>: one page per type, one per hook, and area
 ///   pages for element records, factory methods and modifiers.</item>
@@ -97,6 +102,38 @@ internal sealed class ReferenceGenerator
         if (dllPath is not null && File.Exists(dllPath))
             model = ApiModel.FromAssembly(dllPath);
         return Generate(docs, map, model, templateIds, reverseIndex, guideTitle);
+    }
+
+    /// <summary>
+    /// Generates one reference from several assemblies (issue #1721): their XML
+    /// files are read together and their models merged, so a cref in one
+    /// resolves to a page generated from another.
+    /// </summary>
+    public ReferenceGenResult Generate(
+        IReadOnlyList<ReferenceInput> inputs,
+        ReferenceMap map,
+        IReadOnlySet<string>? templateIds = null,
+        IReadOnlyDictionary<string, IReadOnlyList<TemplateReference>>? reverseIndex = null,
+        Func<string, string?>? guideTitle = null)
+    {
+        var docs = new List<MemberDoc>();
+        var models = new List<ApiModel>();
+        foreach (var input in inputs)
+        {
+            foreach (var path in new[] { input.XmlPath, input.DllPath })
+            {
+                if (!File.Exists(path))
+                {
+                    return new ReferenceGenResult(Array.Empty<ReferencePage>(), new[]
+                    {
+                        new RefGenFinding("REACTOR_DOC_REFGEN_003", $"Reference input not found: {path}", path, TierLintSeverity.Error),
+                    });
+                }
+            }
+            docs.AddRange(XmlDocReader.Read(input.XmlPath));
+            models.Add(ApiModel.FromAssembly(input.DllPath));
+        }
+        return Generate(docs, map, ApiModel.Merge(models), templateIds, reverseIndex, guideTitle);
     }
 
     public ReferenceGenResult Generate(

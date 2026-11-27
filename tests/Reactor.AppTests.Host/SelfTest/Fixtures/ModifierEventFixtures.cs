@@ -1026,6 +1026,7 @@ internal static class ModifierEventFixtures
                                 Opacity = 0.5,
                                 IsVisible = false,
                                 AccessKey = "P",
+                                RequestedTheme = ElementTheme.Dark,
                             }
                         },
                         1 => Empty(),
@@ -1044,7 +1045,9 @@ internal static class ModifierEventFixtures
                 && first.ReadLocalValue(FrameworkElement.HorizontalAlignmentProperty) != DependencyProperty.UnsetValue
                 && first.ReadLocalValue(UIElement.OpacityProperty) != DependencyProperty.UnsetValue
                 && first.ReadLocalValue(UIElement.VisibilityProperty) != DependencyProperty.UnsetValue
-                && first.ReadLocalValue(UIElement.AccessKeyProperty) != DependencyProperty.UnsetValue);
+                && first.ReadLocalValue(UIElement.AccessKeyProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(FrameworkElement.RequestedThemeProperty) != DependencyProperty.UnsetValue
+                && first.RequestedTheme == ElementTheme.Dark);
 
             H.ClickButton("DropPoolClear");
             await Harness.Render();
@@ -1080,6 +1083,11 @@ internal static class ModifierEventFixtures
                 && second.Visibility == Visibility.Visible);
             H.Check("PoolClear_Phase2_AccessKeyCleared",
                 second.ReadLocalValue(UIElement.AccessKeyProperty) == DependencyProperty.UnsetValue);
+            // Issue #1717: the renter declares no RequestedTheme, so a Dark left behind by the
+            // previous renter would theme its whole subtree.
+            H.Check("PoolClear_Phase2_RequestedThemeCleared",
+                second.ReadLocalValue(FrameworkElement.RequestedThemeProperty) == DependencyProperty.UnsetValue
+                && second.RequestedTheme == ElementTheme.Default);
         }
     }
 

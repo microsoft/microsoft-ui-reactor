@@ -198,7 +198,14 @@ checkout containing the test output.
 ### Which `Microsoft.UI.Reactor.xml` the reference phase reads
 
 Phase 5.7 generates `docs/guide/reference/**` from the XML doc comments the C#
-compiler emits, so it needs a *built* `src/Reactor`. It reads the **most recently
+compiler emits, so it needs a *built* `src/Reactor` and a built `src/Reactor.Advanced`.
+The reference documents both packages as one merged model ([issue #1721][i1721]):
+types, crefs and base types resolve across them, and pages for Advanced APIs say
+`Package: Microsoft.UI.Reactor.Advanced`. Each assembly's XML is chosen the same way,
+from its own project's `bin` (`Microsoft.UI.Reactor.Advanced.xml` under
+`src/Reactor.Advanced/bin`). The rest of this section describes the core file.
+
+It reads the **most recently
 written** `Microsoft.UI.Reactor.xml` anywhere under `src/Reactor/bin` — configuration plays no
 part in the choice, and neither does the directory layout, so flat
 `bin/<config>/<tfm>/`, platform-stamped `bin/<arch>/<config>/<tfm>/` and
@@ -241,8 +248,9 @@ guide pages. Under `--ci` the same condition **exits 1** instead. CI always
 builds, so a missing input there means the run is not the run that was asked
 for, and skipping the phase would leave the pages under
 `docs/guide/reference/` silently at whatever was committed. The same applies to
-a missing `reference-map.yaml`. `ReferenceStalenessWiringTests` pins both
-directions.
+a missing `reference-map.yaml`, and to a missing `Microsoft.UI.Reactor.Advanced.xml`:
+generating from core alone would prune every Advanced page as stale.
+`ReferenceStalenessWiringTests` pins both directions.
 
 The phase also reads `Microsoft.UI.Reactor.dll` from the same folder as the XML
 file. If the XML file is there but the DLL is not, it reports
@@ -251,7 +259,9 @@ and deletes nothing, so the committed pages stay as they are.
 
 CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
 *without* `--no-build`, so Phase 2 builds every doc app, each of which
-`ProjectReference`s `src/Reactor/Reactor.csproj` — reference generation therefore
+`ProjectReference`s `src/Reactor/Reactor.csproj`, and several of them (charting,
+docking, Win2D canvas, data system, among others) also reference `src/Reactor.Advanced` —
+reference generation therefore
 runs for real on every PR. `REACTOR_DOC_REFGEN_W002` still stays quiet there, for
 an ordering reason rather than a missing-build one: `actions/checkout` writes the
 sources before that build runs, so the emitted XML always postdates every `.cs`.
@@ -263,6 +273,7 @@ compile, and that reading is only sound if every page was actually written — s
 the non-zero exit above is what the gate stands on.
 
 [i1068]: https://github.com/microsoft/microsoft-ui-reactor/issues/1068
+[i1721]: https://github.com/microsoft/microsoft-ui-reactor/issues/1721
 
 ### Screenshots and committed images
 
@@ -540,6 +551,24 @@ the compile still exited 0 ([issue #989][i989]). Several guards now prevent that
   pass that looks like it is working for hours instead of failing in seconds,
   which is the same "no output is not evidence of no problem" shape as the rest of
   this list.
+- A painted frame can still be Reactor's **render-error panel**: a red-bordered
+  exception dump that passes every pixel guard above. Two committed screenshots
+  were exactly that (`components/props-component` previewed `Alert`, a
+  `Component<AlertProps>`, with null `Props`; `win2d-canvas/virtual` hit a
+  reconciler bug on the component switch). So after each capture the client reads
+  `renderError` from the preview host's `/status`. The host records the first
+  render error that replaced content since the last component switch, through an
+  internal observer on `RenderErrorDispatch` that sees those errors whatever
+  `RenderErrorHandler` the app set. Until the switched-to component has completed
+  a render, `renderError` reports the switch as pending, because the window still
+  shows the previous component. Capture waits up to 10 s for that to clear, and
+  refuses the screenshot without taking a frame if it does not. A non-null value
+  after the capture fails that screenshot with
+  `REACTOR_DOC_SHOT_003` and writes nothing. A `/status` that cannot be read, or
+  that lacks the field, fails closed the same way. Errors caught by an
+  `ErrorBoundary` never reach the observer, so the error-boundary samples still
+  capture. A `Component<TProps>` cannot be a manifest `component:` on its own;
+  point the manifest at a small wrapper that renders it with props.
 - A topic or screenshot id containing `:` is refused before it is joined to any
   output root, and so is a `:` in a markdown image reference. Containment alone
   does not cover it: on Windows `:` is a stream
@@ -661,9 +690,10 @@ reference-generation codes.
 | `REACTOR_DOC_IMAGE_004`    | *(warning — does **not** fail `--ci`)* The blank-image gate could not run: `System.Drawing.Common` is Windows-only, so on any other platform there is no decoder. Emitted **once per page** — the condition is a property of the machine, not of any image, so one finding per screenshot would bury it. Nothing else is suppressed: reference validation (`_001`) and the decoder-free checks behind `_003` (zero-byte file, no PNG/JPEG signature) still run everywhere. Never fires on the supported configuration. It is the one non-fatal finding this gate emits, and deliberately so: it says the scan *could not run*, not that an image is bad, and it fires precisely on the platform that cannot decode — so breaking the build on it would fail a docs compile over a missing codec while nothing is wrong with the docs |
 | `REACTOR_DOC_SHOT_001`     | Captured frame was contentless; nothing was written and the existing screenshot was left untouched. The message names which clause fired — *no pixel below the threshold* or *one flat colour* — because for a dark fill the first wording states the opposite of what happened |
 | `REACTOR_DOC_SHOT_002`     | Manifest screenshot id ends in the reserved `-thumb` suffix without `kind: catalog-thumb`. Matched against the whole id, so a dotted id (`widget.v2-thumb`) is caught too |
+| `REACTOR_DOC_SHOT_003`     | The preview host did not show the requested component cleanly: a render error replaced content, the component switch had not rendered yet, or `/status` could not be read or does not report `renderError`. Nothing was written. A null reference usually means a `Component<TProps>` named directly in the manifest (its `Props` is null when previewed alone); point the manifest at a wrapper that renders it with props |
 | `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
-| `REACTOR_DOC_REFGEN_003`   | The reference phase found `Microsoft.UI.Reactor.xml` but no `Microsoft.UI.Reactor.dll` next to it (or an input file it was given does not exist). Nothing under `docs/guide/reference/` is written or deleted. Run `dotnet build src/Reactor` and compile again. Fails `--ci` and `--reference-only` |
-| `REACTOR_DOC_REFGEN_W002`  | *(warning — does **not** fail `--ci`)* The `Microsoft.UI.Reactor.xml` the reference phase selected is older than the newest `.cs` under `src/Reactor`, so `docs/guide/reference/**` is being generated from a build that predates the source it documents — an edited `<summary>` will not appear and a deleted one comes back. Run `dotnet build src/Reactor` and compile again. Warning, not error, because it reports that the *input* may be stale rather than a defect in the tree. It does not fire in CI: the docs job builds `src/Reactor` (via Phase 2's doc-app builds) *after* checkout has written the sources, so the XML always postdates them. See [§4](#which-microsoftuireactorxml-the-reference-phase-reads) |
+| `REACTOR_DOC_REFGEN_003`   | The reference phase found an assembly's XML doc file (`Microsoft.UI.Reactor.xml` or `Microsoft.UI.Reactor.Advanced.xml`) but no DLL next to it (or an input file it was given does not exist). Nothing under `docs/guide/reference/` is written or deleted. Run the `dotnet build` the message names (`src/Reactor` or `src/Reactor.Advanced`) and compile again. Fails `--ci` and `--reference-only` |
+| `REACTOR_DOC_REFGEN_W002`  | *(warning — does **not** fail `--ci`)* An XML doc file the reference phase selected is older than the newest `.cs` in its project (`src/Reactor` or `src/Reactor.Advanced`), so `docs/guide/reference/**` is being generated from a build that predates the source it documents — an edited `<summary>` will not appear and a deleted one comes back. Run the `dotnet build` the message names and compile again. Warning, not error, because it reports that the *input* may be stale rather than a defect in the tree. It does not fire in CI: the docs job builds both projects (via Phase 2's doc-app builds) *after* checkout has written the sources, so the XML always postdates them. See [§4](#which-microsoftuireactorxml-the-reference-phase-reads) |
 
 ## 7. Quarterly tier audit (spec 041 §5.4)
 

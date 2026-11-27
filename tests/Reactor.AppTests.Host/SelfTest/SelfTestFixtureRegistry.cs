@@ -384,11 +384,19 @@ internal static class SelfTestFixtureRegistry
         // ThemeRef through the synthesized {ThemeResource} Style: SplitView pane background,
         // InteractionStates restore, an app's own Style kept as BasedOn, quoted keys.
         ("ThemeRefStyle_SharedForegroundLookup", static harness => new ThemeRefStyleFixtures.SharedForegroundLookup(harness)),
+        ("ThemeRefStyle_ForegroundInteractionLookupIsLazy", static harness => new ThemeRefStyleFixtures.ForegroundInteractionLookupIsLazy(harness)),
         ("ThemeRefStyle_ForegroundAppliedAfterBackgroundCallback", static harness => new ThemeRefStyleFixtures.ForegroundAppliedAfterBackgroundCallback(harness)),
         ("ThemeRefStyle_RichTextForegroundRestoredAfterSkippedRender", static harness => new ThemeRefStyleFixtures.RichTextForegroundRestoredAfterSkippedRender(harness)),
         ("ThemeRefStyle_RichTextForegroundRemovedDuringHover", static harness => new ThemeRefStyleFixtures.RichTextForegroundRemovedDuringHover(harness)),
         ("ThemeRefStyle_AnimatedIconInteractionStatesRemovedDuringHover", static harness => new ThemeRefStyleFixtures.AnimatedIconInteractionStatesRemovedDuringHover(harness)),
         ("ThemeRefStyle_FlyoutKeepsHoverForegroundWhenTargetDropsInteractionStates", static harness => new ThemeRefStyleFixtures.FlyoutKeepsHoverForegroundWhenTargetDropsInteractionStates(harness)),
+        ("ThemeRefStyle_FlyoutRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => Factories.Flyout(target, Factories.TextBlock("flyout")))),
+        ("ThemeRefStyle_MenuFlyoutRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => Factories.MenuFlyout(target))),
+        ("ThemeRefStyle_CommandBarFlyoutRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => Factories.CommandBarFlyout(target))),
+        ("ThemeRefStyle_PlainRebuiltNormalForeground", static harness => new ThemeRefStyleFixtures.RebuiltNormalForegroundKeepsInteraction(harness, static target => target, layered: false)),
+        ("ThemeRefStyle_NestedFlyoutDoesNotRestoreWithdrawnHoverForeground", static harness => new ThemeRefStyleFixtures.NestedFlyoutDoesNotRestoreWithdrawnHoverForeground(harness)),
+        ("ThemeRefStyle_MemoKeepsHoverForegroundDuringFlyoutResourceRefresh", static harness => new ThemeRefStyleFixtures.MemoKeepsHoverForegroundDuringFlyoutResourceRefresh(harness)),
+        ("ThemeRefStyle_MemoForegroundUpdateKeepsEquivalentFlyoutHover", static harness => new ThemeRefStyleFixtures.MemoForegroundUpdateKeepsEquivalentFlyoutHover(harness)),
         ("ThemeRefStyle_DerivedIconThemeForeground", static harness => new ThemeRefStyleFixtures.DerivedIconThemeForeground(harness)),
         ("ThemeRefStyle_RichTextForegroundResetOutranksSetter", static harness => new ThemeRefStyleFixtures.RichTextForegroundResetOutranksSetter(harness)),
         ("ThemeRefStyle_PooledRichTextDoesNotKeepForeground", static harness => new ThemeRefStyleFixtures.PooledRichTextDoesNotKeepForeground(harness)),
@@ -432,6 +440,9 @@ internal static class SelfTestFixtureRegistry
         // Issue #965 — inline Margin/Padding/Border edges must not read the previous
         // render's overlay back as their base.
         ("Issue965_InlineEdgesDoNotReadBackPreviousOverlay", static harness => new Issue965InlineEdgeFixture.InlineEdgesDoNotReadBackPreviousOverlay(harness)),
+        // Issue #1749 — dropping .Padding(x) and an inline padding edge in the same render
+        // must release the padding, not write x back.
+        ("Issue1749_DroppingPaddingAndInlineEdgeTogetherClears", static harness => new Issue1749PaddingDropBothFixture.DroppingPaddingAndInlineEdgeTogetherClears(harness)),
         // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
         // Reactor subtrees (Flyout content, Popup child) the generic recursion
         // cannot reach.
@@ -583,6 +594,7 @@ internal static class SelfTestFixtureRegistry
         ("Win2D_AnimatedCanvas_InitialPausedResumes", static harness => new Win2DCanvasFixtures.AnimatedCanvasInitialPausedResumes(harness)),
         ("Win2D_Canvas_SameRedrawKeyNoExtraDraws", static harness => new Win2DCanvasFixtures.CanvasSameRedrawKeyNoExtraDraws(harness)),
         ("Win2D_AnimatedCanvas_SharedDeviceResourceDraws", static harness => new Win2DCanvasFixtures.AnimatedCanvasSharedDeviceResourceDraws(harness)),
+        ("Win2D_Canvas_ReplacedByOtherTypeKeepsSiblings", static harness => new Win2DCanvasFixtures.CanvasReplacedByOtherTypeKeepsSiblings(harness)),
         // Reactor.Advanced TableView / Chart (Windows App SDK experimental controls).
         ("TableView_MountsRowsAndColumns", static harness => new TableViewFixtures.MountsRowsAndColumns(harness)),
         ("TableView_UpdatesColumnsInPlace", static harness => new TableViewFixtures.UpdatesColumnsInPlace(harness)),
@@ -1257,6 +1269,9 @@ internal static class SelfTestFixtureRegistry
         ("Hosting_NotifyResourcesChangedRefreshesThemeRefOverrides", static harness => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesThemeRefOverrides(harness)),
         ("Hosting_NotifyResourcesChangedRefreshesMemoizedThemeModifiers", static harness => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesMemoizedThemeModifiers(harness)),
         ("Hosting_NotifyDuringRenderPassSchedulesRender", static harness => new HostIdleAndThemeResourceFixtures.NotifyDuringRenderPassSchedulesRender(harness)),
+        ("Hosting_HighContrastProbeFollowsWinUITheme", static harness => new HighContrastRefreshFixtures.ProbeFollowsWinUITheme(harness)),
+        ("Hosting_HighContrastHostControlRefresh", static harness => new HighContrastRefreshFixtures.HostControlRefreshesOnContrastSwitch(harness)),
+        ("Hosting_HighContrastWindowHostRefresh", static harness => new HighContrastRefreshFixtures.WindowHostRefreshesOnContrastSwitch(harness)),
         // Navigation coverage — advanced handle ops, serialization, deep links, transitions
         ("NavCov_HandleAdvancedOps", static harness => new NavigationCoverageFixtures.NavHandleAdvancedOps(harness)),
         ("NavCov_HandlePopTo", static harness => new NavigationCoverageFixtures.NavHandlePopTo(harness)),
@@ -2396,6 +2411,13 @@ internal static class SelfTestFixtureRegistry
         ("ControlledOptionalDateTimeFamily", static harness => new ControlledOptionalDateTimeFamilyFixture.Execution(harness)),
         ("ControlledOptionalTextInputFamily", static harness => new ControlledOptionalTextInputFamilyFixture.Execution(harness)),
         ("OneWayClearValue", static harness => new OneWayClearValueFixture.Execution(harness)),
+        ("ModifierFieldContract_BrushAndFont", static harness => new ModifierFieldContractFixture.Execution(harness)),
+        ("ModifierMatrix_Layout", static harness => new ModifierMatrixFixtures.Execution(harness, "Layout")),
+        ("ModifierMatrix_Control", static harness => new ModifierMatrixFixtures.Execution(harness, "Control")),
+        ("ModifierMatrix_Panels", static harness => new ModifierMatrixFixtures.Execution(harness, "Panels")),
+        ("ModifierMatrix_Automation", static harness => new ModifierMatrixFixtures.Execution(harness, "Automation")),
+        ("ModifierMatrix_Accessibility", static harness => new ModifierMatrixFixtures.Execution(harness, "Accessibility")),
+        ("ModifierMatrix_Negatives", static harness => new ModifierMatrixFixtures.Negatives(harness)),
         ("OptionalEchoStrandRegression", static harness => new OptionalEchoStrandRegressionFixture.Execution(harness)),
         ("AutoSuggestBoxCollectedStateTick", static harness => new AutoSuggestBoxCollectedStateTickFixture.Execution(harness)),
         ("OptionalThemeInteraction", static harness => new OptionalThemeInteractionFixture.Execution(harness)),

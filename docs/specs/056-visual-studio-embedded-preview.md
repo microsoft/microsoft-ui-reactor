@@ -510,7 +510,11 @@ The implementation must gate those calls on
 
 `/status` gains two fields used by the extension for race-free state
 tracking: `protocol` (string, currently `"embed-v1"`; see Q4) and
-`generation` (int, mirrors `/hwnd`).
+`generation` (int, mirrors `/hwnd`). A later, additive field,
+`renderError` (string or null), is display-only text for the docs
+screenshot pipeline: the first render error since the last `/preview`
+switch, or a pending marker until that switch has rendered. It stays set
+until the next switch, including across a hot reload.
 
 **No `/reload` endpoint.** Force-reload is purely extension-driven (kill
 the `dotnet watch` tree + relaunch — see §8). A separate `/reload` HTTP

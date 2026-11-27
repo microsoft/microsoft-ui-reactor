@@ -10,7 +10,7 @@ screenshots:
     format: png
   - id: props-component
     description: "Component with typed record props"
-    component: Alert
+    component: AlertDemo
     format: png
   - id: function-component
     description: "Function components with Func and Memo"

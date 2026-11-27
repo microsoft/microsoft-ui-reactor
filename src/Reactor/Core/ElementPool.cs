@@ -342,6 +342,11 @@ public sealed class ElementPool : IDisposable
         // the clear throws and Return drops the control.
         fe.ClearValue(FrameworkElement.RenderTransformProperty);
         fe.ClearValue(FrameworkElement.FlowDirectionProperty);
+        // Issue #1717: .RequestedTheme(...) writes this, and ApplyModifiers clears it only on a
+        // set → unset transition. Mount runs ApplyModifiers(fe, null, m), so a renter that
+        // declares no RequestedTheme would otherwise render its subtree in the previous renter's
+        // theme.
+        fe.ClearValue(FrameworkElement.RequestedThemeProperty);
         // A context flyout is a live object graph owned by the previous renter's component.
         // Without this, right-clicking a recycled control shows the *previous* element's menu.
         fe.ClearValue(UIElement.ContextFlyoutProperty);

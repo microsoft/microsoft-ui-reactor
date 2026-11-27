@@ -74,7 +74,7 @@ public class RemainingModifierOwnerTests
         Scale = scale.HasValue ? new Vector3(scale.Value) : null,
     };
 
-    private static Reconciler Prepare(Element root) => new() { ModifierUpdate = (null, root, root.Modifiers) };
+    private static Reconciler Prepare(Element root) => new() { ModifierUpdate = (null, root, root.Modifiers, false) };
 
     private static Lookup Bind(Element root) => Prepare(root).FindRemainingModifierOwner;
 
@@ -83,7 +83,7 @@ public class RemainingModifierOwnerTests
     {
         var root = new Leaf(1) { Modifiers = new() { Rotation = 30 } };
         var merged = root.Modifiers.Merge(Mods(2));
-        using var reconciler = new Reconciler { ModifierUpdate = (null, root, merged) };
+        using var reconciler = new Reconciler { ModifierUpdate = (null, root, merged, false) };
         var owner = reconciler.FindRemainingModifierOwner(HasScale)!.Value;
         Assert.Same(root, owner.Source);
         Assert.Same(merged, owner.Modifiers);
