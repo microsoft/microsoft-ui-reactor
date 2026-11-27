@@ -68,6 +68,21 @@ public sealed class PreviewRenderErrorRecorderTests
     }
 
     [Fact]
+    public void An_Error_Whose_Message_Throws_Is_Still_Recorded()
+    {
+        var recorder = new PreviewRenderErrorRecorder();
+
+        recorder.Record(new RenderError(new ThrowingMessageException(), RenderErrorSource.RootRender, "Alert", isHostLevel: true));
+
+        Assert.Equal("RootRender in Alert: ThrowingMessageException: (message unavailable)", recorder.Current);
+    }
+
+    private sealed class ThrowingMessageException : Exception
+    {
+        public override string Message => throw new InvalidOperationException("message getter");
+    }
+
+    [Fact]
     public async Task Installed_Recorder_Reports_A_Dispatched_Error_On_Status()
     {
         var previous = RenderErrorDispatch.Observer;

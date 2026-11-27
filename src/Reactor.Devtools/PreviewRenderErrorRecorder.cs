@@ -108,6 +108,20 @@ internal sealed class PreviewRenderErrorRecorder
     internal static string Describe(RenderError error)
     {
         var where = error.ComponentName is { Length: > 0 } name ? $" in {name}" : "";
-        return $"{error.Source}{where}: {error.Exception.GetType().Name}: {error.Exception.Message}";
+        return $"{error.Source}{where}: {error.Exception.GetType().Name}: {MessageOf(error.Exception)}";
+    }
+
+    // A message getter that throws must not lose the error: the observer swallows observer
+    // exceptions, so /status would report a clean render while the fallback is on screen.
+    private static string MessageOf(Exception exception)
+    {
+        try
+        {
+            return exception.Message;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            return "(message unavailable)";
+        }
     }
 }
