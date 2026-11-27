@@ -129,6 +129,16 @@ internal static class ModifierMatrixExpectations
     ];
 
     /// <summary>
+    /// Poolable cases whose bare carrier writes the DP during its own mount, so a renter reads that
+    /// value instead of <c>UnsetValue</c>, written as the fixture describes it. Every other poolable
+    /// case expects the renter to hold no local value.
+    /// </summary>
+    internal static readonly (string Slot, string Carrier, string RentValue, string Reason)[] RenterMountWrites =
+    [
+        ("IsEnabled", "Button", "True", "ButtonElement's descriptor writes its EffectiveIsEnabled on every mount."),
+    ];
+
+    /// <summary>
     /// Hand-coded property slots the matrix leaves out, and why. Pinned so a slot that changes
     /// shape (into or out of rows A–D) shows in review instead of silently leaving the matrix.
     /// </summary>

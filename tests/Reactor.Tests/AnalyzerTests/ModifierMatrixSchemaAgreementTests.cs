@@ -82,6 +82,19 @@ public class ModifierMatrixSchemaAgreementTests
     }
 
     [Fact]
+    public void Renter_Mount_Writes_Name_Poolable_Cases_With_A_Reason()
+    {
+        Assert.NotEmpty(ModifierMatrixExpectations.RenterMountWrites);
+        foreach (var (slot, carrier, rentValue, reason) in ModifierMatrixExpectations.RenterMountWrites)
+        {
+            Assert.Contains(ModifierMatrixExpectations.Cases, c => c.Slot == slot && c.Carrier == carrier
+                && c.Pool is not (MatrixPool.NotPoolable or MatrixPool.NotReset));
+            Assert.False(string.IsNullOrEmpty(rentValue));
+            Assert.False(string.IsNullOrWhiteSpace(reason));
+        }
+    }
+
+    [Fact]
     public void Case_Carriers_Are_Receivers_And_Negative_Carriers_Are_Not()
     {
         foreach (var c in ModifierMatrixExpectations.Cases)
