@@ -960,6 +960,27 @@ helper doesn't repeat the resolver's fields in the frozen order. 4a generates `P
 stays hand-coded). `Margin` has the single `FrameworkElement` receiver, so it has no receiver list
 to move, and that finishes layer 4.
 
+Layer 5a adds the pool facts to the schema before anything is generated from them. A
+`ModifierReceiver` now says how `CleanElement` resets it: `ClearValue` (the default),
+`WriteDefault` with the literal it writes back (TextBlock `FontSize`, which inherits, so it's
+reset to `14`), or `NotReset` with a reason (receivers on types the pool never recycles,
+like RelativePanel's box DPs and `IconElement.Foreground`). The facts live on the existing Apply
+receivers rather than in the `Pool` role and `None` value §4.2 sketched, because every pooled reset
+already has a matching Apply receiver. Two oracles pin the current hand-written reset.
+`ModifierPoolResetTests` reads `CleanElement` through `CleanElementScan` and checks every
+declaration against it. The `ModifierPoolReset` selftest uses its own frozen
+`PoolResetExpectations`, which doesn't read the schema: 82 declared (receiver, DP) resets, 77 reset
+and 5 not reset. It sets every DP the schema declares a receiver for on a fresh control of each of
+the 15 pooled types, runs `CleanElement`, and checks what each DP is left with. A headless fact keeps
+those expectations equal to the schema's declarations, so dropping any one reset fails both oracles.
+The fixture starts a ProgressRing with `IsIndeterminate` false, the state `CleanElement` leaves
+it in. Otherwise the pool's own `IsIndeterminate` write makes WinUI set `AccessibilityView`
+itself, and that check would pass with or without the clear. `WithFlyout`'s
+`FlyoutBase.AttachedFlyout` has no schema receiver, and `CleanElement` doesn't reset it on
+non-Button pooled types today. A headless fact pins that gap until issue #1753 adds the clear to
+the hand-written `CleanElement`. That change gives the slot a receiver and its expectations row, so
+layer 5b generates the reset with no behaviour change.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

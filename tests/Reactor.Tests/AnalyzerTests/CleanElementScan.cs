@@ -48,11 +48,16 @@ internal enum ResetShape
 /// </param>
 /// <param name="Property">The bare property name, as written inside a <c>.Set</c> lambda.</param>
 /// <param name="Shape">Which of the three reset forms this is.</param>
+/// <param name="Value">
+/// The assigned expression as written, for <see cref="ResetShape.Assignment"/> only (<c>14</c>
+/// for <c>tb.FontSize = 14</c>), so a declared write-back literal can be checked against it.
+/// </param>
 internal readonly record struct CleanElementReset(
     string Receiver,
     string? Owner,
     string Property,
-    ResetShape Shape)
+    ResetShape Shape,
+    string? Value = null)
 {
     /// <summary>The <c>Receiver.Property</c> key the consistency invariants are stated over.</summary>
     public string Key => Receiver + "." + Property;
@@ -61,7 +66,7 @@ internal readonly record struct CleanElementReset(
     {
         ResetShape.ClearValue => $"{Receiver}: ClearValue({Owner}.{Property}Property)",
         ResetShape.CollectionClear => $"{Receiver}: {Property}.Clear()",
-        _ => $"{Receiver}: {Property} = …",
+        _ => $"{Receiver}: {Property} = {Value}",
     };
 }
 
@@ -246,7 +251,7 @@ internal static class CleanElementScan
                     },
                 } assignment:
                     Add(assignment.SpanStart, assignReceiver.Identifier.Text, owner: null,
-                        assignedProperty.Identifier.Text, ResetShape.Assignment);
+                        assignedProperty.Identifier.Text, ResetShape.Assignment, assignment.Right.ToString());
                     break;
 
                 case InvocationExpressionSyntax invocation
@@ -303,7 +308,7 @@ internal static class CleanElementScan
             totalClearValueCalls,
             recognizedClearValueCalls);
 
-        void Add(int position, string receiverName, string? owner, string property, ResetShape shape)
+        void Add(int position, string receiverName, string? owner, string property, ResetShape shape, string? value = null)
         {
             if (!bindings.TryGetValue(receiverName, out var receiverType))
             {
@@ -311,7 +316,7 @@ internal static class CleanElementScan
                 return;
             }
 
-            resets.Add((position, new CleanElementReset(receiverType, owner, property, shape)));
+            resets.Add((position, new CleanElementReset(receiverType, owner, property, shape, value)));
         }
     }
 
