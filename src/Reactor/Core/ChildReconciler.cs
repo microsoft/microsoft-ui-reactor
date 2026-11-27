@@ -391,7 +391,7 @@ internal static class ChildReconciler
             {
                 // Child type changed at runtime — replace in place
                 if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
-                children.Replace(i, replacement);
+                children.ReplaceUnmounted(i, existingControl, replacement);
             }
             return false;
         }
@@ -681,7 +681,7 @@ internal static class ChildReconciler
                 if (replacement is not null)
                 {
                     if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
-                    children.Replace(panelIdx, replacement);
+                    children.ReplaceUnmounted(panelIdx, existingControl, replacement);
                 }
             }
             prefixLen++;
@@ -736,7 +736,7 @@ internal static class ChildReconciler
                 if (replacement is not null)
                 {
                     if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
-                    children.Replace(panelIdx, replacement);
+                    children.ReplaceUnmounted(panelIdx, existingControl, replacement);
                 }
             }
             suffixLen++;
@@ -1138,7 +1138,7 @@ internal static class ChildReconciler
             if (replacement is not null)
             {
                 if (!unmountedByUpdate) _reconciler.UnmountChild(existing);
-                _children.Replace(panelIdx, replacement);
+                _children.ReplaceUnmounted(panelIdx, existing, replacement);
             }
         }
     }

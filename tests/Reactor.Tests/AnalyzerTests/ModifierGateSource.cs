@@ -12,12 +12,14 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 /// <summary>
 /// One <c>controlGate:</c> / <c>poolResetGate:</c> argument exactly as written in
-/// <c>ModifierTable.Properties</c> — the ground truth a text matcher is measured against.
+/// <c>ModifierTable.Properties</c> or on a <c>ModifierSchema.Slots</c> element — the ground truth a
+/// text matcher is measured against.
 /// </summary>
 internal readonly record struct ModifierGateSlot(string Property, string Slot, string Identifier);
 
 /// <summary>
-/// One identifier-valued argument of a <c>ModifierTable.Properties</c> entry — the argument name
+/// One identifier-valued argument of a <c>ModifierTable.Properties</c> entry or a
+/// <c>ModifierSchema.Slots</c> element — the argument name
 /// (<c>null</c> when positional) and the group identifier it references. Unlike
 /// <see cref="ModifierGateSlot"/> this includes non-gate arguments such as <c>elementTypes</c>,
 /// because a slot-blind text matcher sees those too.
@@ -25,8 +27,11 @@ internal readonly record struct ModifierGateSlot(string Property, string Slot, s
 internal readonly record struct ModifierGateArgument(string? Slot, string Identifier);
 
 /// <summary>
-/// Reads gate facts out of <c>src/Reactor.Analyzers/ModifierTable.cs</c> <em>as text</em>, and
-/// supplies the one matcher that is safe to do it with.
+/// Reads gate facts out of <c>src/Reactor.Analyzers/ModifierTable.cs</c> and
+/// <c>src/Reactor.Analyzers/Modifiers/ModifierSchema.cs</c> <em>as text</em>, and supplies the one
+/// matcher that is safe to do it with. Since spec 067 layer 1 the common modifiers' gate groups and
+/// <c>controlGate:</c> / <c>poolResetGate:</c> arguments are written on their schema slots, so an
+/// entry is the table row and the slot of the same name read together.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -175,19 +180,94 @@ internal static class ModifierGateSource
     {
         var repoRoot = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(repoRoot);
-        var file = Path.Join(repoRoot!, "src", "Reactor.Analyzers", "ModifierTable.cs");
-        Assert.True(File.Exists(file), $"ModifierTable.cs not found at {file}");
 
-        var table = CSharpSyntaxTree.ParseText(File.ReadAllText(file))
+        var groups = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+        var slots = new List<ModifierGateSlot>();
+        var arguments = new Dictionary<string, List<ModifierGateArgument>>(StringComparer.Ordinal);
+
+        // Since spec 067 layer 1 a common modifier's gates are written on its ModifierSchema slot
+        // and its editorial facts (poolReset, elementTypes) on its ModifierTable row, so an entry is
+        // both texts together: what a text matcher over the analyzer source would see.
+        var table = ReadClass(repoRoot!, "ModifierTable.cs", "ModifierTable");
+        ReadGroups(table, groups);
+
+        var properties = table.Members
+            .OfType<FieldDeclarationSyntax>()
+            .SelectMany(field => field.Declaration.Variables)
+            .FirstOrDefault(variable => variable.Identifier.Text == "Properties");
+
+        Assert.True(properties is not null, "No 'Properties' field found on ModifierTable");
+        Assert.True(
+            properties!.Initializer?.Value is ObjectCreationExpressionSyntax { Initializer: not null },
+            "ModifierTable.Properties is no longer a collection-initialized dictionary; the entry " +
+            "reader needs updating.");
+
+        var entriesSyntax = ((ObjectCreationExpressionSyntax)properties.Initializer!.Value).Initializer!;
+        foreach (var entry in entriesSyntax.Expressions.OfType<InitializerExpressionSyntax>())
+        {
+            if (entry.Expressions.Count != 2
+                || entry.Expressions[0] is not LiteralExpressionSyntax key)
+            {
+                continue;
+            }
+
+            // `new ModifierInfo(…)` for editorial rows, `Common(…)` for schema-backed ones.
+            if (entry.Expressions[1] is not (ObjectCreationExpressionSyntax { ArgumentList: not null }
+                    or InvocationExpressionSyntax))
+            {
+                continue;
+            }
+
+            AddEntry(key.Token.ValueText, entry, entries, slots, arguments);
+        }
+
+        var schema = ReadClass(repoRoot!, Path.Join("Modifiers", "ModifierSchema.cs"), "ModifierSchema");
+        ReadGroups(schema, groups);
+
+        var slotArray = schema.Members
+            .OfType<FieldDeclarationSyntax>()
+            .SelectMany(field => field.Declaration.Variables)
+            .FirstOrDefault(variable => variable.Identifier.Text == "Slots");
+        Assert.True(
+            slotArray?.Initializer?.Value is InitializerExpressionSyntax,
+            "ModifierSchema.Slots is no longer an array initializer; the entry reader needs updating.");
+
+        foreach (var element in ((InitializerExpressionSyntax)slotArray!.Initializer!.Value).Expressions)
+        {
+            // The slot name is the first string literal in the element: S("Padding", …),
+            // Automation("HelpText", …), BoxReceivers(S("Padding", …), …).
+            var name = element.DescendantNodes()
+                .OfType<LiteralExpressionSyntax>()
+                .FirstOrDefault(literal => literal.Token.Value is string)?.Token.ValueText;
+            Assert.True(name is not null, $"No slot name found in ModifierSchema.Slots element: {element}");
+            AddEntry(name!, element, entries, slots, arguments);
+        }
+
+        return new TableModel(
+            groups,
+            slots.AsReadOnly(),
+            entries,
+            arguments.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<ModifierGateArgument>)pair.Value.AsReadOnly(), StringComparer.Ordinal));
+    }
+
+    private static ClassDeclarationSyntax ReadClass(string repoRoot, string relativePath, string className)
+    {
+        var file = Path.Join(repoRoot, "src", "Reactor.Analyzers", relativePath);
+        Assert.True(File.Exists(file), $"{relativePath} not found at {file}");
+        var declaration = CSharpSyntaxTree.ParseText(File.ReadAllText(file))
             .GetRoot()
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
-            .FirstOrDefault(c => c.Identifier.Text == "ModifierTable");
+            .FirstOrDefault(c => c.Identifier.Text == className);
+        Assert.True(declaration is not null, $"No '{className}' class declaration found in {file}");
+        return declaration!;
+    }
 
-        Assert.True(table is not null, $"No 'ModifierTable' class declaration found in {file}");
-
-        var groups = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
-        foreach (var field in table!.Members.OfType<FieldDeclarationSyntax>())
+    // Every `static readonly string[] NAME = { "…" }` group in the class.
+    private static void ReadGroups(ClassDeclarationSyntax type, Dictionary<string, IReadOnlyList<string>> groups)
+    {
+        foreach (var field in type.Members.OfType<FieldDeclarationSyntax>())
         {
             if (field.Declaration.Type is not ArrayTypeSyntax { ElementType: PredefinedTypeSyntax element }
                 || element.Keyword.Text != "string")
@@ -211,59 +291,29 @@ internal static class ModifierGateSource
                     groups[variable.Identifier.Text] = Array.AsReadOnly(types);
             }
         }
+    }
 
-        var properties = table.Members
-            .OfType<FieldDeclarationSyntax>()
-            .SelectMany(field => field.Declaration.Variables)
-            .FirstOrDefault(variable => variable.Identifier.Text == "Properties");
+    private static void AddEntry(string property, Microsoft.CodeAnalysis.SyntaxNode entry, Dictionary<string, string> entries,
+        List<ModifierGateSlot> slots, Dictionary<string, List<ModifierGateArgument>> arguments)
+    {
+        entries[property] = entries.TryGetValue(property, out var existing) ? existing + "\n" + entry : entry.ToString();
+        if (!arguments.TryGetValue(property, out var referenced))
+            arguments[property] = referenced = new List<ModifierGateArgument>();
 
-        Assert.True(properties is not null, "No 'Properties' field found on ModifierTable");
-        Assert.True(
-            properties!.Initializer?.Value is ObjectCreationExpressionSyntax { Initializer: not null },
-            "ModifierTable.Properties is no longer a collection-initialized dictionary; the entry " +
-            "reader needs updating.");
+        // Only identifier-valued arguments matter: a group referenced by name is what a text
+        // matcher can see. Inline `new[] { "..." }` element lists have no identifier.
+        var namedGroups = entry.DescendantNodesAndSelf()
+            .OfType<ArgumentSyntax>()
+            .Where(argument => argument.Expression is IdentifierNameSyntax);
 
-        var entriesSyntax = ((ObjectCreationExpressionSyntax)properties.Initializer!.Value).Initializer!;
-
-        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
-        var slots = new List<ModifierGateSlot>();
-        var arguments = new Dictionary<string, IReadOnlyList<ModifierGateArgument>>(StringComparer.Ordinal);
-
-        foreach (var entry in entriesSyntax.Expressions.OfType<InitializerExpressionSyntax>())
+        foreach (var argument in namedGroups)
         {
-            if (entry.Expressions.Count != 2
-                || entry.Expressions[0] is not LiteralExpressionSyntax key)
-            {
-                continue;
-            }
+            var identifier = ((IdentifierNameSyntax)argument.Expression).Identifier.Text;
+            var slot = argument.NameColon?.Name.Identifier.Text;
+            referenced.Add(new ModifierGateArgument(slot, identifier));
 
-            var property = key.Token.ValueText;
-            entries[property] = entry.ToString();
-            arguments[property] = Array.Empty<ModifierGateArgument>();
-
-            if (entry.Expressions[1] is not ObjectCreationExpressionSyntax { ArgumentList: not null } info)
-                continue;
-
-            var referenced = new List<ModifierGateArgument>();
-
-            // Only identifier-valued arguments matter: a group referenced by name is what a text
-            // matcher can see. Inline `new[] { "..." }` element lists have no identifier.
-            var namedGroups = info.ArgumentList.Arguments
-                .Where(argument => argument.Expression is IdentifierNameSyntax);
-
-            foreach (var argument in namedGroups)
-            {
-                var identifier = ((IdentifierNameSyntax)argument.Expression).Identifier.Text;
-                var slot = argument.NameColon?.Name.Identifier.Text;
-                referenced.Add(new ModifierGateArgument(slot, identifier));
-
-                if (slot is ControlGate or PoolResetGate)
-                    slots.Add(new ModifierGateSlot(property, slot, identifier));
-            }
-
-            arguments[property] = referenced.AsReadOnly();
+            if (slot is ControlGate or PoolResetGate)
+                slots.Add(new ModifierGateSlot(property, slot, identifier));
         }
-
-        return new TableModel(groups, slots.AsReadOnly(), entries, arguments);
     }
 }

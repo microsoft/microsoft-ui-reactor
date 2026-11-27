@@ -216,6 +216,17 @@ internal static class ScreenshotCapture
                             failed++;
                             continue;
                         }
+                        // Wait for the switch to actually render (the request only queues
+                        // it). Until it has, the window may still show the outgoing
+                        // component, so a switch that doesn't render in time is refused
+                        // without capturing: a later status read could already be clean.
+                        var switchRefusal = await WaitForSwitchRendered(http, port, SwitchRenderTimeout);
+                        if (switchRefusal is not null)
+                        {
+                            ReportCaptureFailure(screenshot.Id, switchRefusal);
+                            failed++;
+                            continue;
+                        }
                         // Let the switch, layout and any entrance transition settle. Same
                         // settle time the old frame-timer capture used.
                         await Task.Delay(1000);
@@ -229,6 +240,17 @@ internal static class ScreenshotCapture
                     if (frameBytes.Length == 0)
                     {
                         ReportCaptureFailure(screenshot.Id, "no frame produced within deadline");
+                        failed++;
+                        continue;
+                    }
+
+                    // Asked after the frame is taken, so an error raised any time up to the
+                    // capture is seen. The frame guards only ask whether something painted,
+                    // and Reactor's error panel paints plenty.
+                    var refusal = await CheckRenderError(http, port, screenshot.Component, ComponentSwitchTimeout);
+                    if (refusal is not null)
+                    {
+                        ReportCaptureFailure(screenshot.Id, refusal);
                         failed++;
                         continue;
                     }
@@ -555,6 +577,124 @@ internal static class ScreenshotCapture
     }
 
     internal static string PreviewUrl(int port) => $"http://{CaptureHost}:{port}/preview";
+
+    internal static string StatusUrl(int port) => $"http://{CaptureHost}:{port}/status";
+
+    /// <summary>Diagnostic code for a capture refused because the app showed a render error.</summary>
+    internal const string RenderErrorDiagnosticCode = "REACTOR_DOC_SHOT_003";
+
+    /// <summary>
+    /// Prefix of the <c>renderError</c> the preview host reports while a component switch has
+    /// not rendered yet (<c>PreviewRenderErrorRecorder.PendingDescription</c>).
+    /// </summary>
+    internal const string PendingRenderErrorPrefix = "Pending:";
+
+    /// <summary>How long a component switch may take to render before capture goes ahead.</summary>
+    private static readonly TimeSpan SwitchRenderTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Polls <c>/status</c> until the last component switch is no longer pending. Returns
+    /// <c>null</c> once it isn't, otherwise the <see cref="RenderErrorDiagnosticCode"/> failure
+    /// to report: the switch was still pending at <paramref name="timeout"/>, or the status
+    /// could not be read. The caller must not capture in that case.
+    /// </summary>
+    internal static async Task<string?> WaitForSwitchRendered(HttpClient http, int port, TimeSpan timeout, TimeSpan? pollInterval = null)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        var interval = pollInterval ?? TimeSpan.FromMilliseconds(100);
+        while (true)
+        {
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+            {
+                return $"{RenderErrorDiagnosticCode}: the component switch did not render within " +
+                       $"{timeout.TotalSeconds:0.#} s, so the window may still show the previous component. " +
+                       "Nothing was captured.";
+            }
+            try
+            {
+                var renderError = await ReadRenderError(http, port, remaining < ComponentSwitchTimeout ? remaining : ComponentSwitchTimeout);
+                if (renderError is null || !renderError.StartsWith(PendingRenderErrorPrefix, StringComparison.Ordinal))
+                    return null;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
+                                          or global::System.Text.Json.JsonException or TaskCanceledException)
+            {
+                return $"{RenderErrorDiagnosticCode}: could not check that the component switch rendered " +
+                       $"({ex.Message}). Nothing was captured.";
+            }
+            await Task.Delay(interval);
+        }
+    }
+
+    /// <summary>
+    /// Asks the preview host whether the frame just captured can be trusted. Returns <c>null</c>
+    /// when the requested component rendered cleanly, otherwise the
+    /// <see cref="RenderErrorDiagnosticCode"/> failure to report. Fails closed: a status that
+    /// cannot be read, or that does not report <c>renderError</c>, refuses the frame too.
+    /// </summary>
+    internal static async Task<string?> CheckRenderError(HttpClient http, int port, string? component, TimeSpan timeout)
+    {
+        string? renderError;
+        try
+        {
+            renderError = await ReadRenderError(http, port, timeout);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
+                                      or global::System.Text.Json.JsonException or TaskCanceledException)
+        {
+            return $"{RenderErrorDiagnosticCode}: could not check the frame for a render error ({ex.Message}). " +
+                   "Nothing was written.";
+        }
+        return renderError is null ? null : DescribeRenderErrorFailure(component, renderError);
+    }
+
+    /// <summary>
+    /// Reads <c>renderError</c> from the preview host's <c>/status</c>: its description of the
+    /// render error shown since the last component switch, or <c>null</c> when none was.
+    /// </summary>
+    internal static async Task<string?> ReadRenderError(HttpClient http, int port, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        using var resp = await http.GetAsync(StatusUrl(port), cts.Token);
+        resp.EnsureSuccessStatusCode();
+        return ParseRenderError(await resp.Content.ReadAsStringAsync(cts.Token));
+    }
+
+    /// <summary>
+    /// Reads <c>renderError</c> from a <c>/status</c> body.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The body is not a JSON object, has no <c>renderError</c> property, or it is not a
+    /// string. A host that does not report render errors cannot vouch for the frame.
+    /// </exception>
+    internal static string? ParseRenderError(string statusJson)
+    {
+        var node = JsonNode.Parse(statusJson) as JsonObject
+            ?? throw new InvalidOperationException("preview /status did not return a JSON object");
+        if (!node.TryGetPropertyValue("renderError", out var value))
+        {
+            throw new InvalidOperationException(
+                "preview /status does not report 'renderError'; rebuild the doc app against the current Reactor.Devtools");
+        }
+        if (value is null) return null;
+        if (value is JsonValue v && v.TryGetValue<string>(out var text)) return text;
+        throw new InvalidOperationException("preview /status reported a 'renderError' that is not a string");
+    }
+
+    internal static string DescribeRenderErrorFailure(string? component, string renderError)
+    {
+        var target = string.IsNullOrEmpty(component) ? "its root component" : $"'{component}'";
+        var message = $"{RenderErrorDiagnosticCode}: the app did not show {target} cleanly ({renderError}). Nothing was written.";
+        // The likeliest cause of a null reference in a docs sample: a Component<TProps> named
+        // in the manifest is previewed on its own, with null Props.
+        if (renderError.Contains(nameof(NullReferenceException), StringComparison.Ordinal))
+        {
+            message += $" If {target} is a Component<TProps>, it has null Props when previewed on its own; " +
+                       "point the manifest at a component that renders it with props.";
+        }
+        return message;
+    }
 
     /// <summary>
     /// Builds the <c>/preview</c> component-switch body for

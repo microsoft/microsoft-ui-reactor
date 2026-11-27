@@ -899,8 +899,11 @@ public class ReactorDiagnosticsComponentsTests
 
     /// <summary>
     /// Members of <see cref="ElementModifiers"/> that are deliberately not in the map
-    /// because applying them is not a dependency-property write. A new modifier must be
-    /// added either to <see cref="AppliedModifierMap.Entries"/> or here.
+    /// because applying them is not a dependency-property write. <see cref="AppliedModifierMap.Entries"/>
+    /// is generated (spec 067 layer 2), so a new modifier that writes a property gets an Apply
+    /// receiver or <c>.Report(target: …)</c> on its <c>ModifierSchema</c> slot, a place in
+    /// <c>ModifierSchema.AppliedReportOrder</c>, and a run of <c>tools/Reactor.ModifierGen</c>;
+    /// one that doesn't is listed here.
     /// </summary>
     private static readonly HashSet<string> NotPropertyWrites = new(StringComparer.Ordinal)
     {
@@ -931,7 +934,10 @@ public class ReactorDiagnosticsComponentsTests
             .ToList();
 
         Assert.True(unaccounted.Count == 0,
-            "Modifiers neither mapped in AppliedModifierMap nor listed in NotPropertyWrites: " + string.Join(", ", unaccounted));
+            "Modifiers neither mapped in AppliedModifierMap nor listed in NotPropertyWrites: " + string.Join(", ", unaccounted)
+            + ". Declare an Apply receiver or .Report(target: …) on the ModifierSchema slot, add it to "
+            + "ModifierSchema.AppliedReportOrder and run `dotnet run --project tools/Reactor.ModifierGen`, "
+            + "or list it in NotPropertyWrites.");
 
         var stale = mapped.Where(n => n.StartsWith("Accessibility.", StringComparison.Ordinal)
                 ? typeof(AccessibilityModifiers).GetProperty(n["Accessibility.".Length..]) is null

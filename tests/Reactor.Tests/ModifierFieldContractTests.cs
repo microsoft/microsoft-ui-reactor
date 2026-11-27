@@ -3,26 +3,34 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using Microsoft.UI.Reactor.Analyzers.Modifiers;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
+using Bucket = Microsoft.UI.Reactor.Analyzers.Modifiers.ModifierBucket;
+using Skip = Microsoft.UI.Reactor.Analyzers.Modifiers.SkipEquality;
 
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Spec 067 §10.1, layer 0: every modifier field is declared once below, with the way the
-/// shallow-skip gate compares it, and the hand-written <c>Merge</c> and skip-equality code is
-/// checked against that declaration for every field. A new field with no declaration fails
+/// Spec 067 §10.1: every modifier field is declared once in <c>ModifierSchema.Slots</c>
+/// (<c>src/Reactor.Analyzers/Modifiers/ModifierSchema.cs</c>) with the way the shallow-skip gate
+/// compares it, and the <c>Merge</c> and skip-equality code is checked against that
+/// declaration for every field. A new field with no declaration fails
 /// <see cref="Every_Modifier_Field_Is_Declared_Exactly_Once"/>, so it can't ship half-wired
 /// (the class of bug behind spec 059's <c>IsDragRegion</c>, #976's <c>OnUpdateAction</c> and
 /// spec 067 §14's <c>XYFocusKeyboardNavigation</c>).
 /// </summary>
 /// <remarks>
-/// The table is today's behaviour, not a schema. Layer 1 moves these facts into
-/// <c>ModifierSchema</c> and this file reads them from there. Brush and FontFamily fields can't
+/// Added in layer 0 with a literal table; layer 1 moved that table into the schema unchanged, so
+/// these tests now check the schema's skip declarations against the code. Since layer 2 that code
+/// (<c>ModifierEquality</c> and the four <c>Merge</c> bodies) is generated from the same schema,
+/// so the independent oracle for the skip policy itself is <c>ModifierSkipPolicySnapshotTests</c>;
+/// these tests still check the emitted code against the record shapes and the per-kind behaviour.
+/// Brush and FontFamily fields can't
 /// be constructed headless, so their merge and equality checks run in the
 /// <c>ModifierFieldContract_BrushAndFont</c> selftest.
 /// </remarks>
@@ -32,25 +40,6 @@ namespace Microsoft.UI.Reactor.Tests;
 [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: Enum.GetValues(Type) and Expression.Compile for sample values. JIT-only host, never AOT-compiled.")]
 public class ModifierFieldContractTests
 {
-    /// <summary>How the shallow-skip gate (<c>ModifiersEqualCore</c>) compares a field. Spec 067 §4.2.</summary>
-    internal enum Skip
-    {
-        /// <summary>Compared by value (<c>==</c> or the bucket record's <c>Equals</c>).</summary>
-        Value,
-        /// <summary><c>BrushesEqual</c>: colour and opacity. Selftest only.</summary>
-        BrushValue,
-        /// <summary><c>FontFamiliesEqual</c>: <c>Source</c>. Selftest only.</summary>
-        FontFamilyValue,
-        /// <summary><c>ReferenceEquals</c>.</summary>
-        Reference,
-        /// <summary>Full mode: equal only when both sides are null. Visible mode: presence only.</summary>
-        BlocksSkipWhenSet,
-        /// <summary>Never compared. Requires a reason.</summary>
-        NotCompared,
-    }
-
-    internal enum Bucket { Root, Layout, Visual, Accessibility }
-
     /// <summary>One modifier field and how the skip gate compares it.</summary>
     /// <param name="Bucket">The record that declares the field.</param>
     /// <param name="Name">The property name on that record.</param>
@@ -59,125 +48,9 @@ public class ModifierFieldContractTests
     /// <param name="Reason">Why a <see cref="Skip.NotCompared"/> field is not compared. Required for that kind only.</param>
     internal sealed record Field(Bucket Bucket, string Name, Skip Skip, bool Callback = false, string? Reason = null);
 
-    private const string GestureReason =
-        "Dispatched through per-element gesture / drag state that the skip path refreshes without "
-        + "re-subscribing (GestureDispatch.RefreshGestureDragStateOnSkip, #721). Comparing it would "
-        + "re-arm an in-flight gesture (see ModifierCallbacksEqual).";
-
+    /// <summary>Every modifier field, read from <c>ModifierSchema</c> (spec 067 layer 1).</summary>
     internal static readonly Field[] Fields =
-    [
-        // ── Root ──────────────────────────────────────────────────────
-        new(Bucket.Root, "ToolTip", Skip.Value),
-        new(Bucket.Root, "RichToolTip", Skip.BlocksSkipWhenSet),
-        new(Bucket.Root, "ToolTipPlacement", Skip.Value),
-        new(Bucket.Root, "ToolTipPlacementTargetRef", Skip.Reference),
-        new(Bucket.Root, "AttachedFlyout", Skip.BlocksSkipWhenSet),
-        new(Bucket.Root, "ContextFlyout", Skip.BlocksSkipWhenSet),
-        new(Bucket.Root, "IsEnabled", Skip.Value),
-        new(Bucket.Root, "AutomationName", Skip.Value),
-        new(Bucket.Root, "AutomationId", Skip.Value),
-        new(Bucket.Root, "ElementSoundMode", Skip.Value),
-        new(Bucket.Root, "OnMountAction", Skip.NotCompared,
-            Reason: "Fires once at mount (oldM is null), so a later change is inert."),
-        new(Bucket.Root, "OnUnmountAction", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnUpdateAction", Skip.Reference, Callback: true),
-        new(Bucket.Root, "FontFamily", Skip.FontFamilyValue),
-        new(Bucket.Root, "FontSize", Skip.Value),
-        new(Bucket.Root, "FontWeight", Skip.Value),
-        new(Bucket.Root, "OnSizeChanged", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerPressed", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerMoved", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerReleased", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerEntered", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerExited", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerCanceled", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerCaptureLost", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPointerWheelChanged", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnTapped", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnDoubleTapped", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnRightTapped", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnHolding", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnKeyDown", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnKeyUp", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPreviewKeyDown", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnPreviewKeyUp", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnCharacterReceived", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnGotFocus", Skip.Reference, Callback: true),
-        new(Bucket.Root, "OnLostFocus", Skip.Reference, Callback: true),
-        new(Bucket.Root, "Pan", Skip.NotCompared, Reason: GestureReason),
-        new(Bucket.Root, "Pinch", Skip.NotCompared, Reason: GestureReason),
-        new(Bucket.Root, "Rotate", Skip.NotCompared, Reason: GestureReason),
-        new(Bucket.Root, "LongPress", Skip.NotCompared, Reason: GestureReason),
-        new(Bucket.Root, "DragSource", Skip.NotCompared, Reason: GestureReason),
-        new(Bucket.Root, "DropTarget", Skip.NotCompared, Reason: GestureReason),
-        new(Bucket.Root, "IsDragRegion", Skip.Value),
-        new(Bucket.Root, "HeadingLevel", Skip.Value),
-        new(Bucket.Root, "IsTabStop", Skip.Value),
-        new(Bucket.Root, "IsHitTestVisible", Skip.Value),
-        new(Bucket.Root, "TabIndex", Skip.Value),
-        new(Bucket.Root, "AccessKey", Skip.Value),
-        new(Bucket.Root, "XYFocusKeyboardNavigation", Skip.Value),
-        new(Bucket.Root, "XYFocusUpRef", Skip.Reference),
-        new(Bucket.Root, "XYFocusDownRef", Skip.Reference),
-        new(Bucket.Root, "XYFocusLeftRef", Skip.Reference),
-        new(Bucket.Root, "XYFocusRightRef", Skip.Reference),
-        new(Bucket.Root, "OnAccessKeyDisplayRequested", Skip.Reference, Callback: true),
-        new(Bucket.Root, "Ref", Skip.Reference, Callback: true),
-        new(Bucket.Root, "Backdrop", Skip.NotCompared,
-            Reason: "Not applied by ApplyModifiers. The host reads the root tree's Backdrop on every render (ReactorHost, ReactorHostControl)."),
-
-        // ── Layout (record value-equality) ────────────────────────────
-        new(Bucket.Layout, "Margin", Skip.Value),
-        new(Bucket.Layout, "Padding", Skip.Value),
-        new(Bucket.Layout, "Width", Skip.Value),
-        new(Bucket.Layout, "Height", Skip.Value),
-        new(Bucket.Layout, "MinWidth", Skip.Value),
-        new(Bucket.Layout, "MinHeight", Skip.Value),
-        new(Bucket.Layout, "MaxWidth", Skip.Value),
-        new(Bucket.Layout, "MaxHeight", Skip.Value),
-        new(Bucket.Layout, "HorizontalAlignment", Skip.Value),
-        new(Bucket.Layout, "VerticalAlignment", Skip.Value),
-        new(Bucket.Layout, "HorizontalContentAlignment", Skip.Value),
-        new(Bucket.Layout, "VerticalContentAlignment", Skip.Value),
-        new(Bucket.Layout, "IsVisible", Skip.Value),
-        new(Bucket.Layout, "MarginInlineStart", Skip.Value),
-        new(Bucket.Layout, "MarginInlineEnd", Skip.Value),
-        new(Bucket.Layout, "PaddingInlineStart", Skip.Value),
-        new(Bucket.Layout, "PaddingInlineEnd", Skip.Value),
-        new(Bucket.Layout, "BorderInlineStart", Skip.Value),
-        new(Bucket.Layout, "RequestedTheme", Skip.Value),
-
-        // ── Visual (field by field) ───────────────────────────────────
-        new(Bucket.Visual, "Background", Skip.BrushValue),
-        new(Bucket.Visual, "Foreground", Skip.BrushValue),
-        new(Bucket.Visual, "BorderBrush", Skip.BrushValue),
-        new(Bucket.Visual, "BorderThickness", Skip.Value),
-        new(Bucket.Visual, "CornerRadius", Skip.Value),
-        new(Bucket.Visual, "Opacity", Skip.Value),
-        new(Bucket.Visual, "Scale", Skip.Value),
-        new(Bucket.Visual, "Rotation", Skip.Value),
-        new(Bucket.Visual, "Translation", Skip.Value),
-        new(Bucket.Visual, "CenterPoint", Skip.Value),
-        new(Bucket.Visual, "TransformOrigin", Skip.Value),
-
-        // ── Accessibility (record value-equality, so reference-typed fields compare by reference) ──
-        new(Bucket.Accessibility, "HelpText", Skip.Value),
-        new(Bucket.Accessibility, "FullDescription", Skip.Value),
-        new(Bucket.Accessibility, "LandmarkType", Skip.Value),
-        new(Bucket.Accessibility, "AccessibilityView", Skip.Value),
-        new(Bucket.Accessibility, "IsRequiredForForm", Skip.Value),
-        new(Bucket.Accessibility, "LiveSetting", Skip.Value),
-        new(Bucket.Accessibility, "PositionInSet", Skip.Value),
-        new(Bucket.Accessibility, "SizeOfSet", Skip.Value),
-        new(Bucket.Accessibility, "Level", Skip.Value),
-        new(Bucket.Accessibility, "ItemStatus", Skip.Value),
-        new(Bucket.Accessibility, "LabeledBy", Skip.Value),
-        new(Bucket.Accessibility, "LabeledByRef", Skip.Reference),
-        new(Bucket.Accessibility, "DescribedByRefs", Skip.Reference),
-        new(Bucket.Accessibility, "FlowsToRefs", Skip.Reference),
-        new(Bucket.Accessibility, "FlowsFromRefs", Skip.Reference),
-        new(Bucket.Accessibility, "TabFocusNavigation", Skip.Value),
-    ];
+        ModifierSchema.Slots.Select(s => new Field(s.Bucket, s.Name, s.Skip, s.CallbackSlot, s.SkipReason)).ToArray();
 
     private static readonly string[] Containers = ["Layout", "Visual", "Accessibility"];
 
@@ -222,8 +95,9 @@ public class ModifierFieldContractTests
             Assert.True(actual.SetEquals(declared),
                 $"{bucket}: undeclared [{string.Join(", ", actual.Except(declared))}], "
                 + $"declared but missing [{string.Join(", ", declared.Except(actual))}]. "
-                + $"Declare a new field in {nameof(ModifierFieldContractTests)}.{nameof(Fields)} with its {nameof(Skip)} kind "
-                + "(and a Reason if NotCompared), wire it into Merge and ModifiersEqualCore, and update "
+                + "Add a slot to ModifierSchema.Slots (src/Reactor.Analyzers/Modifiers/ModifierSchema.cs) with its SkipEquality "
+                + "(and a Reason if NotCompared), run `dotnet run --project tools/Reactor.ModifierGen` to regenerate "
+                + "Merge and ModifierEquality, add its ModifierSkipPolicySnapshotTests.Frozen row, and update "
                 + "ModifierApplyOrderTests' frozen order. A Brush or FontFamily field also needs a CheckField line "
                 + "in ModifierFieldContractFixture and an entry in ModifierFieldContractSelfTestFields (Reactor.AppTests.Host).");
         }
@@ -362,6 +236,22 @@ public class ModifierFieldContractTests
             Assert.True(visible[i] == Element.ModifiersVisiblyEqual(a, b), $"{id} ({f.Skip}) {pair}: ModifiersVisiblyEqual(a, b) should be {visible[i]}.");
             Assert.True(visible[i] == Element.ModifiersVisiblyEqual(b, a), $"{id} ({f.Skip}) {pair}: ModifiersVisiblyEqual(b, a) should be {visible[i]}.");
         }
+    }
+
+    [Theory]
+    [InlineData("Layout", true)]
+    [InlineData("Visual", true)]
+    // Accessibility has no empty sentinel: AccessibilityEqual treats an empty bucket and a missing
+    // one as different, in both modes. Pinned as today's behaviour, not endorsed.
+    [InlineData("Accessibility", false)]
+    public void An_Empty_Bucket_Compares_Against_A_Missing_One(string bucket, bool equal)
+    {
+        var empty = EmptyBucket(Enum.Parse<Bucket>(bucket));
+        var missing = new ElementModifiers();
+        Assert.Equal(equal, Element.ModifiersEqual(empty, missing));
+        Assert.Equal(equal, Element.ModifiersEqual(missing, empty));
+        Assert.Equal(equal, Element.ModifiersVisiblyEqual(empty, missing));
+        Assert.Equal(equal, Element.ModifiersVisiblyEqual(missing, empty));
     }
 
     [Fact]

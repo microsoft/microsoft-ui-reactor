@@ -34,8 +34,10 @@ internal static class CompositeLifecycle
                 // Explicit RemoveAt+Insert instead of indexer assignment — WinUI's
                 // Children[i] = x can leave the old element's internal parent state
                 // attached, causing a COMException when it is later reused from the
-                // pool (mirrors PanelChildCollection.Replace).
-                host.Children.RemoveAt(0);
+                // pool (mirrors PanelChildCollection.Replace). The unmount may already
+                // have detached the child (see ChildCollectionExtensions.ReplaceUnmounted).
+                if (host.Children.Count > 0 && ReferenceEquals(host.Children[0], existingChild))
+                    host.Children.RemoveAt(0);
                 host.Children.Insert(0, replacement);
             }
         }

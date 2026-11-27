@@ -35,6 +35,7 @@ internal static class ReconcilerSource
         "ModifierEvents.cs",
         "ReferenceEdgeWiring.cs",
         "ThemeBindingApplier.cs",
+        "ThemeBindingApplier.Generated.cs",
     ];
 
     private static readonly Lazy<IReadOnlyList<SyntaxNode>> s_roots = new(() =>

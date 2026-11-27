@@ -288,18 +288,18 @@ internal sealed partial class ReferenceMap
 
     /// <summary>
     /// Map ids become folder and file names under <c>docs/guide/reference</c>, so
-    /// they must be slugs: runs of lowercase a–z joined by single hyphens. Every id
-    /// in the map has that shape. A dot, a slash or a capital is rejected here
-    /// instead of reaching the disk.
+    /// they must be slugs: runs of lowercase a–z and digits joined by single hyphens
+    /// (<c>win2d</c> is one). Every id in the map has that shape. A dot, a slash or a
+    /// capital is rejected here instead of reaching the disk.
     /// </summary>
-    [GeneratedRegex(@"\A[a-z]+(-[a-z]+)*\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A[a-z0-9]+(-[a-z0-9]+)*\z", RegexOptions.CultureInvariant)]
     private static partial Regex SlugPattern();
 
     private static void RequireSlug(string id, string what)
     {
         if (!SlugPattern().IsMatch(id))
             throw new DocPipelineException("REACTOR_DOC_REGISTRY_001",
-                $"{what} id `{id}` is not a slug. Ids become file and folder names, so use lowercase letters " +
+                $"{what} id `{id}` is not a slug. Ids become file and folder names, so use lowercase letters and digits " +
                 "joined by single hyphens, for example `focus-and-keyboard`");
     }
 

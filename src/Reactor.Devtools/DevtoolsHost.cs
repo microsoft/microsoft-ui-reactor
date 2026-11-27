@@ -234,6 +234,9 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         var initialComponentType = componentType;
         var initialComponentName = componentName;
 
+        // Installed before the first render so an error in the initial component is seen too.
+        var renderErrors = vscodeMode ? PreviewRenderErrorRecorder.Install() : null;
+
         ReactorApp.RunOnSta(() =>
         {
             ReactorApp.InitProcess();
@@ -255,9 +258,14 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                     var type = FindComponentType(name);
                     if (type == null) return false;
 
+                    // Pending before /preview answers, so a status read can't see the
+                    // previous component's state as this switch's.
+                    var switchGeneration = renderErrors?.Reset() ?? 0;
                     host.Window.DispatcherQueue.TryEnqueue(() =>
                     {
                         var instance = (Component)Activator.CreateInstance(type)!;
+                        // A later switch superseded this one; its callback may have run first.
+                        if (renderErrors?.Arm(switchGeneration) == false) return;
                         host.Mount(instance);
                         host.Window.Title = $"Preview — {name}";
                     });
@@ -277,6 +285,16 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                     server.GetComponents = () => FindAllComponentNames().ToList();
                     server.GetCurrentComponent = () => initialComponentName;
                     server.SwitchComponent = SwitchComponentCore;
+                    if (renderErrors is not null)
+                    {
+                        renderErrors.AttachTo(server);
+                        var previousRenderComplete = host.OnRenderComplete;
+                        host.OnRenderComplete = (tree, reconcile, effects) =>
+                        {
+                            previousRenderComplete?.Invoke(tree, reconcile, effects);
+                            renderErrors.Settle();
+                        };
+                    }
 
                     if (options.EmbedRequested)
                     {

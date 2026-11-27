@@ -266,6 +266,15 @@ Conventions for contributors:
   issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
   the app's own repository. The cards use soft color gradients drawn in CSS, so they need no image files.
 
+- **The API reference now covers `Microsoft.UI.Reactor.Advanced`.** Charting (with the D3
+  scales, shapes and layouts, and chart accessibility), the data grid, docking, Markdown and the
+  Win2D canvas have reference pages. Their elements, factories, modifiers and hooks are listed
+  next to the core ones, and their other types get new Charting, Docking, Markdown and Win2D
+  canvas sections. Every Advanced page says which package it comes from. Links between the two
+  packages work, for example from an Advanced element to the core `Element`. The docs compile
+  now reads `Microsoft.UI.Reactor.Advanced.xml` and its DLL beside the core ones, and a
+  `--ci` compile fails if either build is missing (issue #1721).
+
 ### Deprecated
 
 ### Removed
@@ -291,6 +300,23 @@ Conventions for contributors:
 - Rebuilding an equivalent normal foreground brush preserves an unchanged active interaction
   foreground on Flyout targets while its tracker survives the update, and updates the brush
   restored when the state ends (#1727).
+
+- Dropping `.Padding(x)` and `.PaddingInlineStart(y)` or `.PaddingInlineEnd(y)` in
+  the same render now releases the padding. Before, the control kept `x` as a
+  local value, so a `Button` never got its themed padding back (issue #1749).
+
+- Replacing a `Win2DCanvas`, `Win2DAnimatedCanvas` or `Win2DVirtualCanvas` with an
+  element of another type no longer removes the following sibling, or throws
+  `ArgumentOutOfRangeException` when the canvas was the last child. This covers a
+  direct child, a `Flyout` target, and a component whose root changes type. The
+  Win2D unmount detaches the control from its panel, and the reconciler then
+  replaced by a stale index.
+
+- The docs screenshot pipeline no longer writes a frame that shows Reactor's
+  render-error panel. The preview host reports, on `/status` (`renderError`), the
+  first render error since the last component switch, or that the switch has not
+  rendered yet. Capture then fails with `REACTOR_DOC_SHOT_003`, leaving the
+  existing image untouched.
 
 - **A pooled control no longer keeps the previous renter's `.RequestedTheme(...)` (issue #1717).**
   The pool never cleared `RequestedTheme` when a control returned to it, and a mount doesn't clear

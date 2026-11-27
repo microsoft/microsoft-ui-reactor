@@ -440,6 +440,9 @@ internal static class SelfTestFixtureRegistry
         // Issue #965 — inline Margin/Padding/Border edges must not read the previous
         // render's overlay back as their base.
         ("Issue965_InlineEdgesDoNotReadBackPreviousOverlay", static harness => new Issue965InlineEdgeFixture.InlineEdgesDoNotReadBackPreviousOverlay(harness)),
+        // Issue #1749 — dropping .Padding(x) and an inline padding edge in the same render
+        // must release the padding, not write x back.
+        ("Issue1749_DroppingPaddingAndInlineEdgeTogetherClears", static harness => new Issue1749PaddingDropBothFixture.DroppingPaddingAndInlineEdgeTogetherClears(harness)),
         // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
         // Reactor subtrees (Flyout content, Popup child) the generic recursion
         // cannot reach.
@@ -591,6 +594,7 @@ internal static class SelfTestFixtureRegistry
         ("Win2D_AnimatedCanvas_InitialPausedResumes", static harness => new Win2DCanvasFixtures.AnimatedCanvasInitialPausedResumes(harness)),
         ("Win2D_Canvas_SameRedrawKeyNoExtraDraws", static harness => new Win2DCanvasFixtures.CanvasSameRedrawKeyNoExtraDraws(harness)),
         ("Win2D_AnimatedCanvas_SharedDeviceResourceDraws", static harness => new Win2DCanvasFixtures.AnimatedCanvasSharedDeviceResourceDraws(harness)),
+        ("Win2D_Canvas_ReplacedByOtherTypeKeepsSiblings", static harness => new Win2DCanvasFixtures.CanvasReplacedByOtherTypeKeepsSiblings(harness)),
         // PR #324 review fixes — heterogeneous rows, RefreshRealizedItems
         // sync, and ItemsRepeater unmount cleanup.
         ("EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking", static harness => new ElementFactoryRecyclingFixtures.Factory_ReplacementOnRootTypeChange_DropsOldControlTracking(harness)),
@@ -2392,6 +2396,12 @@ internal static class SelfTestFixtureRegistry
         ("ControlledOptionalTextInputFamily", static harness => new ControlledOptionalTextInputFamilyFixture.Execution(harness)),
         ("OneWayClearValue", static harness => new OneWayClearValueFixture.Execution(harness)),
         ("ModifierFieldContract_BrushAndFont", static harness => new ModifierFieldContractFixture.Execution(harness)),
+        ("ModifierMatrix_Layout", static harness => new ModifierMatrixFixtures.Execution(harness, "Layout")),
+        ("ModifierMatrix_Control", static harness => new ModifierMatrixFixtures.Execution(harness, "Control")),
+        ("ModifierMatrix_Panels", static harness => new ModifierMatrixFixtures.Execution(harness, "Panels")),
+        ("ModifierMatrix_Automation", static harness => new ModifierMatrixFixtures.Execution(harness, "Automation")),
+        ("ModifierMatrix_Accessibility", static harness => new ModifierMatrixFixtures.Execution(harness, "Accessibility")),
+        ("ModifierMatrix_Negatives", static harness => new ModifierMatrixFixtures.Negatives(harness)),
         ("OptionalEchoStrandRegression", static harness => new OptionalEchoStrandRegressionFixture.Execution(harness)),
         ("AutoSuggestBoxCollectedStateTick", static harness => new AutoSuggestBoxCollectedStateTickFixture.Execution(harness)),
         ("OptionalThemeInteraction", static harness => new OptionalThemeInteractionFixture.Execution(harness)),

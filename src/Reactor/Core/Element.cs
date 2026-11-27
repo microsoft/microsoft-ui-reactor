@@ -1220,7 +1220,7 @@ public abstract record Element
         return false;
     }
 
-    private static bool FontFamiliesEqual(Microsoft.UI.Xaml.Media.FontFamily? a, Microsoft.UI.Xaml.Media.FontFamily? b)
+    internal static bool FontFamiliesEqual(Microsoft.UI.Xaml.Media.FontFamily? a, Microsoft.UI.Xaml.Media.FontFamily? b)
     {
         if (ReferenceEquals(a, b)) return true;
         if (a is null || b is null) return false;
@@ -1267,7 +1267,7 @@ public abstract record Element
     /// the skip.
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
-        => ModifiersEqualCore(a, b, visibleOnly: false);
+        => ModifierEquality.ModifiersEqualCore(a, b, visibleOnly: false);
 
     /// <summary>
     /// Like <see cref="ModifiersEqual"/>, but only for what the control shows: callback
@@ -1277,204 +1277,7 @@ public abstract record Element
     /// fresh per-render closure must not make a render look productive.
     /// </summary>
     internal static bool ModifiersVisiblyEqual(ElementModifiers? a, ElementModifiers? b)
-        => ModifiersEqualCore(a, b, visibleOnly: true);
-
-    private static bool ModifiersEqualCore(ElementModifiers? a, ElementModifiers? b, bool visibleOnly)
-    {
-        if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null)
-        {
-            if (!visibleOnly) return false;
-            // A side without modifiers shows the defaults, so a callback-only bucket added or
-            // removed is no visible change.
-            a ??= _emptyModifiers;
-            b ??= _emptyModifiers;
-        }
-
-        // #159 — hoist the Layout/Visual sub-record reads once instead of
-        // dereferencing a.Layout?.X / a.Visual?.X ~20 times through the shim
-        // properties. A null bucket is normalized to a shared empty sentinel so
-        // the field-level semantics match the historical per-shim comparison
-        // (a null Layout reads as all-null fields).
-        var al = a.Layout ?? _emptyLayout;
-        var bl = b.Layout ?? _emptyLayout;
-        // LayoutModifiers is entirely value-typed, so the synthesized record
-        // value-equality is exact — and also covers the logical-inset /
-        // RequestedTheme fields an explicit field list historically forgot,
-        // keeping the skip path faithful to a full Update.
-        if (!ReferenceEquals(al, bl) && !al.Equals(bl)) return false;
-
-        // Visual holds Brush fields that must compare by value (Color/Opacity),
-        // not by record reference-equality, so it is compared field-by-field.
-        if (!VisualModifiersEqual(a.Visual, b.Visual)) return false;
-
-        return a.IsEnabled == b.IsEnabled
-            && a.ElementSoundMode == b.ElementSoundMode
-            && a.ToolTip == b.ToolTip
-            && a.ToolTipPlacement == b.ToolTipPlacement
-            && ReferenceEquals(a.ToolTipPlacementTargetRef, b.ToolTipPlacementTargetRef)
-            && a.AutomationName == b.AutomationName
-            && a.AutomationId == b.AutomationId
-            && a.FontSize == b.FontSize
-            && a.FontWeight == b.FontWeight
-            && FontFamiliesEqual(a.FontFamily, b.FontFamily)
-            // FLAGSHIP-1 — modifier event handlers dispatch through the
-            // reconciler's per-element ModifierEventHandlerState.Current* fields,
-            // which are refreshed ONLY on the non-skip Update path
-            // (ApplyEventHandlers). Skipping is therefore safe exactly when every
-            // callback-bearing slot is reference-equal: the stale Current* IS the
-            // new delegate, so dispatch is identical. Reference-stable handlers
-            // (non-capturing lambdas, method groups, memoized closures) now take
-            // the skip path; per-render capturing closures still force Update so
-            // their fresh captures are wired. This replaces the old blanket
-            // "any-handler-present ⇒ never skip" rule and also closes the latent
-            // hole where non-listed routed handlers (PointerEntered, GotFocus, …)
-            // were ignored entirely. Gesture / drag-drop slots are deliberately
-            // NOT compared here (see ModifierCallbacksEqual) so behavior matches
-            // the historical diff exactly.
-            && (visibleOnly || ModifierCallbacksEqual(a, b))
-            // Skip RichToolTip, AttachedFlyout, ContextFlyout — rare, conservative false
-            && (visibleOnly
-                ? (a.RichToolTip is null) == (b.RichToolTip is null)
-                    && (a.AttachedFlyout is null) == (b.AttachedFlyout is null)
-                    && (a.ContextFlyout is null) == (b.ContextFlyout is null)
-                : a.RichToolTip is null && b.RichToolTip is null
-                    && a.AttachedFlyout is null && b.AttachedFlyout is null
-                    && a.ContextFlyout is null && b.ContextFlyout is null)
-            // Accessibility Tier 1
-            && a.HeadingLevel == b.HeadingLevel
-            && a.IsDragRegion == b.IsDragRegion
-            && a.IsTabStop == b.IsTabStop
-            && a.IsHitTestVisible == b.IsHitTestVisible
-            && a.TabIndex == b.TabIndex
-            && a.AccessKey == b.AccessKey
-            && a.XYFocusKeyboardNavigation == b.XYFocusKeyboardNavigation
-            && ReferenceEquals(a.XYFocusUpRef, b.XYFocusUpRef)
-            && ReferenceEquals(a.XYFocusDownRef, b.XYFocusDownRef)
-            && ReferenceEquals(a.XYFocusLeftRef, b.XYFocusLeftRef)
-            && ReferenceEquals(a.XYFocusRightRef, b.XYFocusRightRef)
-            // Imperative ref slot (.Ref). A ref-only change (add/remove/swap)
-            // must force Update so ApplyModifiers clears the old cell and sets the
-            // new one — otherwise the shallow-skip path strands a stale ElementRef.
-            && (visibleOnly || ReferenceEquals(a.Ref, b.Ref))
-            // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
-            // latest OnUnmountAction (ReactorState.UnmountAction) on every non-skip
-            // Update, and that captured delegate is what fires at unmount — so a
-            // changed teardown closure must decline the skip or the stale (first-render)
-            // action is stranded and runs in place of the current one. Unlike
-            // OnMountAction (fired once at mount, gated on oldM is null, so a later
-            // change is inert and is intentionally ignored), OnUnmountAction has live
-            // update-path semantics. ReferenceEquals mirrors the handler/.Ref treatment:
-            // both null ⇒ equal (no teardown either render ⇒ zero skip-rate cost for
-            // plain leaves), a reference-stable teardown still skips, a fresh closure
-            // forces Update so the latest teardown is registered.
-            && (visibleOnly || ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction))
-            // Imperative update slot (.OnUpdateAdd), for the same reason as OnUnmountAction
-            // above: it is DEFINED to run on every in-place update, and this skip path is
-            // the one thing that can make that false — a skipped element never reaches
-            // ApplyModifiers, so its OnUpdateAction is silently dropped for that render.
-            // Both-null (virtually every element) compares equal, so the skip rate is
-            // unchanged in the common case, and a reference-stable action (the static
-            // method group chart labels use) still skips. Only an added/removed/changed
-            // action declines — which is exactly when the caller needs the callback.
-            && (visibleOnly || ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction))
-            // Accessibility Tier 2/3. AccessibilityModifiers is a record of
-            // scalar/string fields, but every fluent helper (.AccessibilityView,
-            // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render
-            // — so reference equality always fails for elements that set any
-            // accessibility modifier, even when the values are unchanged.
-            // Falsely missing this match cascades into the reconcile-highlight
-            // overlay, which paints those elements as "modified" every render.
-            // Use record value-equality instead.
-            && AccessibilityEqual(a.Accessibility, b.Accessibility);
-    }
-
-    // Shared empty buckets so a null Layout/Visual can be compared field-for-field
-    // against a set one without allocating (and without 20+ null-conditional shims).
-    private static readonly LayoutModifiers _emptyLayout = new();
-    private static readonly VisualModifiers _emptyVisual = new();
-    private static readonly ElementModifiers _emptyModifiers = new();
-
-    /// <summary>
-    /// Compare the Visual buckets by value. Brush fields (Background / Foreground /
-    /// BorderBrush) are compared with <see cref="BrushesEqual"/> (Color + Opacity)
-    /// because fluent helpers allocate a fresh <see cref="SolidColorBrush"/> per
-    /// render; everything else is a value type compared with <c>==</c>.
-    /// </summary>
-    private static bool VisualModifiersEqual(VisualModifiers? a, VisualModifiers? b)
-    {
-        if (ReferenceEquals(a, b)) return true;
-        a ??= _emptyVisual;
-        b ??= _emptyVisual;
-        return a.Opacity == b.Opacity
-            && a.CornerRadius == b.CornerRadius
-            && a.BorderThickness == b.BorderThickness
-            && a.Scale == b.Scale
-            && a.Rotation == b.Rotation
-            && a.Translation == b.Translation
-            && a.CenterPoint == b.CenterPoint
-            && a.TransformOrigin == b.TransformOrigin
-            && BrushesEqual(a.Background, b.Background)
-            && BrushesEqual(a.Foreground, b.Foreground)
-            && BrushesEqual(a.BorderBrush, b.BorderBrush);
-    }
-
-    /// <summary>
-    /// FLAGSHIP-1 — true when every <b>routed-input</b> event-handler slot is
-    /// reference-equal between <paramref name="a"/> and <paramref name="b"/>.
-    /// These 21 handlers dispatch through the reconciler's
-    /// <c>ModifierEventHandlerState.Current*</c> fields, refreshed only on the
-    /// non-skip Update path, so the skip path is sound iff the delegate identity
-    /// is unchanged. Reference equality (not presence) is the safe predicate:
-    /// a stale Current* that equals the new delegate dispatches identically,
-    /// while a freshly captured closure forces Update so its captures are wired.
-    ///
-    /// The gesture (Pan/Pinch/Rotate/LongPress) and drag-drop (DragSource/
-    /// DropTarget) slots are deliberately NOT compared here. They dispatch through
-    /// separate per-element gesture/drag state, and the historical diff never
-    /// compared them — so a per-render gesture closure stays skip-eligible exactly
-    /// as before. Comparing them would force Update where the framework previously
-    /// skipped, re-arming an in-flight gesture mid-interaction (e.g. re-registering
-    /// a long-press handler between its Began and Ended phases, so the released
-    /// callback fires against a refreshed closure and double-dispatches). Excluding
-    /// them keeps the skip-path perf lever intact (grid cells use only routed
-    /// handlers). The latent staleness this creates — a skipped element keeping a
-    /// previous-render gesture/drag closure — is closed on the skip path itself by
-    /// <see cref="GestureDispatch.RefreshGestureDragStateOnSkip"/> (#721), which refreshes
-    /// the cached dispatch closures WITHOUT re-subscribing the trampolines, so the
-    /// latest closure fires while no in-flight gesture is re-armed.
-    /// </summary>
-    private static bool ModifierCallbacksEqual(ElementModifiers a, ElementModifiers b)
-    {
-        return ReferenceEquals(a.OnSizeChanged, b.OnSizeChanged)
-            && ReferenceEquals(a.OnPointerPressed, b.OnPointerPressed)
-            && ReferenceEquals(a.OnPointerMoved, b.OnPointerMoved)
-            && ReferenceEquals(a.OnPointerReleased, b.OnPointerReleased)
-            && ReferenceEquals(a.OnPointerEntered, b.OnPointerEntered)
-            && ReferenceEquals(a.OnPointerExited, b.OnPointerExited)
-            && ReferenceEquals(a.OnPointerCanceled, b.OnPointerCanceled)
-            && ReferenceEquals(a.OnPointerCaptureLost, b.OnPointerCaptureLost)
-            && ReferenceEquals(a.OnPointerWheelChanged, b.OnPointerWheelChanged)
-            && ReferenceEquals(a.OnTapped, b.OnTapped)
-            && ReferenceEquals(a.OnDoubleTapped, b.OnDoubleTapped)
-            && ReferenceEquals(a.OnRightTapped, b.OnRightTapped)
-            && ReferenceEquals(a.OnHolding, b.OnHolding)
-            && ReferenceEquals(a.OnKeyDown, b.OnKeyDown)
-            && ReferenceEquals(a.OnKeyUp, b.OnKeyUp)
-            && ReferenceEquals(a.OnPreviewKeyDown, b.OnPreviewKeyDown)
-            && ReferenceEquals(a.OnPreviewKeyUp, b.OnPreviewKeyUp)
-            && ReferenceEquals(a.OnCharacterReceived, b.OnCharacterReceived)
-            && ReferenceEquals(a.OnGotFocus, b.OnGotFocus)
-            && ReferenceEquals(a.OnLostFocus, b.OnLostFocus)
-            && ReferenceEquals(a.OnAccessKeyDisplayRequested, b.OnAccessKeyDisplayRequested);
-    }
-
-    private static bool AccessibilityEqual(AccessibilityModifiers? a, AccessibilityModifiers? b)
-    {
-        if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
-        return a.Equals(b);
-    }
+        => ModifierEquality.ModifiersEqualCore(a, b, visibleOnly: true);
 
     /// <summary>
     /// Compare two Attached property dictionaries by content.
@@ -2144,7 +1947,7 @@ public record ElementExtras
         && ContextValues is null;
 }
 
-public record ElementModifiers
+public partial record ElementModifiers
 {
     // ── Bucketed sub-records (spec 034 §A) ──────────────────────────
     // Layout / Visual fields are stored in dedicated sub-records so that the
@@ -2441,83 +2244,7 @@ public record ElementModifiers
     // ── Accessibility — Tier 2/3 (lazy sub-record, zero allocation unless used) ─
     public AccessibilityModifiers? Accessibility { get; init; }
 
-    public ElementModifiers Merge(ElementModifiers other)
-    {
-        // Merge buckets at sub-record level. Naming a shim'd property inside
-        // the with { } here would clone the bucket once per moved field
-        // (each shim's init re-runs); write Layout / Visual once instead.
-        var mergedLayout = other.Layout is not null
-            ? (Layout is not null ? Layout.Merge(other.Layout) : other.Layout)
-            : Layout;
-        var mergedVisual = other.Visual is not null
-            ? (Visual is not null ? Visual.Merge(other.Visual) : other.Visual)
-            : Visual;
-
-        return this with
-        {
-            Layout = mergedLayout,
-            Visual = mergedVisual,
-            ToolTip = other.ToolTip ?? ToolTip,
-            RichToolTip = other.RichToolTip ?? RichToolTip,
-            ToolTipPlacement = other.ToolTipPlacement ?? ToolTipPlacement,
-            ToolTipPlacementTargetRef = other.ToolTipPlacementTargetRef ?? ToolTipPlacementTargetRef,
-            AttachedFlyout = other.AttachedFlyout ?? AttachedFlyout,
-            ContextFlyout = other.ContextFlyout ?? ContextFlyout,
-            IsEnabled = other.IsEnabled ?? IsEnabled,
-            AutomationName = other.AutomationName ?? AutomationName,
-            AutomationId = other.AutomationId ?? AutomationId,
-            ElementSoundMode = other.ElementSoundMode ?? ElementSoundMode,
-            OnMountAction = other.OnMountAction ?? OnMountAction,
-            OnUnmountAction = other.OnUnmountAction ?? OnUnmountAction,
-            OnUpdateAction = other.OnUpdateAction ?? OnUpdateAction,
-            FontFamily = other.FontFamily ?? FontFamily,
-            FontSize = other.FontSize ?? FontSize,
-            FontWeight = other.FontWeight ?? FontWeight,
-            OnSizeChanged = other.OnSizeChanged ?? OnSizeChanged,
-            OnPointerPressed = other.OnPointerPressed ?? OnPointerPressed,
-            OnPointerMoved = other.OnPointerMoved ?? OnPointerMoved,
-            OnPointerReleased = other.OnPointerReleased ?? OnPointerReleased,
-            OnPointerEntered = other.OnPointerEntered ?? OnPointerEntered,
-            OnPointerExited = other.OnPointerExited ?? OnPointerExited,
-            OnPointerCanceled = other.OnPointerCanceled ?? OnPointerCanceled,
-            OnPointerCaptureLost = other.OnPointerCaptureLost ?? OnPointerCaptureLost,
-            OnPointerWheelChanged = other.OnPointerWheelChanged ?? OnPointerWheelChanged,
-            OnTapped = other.OnTapped ?? OnTapped,
-            OnDoubleTapped = other.OnDoubleTapped ?? OnDoubleTapped,
-            OnRightTapped = other.OnRightTapped ?? OnRightTapped,
-            OnHolding = other.OnHolding ?? OnHolding,
-            OnKeyDown = other.OnKeyDown ?? OnKeyDown,
-            OnKeyUp = other.OnKeyUp ?? OnKeyUp,
-            OnPreviewKeyDown = other.OnPreviewKeyDown ?? OnPreviewKeyDown,
-            OnPreviewKeyUp = other.OnPreviewKeyUp ?? OnPreviewKeyUp,
-            OnCharacterReceived = other.OnCharacterReceived ?? OnCharacterReceived,
-            OnGotFocus = other.OnGotFocus ?? OnGotFocus,
-            OnLostFocus = other.OnLostFocus ?? OnLostFocus,
-            Pan = other.Pan ?? Pan,
-            Pinch = other.Pinch ?? Pinch,
-            Rotate = other.Rotate ?? Rotate,
-            LongPress = other.LongPress ?? LongPress,
-            DragSource = other.DragSource ?? DragSource,
-            DropTarget = other.DropTarget ?? DropTarget,
-            HeadingLevel = other.HeadingLevel ?? HeadingLevel,
-            IsDragRegion = other.IsDragRegion ?? IsDragRegion,
-            IsTabStop = other.IsTabStop ?? IsTabStop,
-            IsHitTestVisible = other.IsHitTestVisible ?? IsHitTestVisible,
-            TabIndex = other.TabIndex ?? TabIndex,
-            AccessKey = other.AccessKey ?? AccessKey,
-            XYFocusKeyboardNavigation = other.XYFocusKeyboardNavigation ?? XYFocusKeyboardNavigation,
-            XYFocusUpRef = other.XYFocusUpRef ?? XYFocusUpRef,
-            XYFocusDownRef = other.XYFocusDownRef ?? XYFocusDownRef,
-            XYFocusLeftRef = other.XYFocusLeftRef ?? XYFocusLeftRef,
-            XYFocusRightRef = other.XYFocusRightRef ?? XYFocusRightRef,
-            OnAccessKeyDisplayRequested = other.OnAccessKeyDisplayRequested ?? OnAccessKeyDisplayRequested,
-            Ref = other.Ref ?? Ref,
-            Backdrop = other.Backdrop ?? Backdrop,
-            Accessibility = other.Accessibility is not null
-                ? (Accessibility is not null ? Accessibility.Merge(other.Accessibility) : other.Accessibility)
-                : Accessibility,
-        };
-    }
+    public partial ElementModifiers Merge(ElementModifiers other);
 }
 
 /// <summary>
@@ -2533,7 +2260,7 @@ public record ElementModifiers
 /// Spec 034 §A. The field set may grow but won't shrink — additions are
 /// always backwards-compatible.
 /// </remarks>
-public record LayoutModifiers
+public partial record LayoutModifiers
 {
     public Thickness? Margin { get; init; }
     public Thickness? Padding { get; init; }
@@ -2561,28 +2288,7 @@ public record LayoutModifiers
     /// Mirrors <see cref="ElementModifiers.Merge"/>.
     /// </summary>
     /// <remarks>Spec 034 §A.</remarks>
-    public LayoutModifiers Merge(LayoutModifiers other) => this with
-    {
-        Margin = other.Margin ?? Margin,
-        Padding = other.Padding ?? Padding,
-        Width = other.Width ?? Width,
-        Height = other.Height ?? Height,
-        MinWidth = other.MinWidth ?? MinWidth,
-        MinHeight = other.MinHeight ?? MinHeight,
-        MaxWidth = other.MaxWidth ?? MaxWidth,
-        MaxHeight = other.MaxHeight ?? MaxHeight,
-        HorizontalAlignment = other.HorizontalAlignment ?? HorizontalAlignment,
-        VerticalAlignment = other.VerticalAlignment ?? VerticalAlignment,
-        HorizontalContentAlignment = other.HorizontalContentAlignment ?? HorizontalContentAlignment,
-        VerticalContentAlignment = other.VerticalContentAlignment ?? VerticalContentAlignment,
-        IsVisible = other.IsVisible ?? IsVisible,
-        MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
-        MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
-        PaddingInlineStart = other.PaddingInlineStart ?? PaddingInlineStart,
-        PaddingInlineEnd = other.PaddingInlineEnd ?? PaddingInlineEnd,
-        BorderInlineStart = other.BorderInlineStart ?? BorderInlineStart,
-        RequestedTheme = other.RequestedTheme ?? RequestedTheme,
-    };
+    public partial LayoutModifiers Merge(LayoutModifiers other);
 }
 
 /// <summary>
@@ -2596,7 +2302,7 @@ public record LayoutModifiers
 /// Spec 034 §A. The field set may grow but won't shrink — additions are
 /// always backwards-compatible.
 /// </remarks>
-public record VisualModifiers
+public partial record VisualModifiers
 {
     public Brush? Background { get; init; }
     public Brush? Foreground { get; init; }
@@ -2616,20 +2322,7 @@ public record VisualModifiers
     /// <paramref name="other"/>'s set fields and falling back to ours.
     /// </summary>
     /// <remarks>Spec 034 §A.</remarks>
-    public VisualModifiers Merge(VisualModifiers other) => this with
-    {
-        Background = other.Background ?? Background,
-        Foreground = other.Foreground ?? Foreground,
-        BorderBrush = other.BorderBrush ?? BorderBrush,
-        BorderThickness = other.BorderThickness ?? BorderThickness,
-        CornerRadius = other.CornerRadius ?? CornerRadius,
-        Opacity = other.Opacity ?? Opacity,
-        Scale = other.Scale ?? Scale,
-        Rotation = other.Rotation ?? Rotation,
-        Translation = other.Translation ?? Translation,
-        CenterPoint = other.CenterPoint ?? CenterPoint,
-        TransformOrigin = other.TransformOrigin ?? TransformOrigin,
-    };
+    public partial VisualModifiers Merge(VisualModifiers other);
 }
 
 /// <summary>
@@ -2638,7 +2331,7 @@ public record VisualModifiers
 /// advanced accessibility annotations. All fluent extension methods create/merge
 /// this record automatically — developers never need to construct it directly.
 /// </summary>
-public record AccessibilityModifiers
+public partial record AccessibilityModifiers
 {
     /// <summary>AutomationProperties.HelpText — supplemental description read after the Name.</summary>
     public string? HelpText { get; init; }
@@ -2688,28 +2381,7 @@ public record AccessibilityModifiers
     /// <summary>UIElement.TabFocusNavigation — Tab behavior within a container (Local, Once, Cycle).</summary>
     public Microsoft.UI.Xaml.Input.KeyboardNavigationMode? TabFocusNavigation { get; init; }
 
-    public AccessibilityModifiers Merge(AccessibilityModifiers other)
-    {
-        return this with
-        {
-            HelpText = other.HelpText ?? HelpText,
-            FullDescription = other.FullDescription ?? FullDescription,
-            LandmarkType = other.LandmarkType ?? LandmarkType,
-            AccessibilityView = other.AccessibilityView ?? AccessibilityView,
-            IsRequiredForForm = other.IsRequiredForForm ?? IsRequiredForForm,
-            LiveSetting = other.LiveSetting ?? LiveSetting,
-            PositionInSet = other.PositionInSet ?? PositionInSet,
-            SizeOfSet = other.SizeOfSet ?? SizeOfSet,
-            Level = other.Level ?? Level,
-            ItemStatus = other.ItemStatus ?? ItemStatus,
-            LabeledBy = other.LabeledBy ?? LabeledBy,
-            LabeledByRef = other.LabeledByRef ?? LabeledByRef,
-            DescribedByRefs = other.DescribedByRefs ?? DescribedByRefs,
-            FlowsToRefs = other.FlowsToRefs ?? FlowsToRefs,
-            FlowsFromRefs = other.FlowsFromRefs ?? FlowsFromRefs,
-            TabFocusNavigation = other.TabFocusNavigation ?? TabFocusNavigation,
-        };
-    }
+    public partial AccessibilityModifiers Merge(AccessibilityModifiers other);
 }
 
 // ════════════════════════════════════════════════════════════════════════
