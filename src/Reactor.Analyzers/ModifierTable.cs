@@ -760,6 +760,7 @@ internal static class ModifierTable
     // user type sharing the simple name cannot trigger the rule.
     private const string AutomationNs = "Microsoft.UI.Xaml.Automation";
     private const string ControlsNs = "Microsoft.UI.Xaml.Controls";
+    private const string PrimitivesNs = "Microsoft.UI.Xaml.Controls.Primitives";
     private const string LayoutNs = "Microsoft.UI.Reactor.Layout";
 
     /// <summary>
@@ -830,6 +831,12 @@ internal static class ModifierTable
 
             // ── TitleBar (spec 059) ──────────────────────────────────────────
             new AttachedModifierInfo("TitleBar", ControlsNs, "IsDragRegion", "IsDragRegion"),
+
+            // ── FlyoutBase (issue #1753) ─────────────────────────────────────
+            // Diagnostic only: SetAttachedFlyout takes a FlyoutBase; .WithFlyout takes the
+            // Reactor element to show in it.
+            new AttachedModifierInfo("FlyoutBase", PrimitivesNs, "AttachedFlyout", "WithFlyout",
+                autoFix: false, modifierUsage: ".WithFlyout(element)"),
 
             // ── FlexPanel — all eleven funnel into one .Flex(...) ────────────
             // Diagnostic only: .Flex(...) is a single SetAttached(FlexAttached) that replaces

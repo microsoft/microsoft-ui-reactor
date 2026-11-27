@@ -1,0 +1,148 @@
+using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Xaml;
+using static Microsoft.UI.Reactor.Factories;
+using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
+using WinUI = Microsoft.UI.Xaml.Controls;
+
+namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
+
+/// <summary>
+/// Issue #1753: <c>.WithFlyout(...)</c> on a non-Button target writes
+/// <c>FlyoutBase.AttachedFlyout</c>. A pooled control used to keep the previous renter's
+/// flyout, and dropping the modifier on an update left it attached. Each case also checks
+/// that the flyout's content component was unmounted, not just detached.
+/// </summary>
+public static class FlyoutAttachmentPoolFixtures
+{
+    private static int s_cleanupCount;
+
+    private sealed class CleanupChild : Component
+    {
+        public override Element Render()
+        {
+            UseEffect(() => () => global::System.Threading.Interlocked.Increment(ref s_cleanupCount));
+            return TextBlock("flyout-content");
+        }
+    }
+
+    // The carrier sits at the VStack tail, so it is the one control returned to the pool and
+    // rented back. The instance check keeps the null checks non-vacuous: a fresh control has no
+    // flyout either. The renter declares no flyout, so nothing but the pool return can clear it.
+    internal class WithFlyoutPoolReturn(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return VStack(
+                    Button("DropFlyoutCarrier", () => set(1)),
+                    Button("RemountFlyoutCarrier", () => set(2)),
+                    phase switch
+                    {
+                        0 => TextBlock("flyout-pool-carrier").WithFlyout(Component<CleanupChild>()),
+                        1 => Empty(),
+                        _ => TextBlock("flyout-pool-carrier-2"),
+                    });
+            });
+
+            await Harness.Render();
+            var first = H.FindText("flyout-pool-carrier");
+            H.Check("WithFlyoutPool_Phase0_Attached",
+                first is not null && WinPrim.FlyoutBase.GetAttachedFlyout(first) is WinUI.Flyout);
+            H.Check("WithFlyoutPool_Phase0_NoCleanupYet", s_cleanupCount == 0);
+
+            H.ClickButton("DropFlyoutCarrier");
+            await Harness.Render();
+            H.Check("WithFlyoutPool_Phase1_ContentUnmounted", s_cleanupCount == 1);
+
+            H.ClickButton("RemountFlyoutCarrier");
+            await Harness.Render();
+            var second = H.FindText("flyout-pool-carrier-2");
+            H.Check("WithFlyoutPool_Phase2_ReusedInstance", first is not null && ReferenceEquals(first, second));
+            H.Check("WithFlyoutPool_Phase2_FlyoutCleared",
+                second is not null && WinPrim.FlyoutBase.GetAttachedFlyout(second) is null);
+        }
+    }
+
+    // An attached flyout Reactor did not install (here an .OnMount write) is not the
+    // reconciler's to unmount, so only the pool's own reset can drop it.
+    internal class ForeignAttachedFlyoutPoolReturn(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return VStack(
+                    Button("DropForeignFlyout", () => set(1)),
+                    Button("RemountForeignFlyout", () => set(2)),
+                    phase switch
+                    {
+                        0 => TextBlock("foreign-flyout-carrier").OnMount(fe =>
+                            WinPrim.FlyoutBase.SetAttachedFlyout(fe, new WinUI.Flyout { Content = new WinUI.TextBlock() })),
+                        1 => Empty(),
+                        _ => TextBlock("foreign-flyout-carrier-2"),
+                    });
+            });
+
+            await Harness.Render();
+            var first = H.FindText("foreign-flyout-carrier");
+            H.Check("ForeignFlyoutPool_Phase0_Attached",
+                first is not null && WinPrim.FlyoutBase.GetAttachedFlyout(first) is not null);
+
+            H.ClickButton("DropForeignFlyout");
+            await Harness.Render();
+            H.ClickButton("RemountForeignFlyout");
+            await Harness.Render();
+            var second = H.FindText("foreign-flyout-carrier-2");
+            H.Check("ForeignFlyoutPool_Phase2_ReusedInstance", first is not null && ReferenceEquals(first, second));
+            H.Check("ForeignFlyoutPool_Phase2_FlyoutCleared",
+                second is not null && second.ReadLocalValue(WinPrim.FlyoutBase.AttachedFlyoutProperty) == DependencyProperty.UnsetValue);
+        }
+    }
+
+    // Set → unset on a control that stays mounted, for both flyout slots: the attached slot on
+    // a TextBlock and Button.Flyout on a Button.
+    internal class WithFlyoutDroppedOnUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (dropped, set) = ctx.UseState(false);
+                Element text = TextBlock("flyout-unset-text");
+                Element button = Button("flyout-unset-button", () => { });
+                return VStack(
+                    Button("DropFlyoutModifier", () => set(true)),
+                    dropped ? text : text.WithFlyout(Component<CleanupChild>()),
+                    dropped ? button : button.WithFlyout(Component<CleanupChild>()));
+            });
+
+            await Harness.Render();
+            var text = H.FindText("flyout-unset-text");
+            var button = H.FindButton("flyout-unset-button");
+            H.Check("WithFlyoutUnset_Phase0_Attached",
+                text is not null && WinPrim.FlyoutBase.GetAttachedFlyout(text) is WinUI.Flyout
+                && button?.Flyout is WinUI.Flyout);
+            H.Check("WithFlyoutUnset_Phase0_NoCleanupYet", s_cleanupCount == 0);
+
+            H.ClickButton("DropFlyoutModifier");
+            await Harness.Render();
+            H.Check("WithFlyoutUnset_Phase1_SameControls",
+                ReferenceEquals(text, H.FindText("flyout-unset-text"))
+                && ReferenceEquals(button, H.FindButton("flyout-unset-button")));
+            H.Check("WithFlyoutUnset_Phase1_TextFlyoutCleared",
+                text is not null && text.ReadLocalValue(WinPrim.FlyoutBase.AttachedFlyoutProperty) == DependencyProperty.UnsetValue);
+            H.Check("WithFlyoutUnset_Phase1_ButtonFlyoutCleared",
+                button is not null && button.ReadLocalValue(WinUI.Button.FlyoutProperty) == DependencyProperty.UnsetValue);
+            H.Check("WithFlyoutUnset_Phase1_ContentUnmounted", s_cleanupCount == 2);
+        }
+    }
+}

@@ -753,6 +753,14 @@ namespace Microsoft.UI.Xaml.Controls
     }
 }
 
+namespace Microsoft.UI.Xaml.Controls.Primitives
+{
+    public static class FlyoutBase
+    {
+        public static void SetAttachedFlyout(object target, object? value) { }
+    }
+}
+
 namespace Microsoft.UI.Reactor.Layout
 {
     public static class FlexPanel
@@ -802,6 +810,7 @@ namespace Microsoft.UI.Reactor
         public static FakeElement ToolTip(this FakeElement el, string v, int placement) => el;
         public static FakeElement ToolTipPlacement(this FakeElement el, int v) => el;
         public static FakeElement IsDragRegion(this FakeElement el, bool v) => el;
+        public static FakeElement WithFlyout(this FakeElement el, object flyout) => el;
         public static FakeElement Flex(this FakeElement el, double grow = 0) => el;
     }
 }
@@ -814,6 +823,7 @@ namespace Microsoft.UI.Reactor
     [InlineData(@"Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, ""Save"")")]
     [InlineData(@"Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(fe, ""Save (Ctrl+S)"")")]
     [InlineData(@"Microsoft.UI.Xaml.Controls.TitleBar.SetIsDragRegion(fe, false)")]
+    [InlineData(@"Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.SetAttachedFlyout(fe, new object())")]
     [InlineData(@"Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(fe, 1)")]
     public async Task Fires_For_Attached_Setter_On_The_Lambda_Parameter(string call)
     {

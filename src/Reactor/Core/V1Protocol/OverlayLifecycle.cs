@@ -442,6 +442,9 @@ internal static class OverlayLifecycle
         s_flyoutOwnerProperty is { } property && flyout?.GetValue(property) is WeakReference<FrameworkElement> reference
         && reference.TryGetTarget(out var target) ? target : null;
 
+    /// <summary>Whether a flyout decorator installed <paramref name="flyout"/> and still owns it.</summary>
+    internal static bool IsDecoratorFlyout(WinPrim.FlyoutBase flyout) => FlyoutTarget(flyout) is not null;
+
     /// <summary>Clears the installed flyout's owner when its target releases its identity.</summary>
     internal static void ForgetFlyoutOwner(FrameworkElement target)
     {

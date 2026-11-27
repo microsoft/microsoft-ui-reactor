@@ -487,6 +487,8 @@ public sealed partial class Reconciler
         || element.Key is not null
         || (element.Extensions is { } extras && (!SkipsCallSiteOnlyTags || !extras.IsBehaviorallyEmpty))
         || HasReferenceModifiers(element)
+        // Issue #1753: unmount reads the tag to release a .WithFlyout(...) flyout's content.
+        || element.Modifiers?.AttachedFlyout is not null
         || (IsComponentBoundary(element) && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
 
     /// <summary>

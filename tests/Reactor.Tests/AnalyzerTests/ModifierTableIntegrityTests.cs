@@ -300,6 +300,10 @@ public class ModifierTableIntegrityTests
                 setter => HasStaticTwoArgMethod(typeof(Microsoft.UI.Xaml.Controls.TitleBar), setter),
                 prop => HasDependencyPropertyField(typeof(Microsoft.UI.Xaml.Controls.TitleBar), prop),
                 setter => StaticTwoArgValueType(typeof(Microsoft.UI.Xaml.Controls.TitleBar), setter)),
+            ["Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase"] = (
+                setter => HasStaticTwoArgMethod(typeof(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase), setter),
+                prop => HasDependencyPropertyField(typeof(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase), prop),
+                setter => StaticTwoArgValueType(typeof(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase), setter)),
             ["Microsoft.UI.Reactor.Layout.FlexPanel"] = (
                 setter => HasStaticTwoArgMethod(typeof(Microsoft.UI.Reactor.Layout.FlexPanel), setter),
                 prop => HasDependencyPropertyField(typeof(Microsoft.UI.Reactor.Layout.FlexPanel), prop),

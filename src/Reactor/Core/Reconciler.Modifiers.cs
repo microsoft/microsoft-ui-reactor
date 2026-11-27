@@ -550,6 +550,8 @@ public sealed partial class Reconciler
 
         if (m.AttachedFlyout is not null)
             ApplyFlyoutAttachment(fe, oldM?.AttachedFlyout, m.AttachedFlyout, requestRerender);
+        else if (oldM?.AttachedFlyout is not null && UnmountFlyoutAttachmentContent(fe))
+            fe.ClearValue(FlyoutSlotProperty(fe));
 
         if (m.ContextFlyout is not null)
         {

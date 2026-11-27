@@ -163,6 +163,47 @@ public sealed partial class Reconciler
         }
     }
 
+    /// <summary>The dependency property behind <paramref name="fe"/>'s flyout slot.</summary>
+    internal static DependencyProperty FlyoutSlotProperty(FrameworkElement fe) =>
+        ResolveFlyoutSlot(fe.GetType()) switch
+        {
+            FlyoutSlot.SplitButton => WinUI.SplitButton.FlyoutProperty,
+            FlyoutSlot.Button => WinUI.Button.FlyoutProperty,
+            _ => WinPrim.FlyoutBase.AttachedFlyoutProperty,
+        };
+
+    /// <summary>
+    /// Unmounts the content of the flyout a <c>.WithFlyout(...)</c> modifier installed on
+    /// <paramref name="fe"/>, as <c>OverlayLifecycle.ReleaseFlyout</c> does for a flyout
+    /// decorator. The caller then clears the slot (issue #1753). Returns false, touching
+    /// nothing, when the slot is empty or holds a flyout decorator's flyout, which that
+    /// decorator's handler releases.
+    /// </summary>
+    private bool UnmountFlyoutAttachmentContent(FrameworkElement fe)
+    {
+        if (GetFlyoutOnControl(fe) is not { } flyout || V1Protocol.OverlayLifecycle.IsDecoratorFlyout(flyout))
+            return false;
+        if (flyout is WinUI.Flyout contentFlyout)
+        {
+            if (contentFlyout.Content is UIElement content) UnmountChild(content);
+            contentFlyout.Content = null;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Unmount counterpart of the <c>.WithFlyout(...)</c> unset arm in
+    /// <c>ApplyToolTipAndFlyoutModifiers</c>: a control leaving the tree takes its
+    /// modifier flyout's content with it, so the content's components run their cleanups
+    /// and a pooled control holds no flyout from its previous renter (issue #1753).
+    /// </summary>
+    private void ReleaseFlyoutAttachment(FrameworkElement fe, Element mounted)
+    {
+        if (FindMountedElementValue(fe, static element => element.Modifiers?.AttachedFlyout, mounted) is not null
+            && UnmountFlyoutAttachmentContent(fe))
+            fe.ClearValue(FlyoutSlotProperty(fe));
+    }
+
     /// <summary>
     /// Creates a WinUI FlyoutBase from a Reactor element descriptor.
     /// Recognizes ContentFlyoutElement and MenuFlyoutContentElement for configured flyouts,
