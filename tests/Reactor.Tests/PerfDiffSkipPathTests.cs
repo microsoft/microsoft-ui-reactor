@@ -160,7 +160,7 @@ public class PerfDiffSkipPathTests
             Assert.False(Element.ModifiersEqual(empty, a), $"{name}: removing handler ⇒ must Update");
         }
 
-        // Tracks the routed-handler slot count in Element.ModifierCallbacksEqual;
+        // Tracks the routed-handler slot count in ModifierEquality.ModifierCallbacksEqual;
         // bump both together. Gesture / drag-drop slots are intentionally excluded —
         // see ModifierCallbacksEqual_Ignores_Gesture_And_DragDrop_Slots_To_Match_Main.
         Assert.Equal(21, cases.Length);
