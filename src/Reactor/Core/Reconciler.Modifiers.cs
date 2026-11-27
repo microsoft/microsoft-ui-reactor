@@ -278,8 +278,11 @@ public sealed partial class Reconciler
         ApplyMarginModifiers(fe, oldM, m, ownsControl);
         ApplyPaddingModifiers(fe, oldM, m, ownsControl);
         ApplySizeAndAlignmentModifiers(fe, oldM, m);
-        ApplyOpacityTransformAndVisibilityModifiers(fe, oldM, m);
-        ApplyToolTipAndFlyoutModifiers(fe, oldM, m, requestRerender);
+        ApplyOpacityAndTransformModifiers(fe, oldM, m);
+        ApplyVisibilityModifier(fe, oldM, m);
+        ApplyToolTipModifiers(fe, oldM, m, requestRerender);
+        ApplyToolTipPlacementModifier(fe, oldM, m);
+        ApplyFlyoutModifiers(fe, oldM, m, requestRerender);
         ApplyIsEnabledAndCornerRadiusModifiers(fe, oldM, m);
         ApplyBorderModifiers(fe, oldM, m, ownsControl);
         ApplyBackgroundAndForegroundModifiers(fe, oldM, m, keepRemovedBackground, foregroundUpdate);
@@ -429,8 +432,8 @@ public sealed partial class Reconciler
         }
     }
 
-    /// <summary>Opacity, the facade transforms (Scale, Rotation, Translation, TransformOrigin, CenterPoint), and IsVisible.</summary>
-    private void ApplyOpacityTransformAndVisibilityModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    /// <summary>Opacity and the facade transforms (Scale, Rotation, Translation, TransformOrigin, CenterPoint).</summary>
+    private void ApplyOpacityAndTransformModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
             ApplyDeclaredOpacity(fe, (float)m.Opacity.Value, GetModifierAnimationSource(fe));
@@ -484,14 +487,10 @@ public sealed partial class Reconciler
             if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
                 AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
-        if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
-            fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;
-        else if (!m.IsVisible.HasValue && oldM?.IsVisible.HasValue == true)
-            fe.ClearValue(UIElement.VisibilityProperty);
     }
 
-    /// <summary>ToolTip/RichToolTip, ToolTipPlacement, AttachedFlyout, and ContextFlyout.</summary>
-    private void ApplyToolTipAndFlyoutModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
+    /// <summary>ToolTip and RichToolTip.</summary>
+    private void ApplyToolTipModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
     {
         if (m.RichToolTip is not null)
         {
@@ -512,12 +511,11 @@ public sealed partial class Reconciler
             WinUI.ToolTipService.SetToolTip(fe, m.ToolTip);
         else if (m.RichToolTip is null && m.ToolTip is null && (oldM?.RichToolTip is not null || oldM?.ToolTip is not null))
             fe.ClearValue(WinUI.ToolTipService.ToolTipProperty);
+    }
 
-        if (m.ToolTipPlacement.HasValue && m.ToolTipPlacement != oldM?.ToolTipPlacement)
-            WinUI.ToolTipService.SetPlacement(fe, m.ToolTipPlacement.Value);
-        else if (!m.ToolTipPlacement.HasValue && oldM?.ToolTipPlacement.HasValue == true)
-            fe.ClearValue(WinUI.ToolTipService.PlacementProperty);
-
+    /// <summary>AttachedFlyout and ContextFlyout.</summary>
+    private void ApplyFlyoutModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
+    {
         if (m.AttachedFlyout is not null)
             ApplyFlyoutAttachment(fe, oldM?.AttachedFlyout, m.AttachedFlyout, requestRerender);
 
