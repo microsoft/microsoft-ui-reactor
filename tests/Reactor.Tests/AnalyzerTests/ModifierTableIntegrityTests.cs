@@ -866,10 +866,10 @@ public class ModifierTableIntegrityTests
 
     /// <summary>
     /// Property name → the WinUI type names <c>ThemeBindingApplier.GetDependencyPropertyName</c> will emit a
-    /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. The method's body is a
+    /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. Its rows, and those of the
+    /// generated <c>GetModifierDependencyPropertyName</c> it calls first (spec 067 layer 2), are a
     /// chain of <c>if (property == "X" &amp;&amp; (fe is A || fe is B)) return "X";</c>, so each
-    /// branch's string comparison names the property. The type tests or the shared foreground
-    /// lookup supply its receiver gate.
+    /// branch's string comparison names the property and its type tests supply the receiver gate.
     /// </summary>
     internal static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
     {
@@ -877,9 +877,19 @@ public class ModifierTableIntegrityTests
 
         Assert.NotNull(method);
 
+        // Spec 067 layer 2: the common-modifier rows moved into the generated
+        // GetModifierDependencyPropertyName. Reading its rows only means something if the
+        // hand-written method still calls it.
+        var generated = ReconcilerSource.Methods("GetModifierDependencyPropertyName").FirstOrDefault();
+        Assert.NotNull(generated);
+        Assert.True(method!.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Any(call => ReconcilerSource.InvokedName(call) == "GetModifierDependencyPropertyName"),
+            "GetDependencyPropertyName no longer calls the generated GetModifierDependencyPropertyName, so the "
+            + "Background/Foreground/BorderBrush ThemeRef rows are unreachable.");
+
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        foreach (var ifStatement in method!.DescendantNodes()
+        foreach (var ifStatement in new[] { method!, generated! }.SelectMany(m => m.DescendantNodes())
             .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.IfStatementSyntax>())
         {
             var property = ifStatement.Condition
@@ -898,9 +908,6 @@ public class ModifierTableIntegrityTests
                             && b.Left is Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax { Identifier.Text: "fe" })
                 .Select(b => SimpleTypeName(b.Right))
                 .Where(typeName => typeName is not null);
-
-            if (property == "Foreground" && CallsForegroundPropertyLookup(ifStatement.Condition))
-                typeNames = typeNames.Concat(ReadForegroundPropertyGate(ReadForegroundModifierSource(RepoRootFinder.FindRepoRoot()!)));
 
             foreach (var typeName in typeNames)
             {
@@ -941,7 +948,9 @@ public class ModifierTableIntegrityTests
         Assert.NotNull(root);
         var runtimeReceivers = ReadForegroundPropertyGate(ReadForegroundModifierSource(root!));
 
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.cs");
+        // Spec 067 layer 2: the owner helpers are generated from the schema; the runtime side,
+        // ForegroundModifier.GetProperty, stays hand-written, so this still compares two sources.
+        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.Generated.cs");
         var cancellationToken = TestContext.Current.CancellationToken;
         var source = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree
             .ParseText(File.ReadAllText(file), cancellationToken: cancellationToken)

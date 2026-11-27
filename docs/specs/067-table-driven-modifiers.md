@@ -366,7 +366,7 @@ Rules the schema enforces about itself (unit tests over the data, §10.1):
 | `src/Reactor/Core/Reconciler.Modifiers.Generated.cs` | rows A–D arms of `ApplyModifiers` at their current positions, and the call sites of rows E–F | 3 |
 | `src/Reactor/Core/Element.Modifiers.Generated.cs` | `ModifiersEqualCore`, `VisualModifiersEqual`, the three `Merge` bodies | 2 |
 | `src/Reactor/Core/Diagnostics/AppliedModifierMap.Generated.cs` | `AppliedModifierMap.Entries` and its owner helpers | 2 |
-| `src/Reactor/Core/Reconciler.ThemeBindings.Generated.cs` | `GetDependencyPropertyName` | 2 |
+| `src/Reactor/Core/ThemeBindingApplier.Generated.cs` | the common-modifier rows of `GetDependencyPropertyName` (`GetModifierDependencyPropertyName`); `PaneBackground` stays hand-written | 2 |
 | `src/Reactor/Core/ElementPool.Generated.cs` | a `CleanModifierBackedProperties(fe)` helper that `CleanElement` calls, emitted from each receiver's declared `PoolReset` (§6.2) | 5 |
 | `src/Reactor/Core/Reconciler.Pooling.Generated.cs` | `DeclaresTransform` (from `TakesVisualAtMount`) and `HasRestorableModifier`'s field list (from `RestorableOwner`) | 6 |
 
@@ -596,7 +596,7 @@ remaining-owner semantics would be a behaviour change.
 The `ThemeRef` overloads of `Background`, `Foreground` and `BorderBrush` go through
 `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568-580`), not `ApplyModifiers`, and
 their reach differs: `Foreground` reaches `RichTextBlock` on the theme path but not on the plain
-brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`). Since #1687 the plain write and the `ThemeRef` path share `ForegroundModifier.GetProperty` and reach the same receivers, so no slot has a separate theme gate today; `ModifierTable.ThemeGate` still derives one from `Theme`-role receivers if they ever differ. In the
+brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`). Since #1687 the plain write and the `ThemeRef` path reach the same receivers (layer 2 generates the `ThemeRef` rows from the `Theme` receivers, and `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` checks them against `ForegroundModifier.GetProperty`), so no slot has a separate theme gate today; `ModifierTable.ThemeGate` still derives one from `Theme`-role receivers if they ever differ. In the
 schema that is a receiver row with the `Theme` role but not the `Apply` role, so it never widens
 the plain write, and layer 2 generates `GetDependencyPropertyName`'s modifier rows from the
 `Theme`-role rows. The pool reach is a third, separate set (`RichTextBlock.Foreground` is cleared
@@ -883,8 +883,17 @@ through `ModifierCallbacksEqual`. The emitter throws on a declaration that shape
 (for example a Layout slot that is not `Value`) instead of emitting different code. Because
 `ModifierFieldContractTests` reads the skip policy from the same schema, a frozen literal
 (`ModifierSkipPolicySnapshotTests`), captured while that test still checked the hand-written
-comparison, is the independent oracle. The second PR generates `AppliedModifierMap` and
-`GetDependencyPropertyName`'s modifier rows.
+comparison, is the independent oracle. The second PR generates `AppliedModifierMap.Entries` and
+its owner helpers (`AppliedModifierMap.Generated.cs`) and the common-modifier rows of
+`GetDependencyPropertyName` (`ThemeBindingApplier.Generated.cs`, read by the gate reader through
+`ReconcilerSource.HelperFiles`). Slots gained `ReportTarget` (the transform facades),
+`ReportSuppressedBy` (ToolTip under RichToolTip) and `ReportHandWritten` (AttachedFlyout's
+flyout-slot owner stays hand-written). A gated receiver reports as `<Receiver>.<Property>`, not
+`<DpOwner>.<Property>` as §4.2 sketched, because `TabIndex` reports `Control.TabIndex` today. The
+report order is pinned by `ModifierSchema.AppliedReportOrder`, so the diagnostics output kept its
+order, and `AppliedModifierMapSnapshotTests` freezes the map captured from the hand-written code.
+`GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` is kept, not deleted as §9
+planned: the brush apply arms stay hand-coded, so it still compares two independent sources.
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

@@ -13,8 +13,8 @@ namespace Microsoft.UI.Reactor.Analyzers.Modifiers;
 /// <para>
 /// The analyzer's <c>ModifierTable</c> takes its gates from here, and the tests check the facts
 /// below against the hand-written reconciler. Layer 2 generates the skip equality
-/// (<c>ModifierEquality</c>) and the four <c>Merge</c> bodies from it into
-/// <c>src/Reactor/Core/Element.Modifiers.Generated.cs</c>; the apply arms are still hand-written.
+/// (<c>ModifierEquality</c>), the four <c>Merge</c> bodies, <c>AppliedModifierMap.Entries</c> and the
+/// ThemeRef rows of <c>GetDependencyPropertyName</c> from it; the apply arms are still hand-written.
 /// </para>
 /// <para>
 /// The analyzer facts (<see cref="ModifierSlot.AnalyzerControlGate"/>,
@@ -151,16 +151,22 @@ internal static class ModifierSchema
             .Method("ApplyOpacityTransformAndVisibilityModifiers").On(ReceiverRole.Apply, FrameworkElement, "Opacity", UIElement)
             .Restorable(),
         S("Scale", ModifierBucket.Visual, "System.Numerics.Vector3", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.One"),
+            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.One")
+            .Report(target: "Visual.Scale"),
         S("Rotation", ModifierBucket.Visual, "float", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "0"),
+            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "0")
+            .Report(target: "Visual.RotationAngle"),
         S("Translation", ModifierBucket.Visual, "System.Numerics.Vector3", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero"),
+            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero")
+            .Report(target: "Visual.Translation"),
         // Before CenterPoint (spec 066 §8.2).
         S("TransformOrigin", ModifierBucket.Visual, "System.Numerics.Vector2", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector2.Zero"),
+            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector2.Zero")
+            // Spec 066 §8: an expression on Visual.CenterPoint fed by the visual's ReactorOrigin property.
+            .Report(target: "Visual.CenterPoint"),
         S("CenterPoint", ModifierBucket.Visual, "System.Numerics.Vector3", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero"),
+            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero")
+            .Report(target: "Visual.CenterPoint"),
 
         // ── Visibility (row C) ──
         S("IsVisible", ModifierBucket.Layout, "bool", ModifierFamily.Visibility, ApplyShape.Converted)
@@ -172,11 +178,13 @@ internal static class ModifierSchema
             .Method("ApplyToolTipAndFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ToolTip", ToolTipService)
             .Equality(SkipEquality.BlocksSkipWhenSet, WriteEquality.Reference).Fluent("WithToolTip"),
         S("ToolTip", ModifierBucket.Root, "string", ModifierFamily.ToolTip, ApplyShape.HandCoded)
-            .Method("ApplyToolTipAndFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ToolTip", ToolTipService),
+            .Method("ApplyToolTipAndFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ToolTip", ToolTipService)
+            .Report(suppressedBy: "RichToolTip"),
         S("ToolTipPlacement", ModifierBucket.Root, "Microsoft.UI.Xaml.Controls.Primitives.PlacementMode", ModifierFamily.ToolTip, ApplyShape.Attached)
             .AttachedTo(ToolTipService, "Placement"),
         S("AttachedFlyout", ModifierBucket.Root, ElementType, ModifierFamily.Flyout, ApplyShape.HandCoded)
-            .Method("ApplyFlyoutAttachment").Equality(SkipEquality.BlocksSkipWhenSet, WriteEquality.Reference).Fluent("WithFlyout"),
+            .Method("ApplyFlyoutAttachment").Equality(SkipEquality.BlocksSkipWhenSet, WriteEquality.Reference).Fluent("WithFlyout")
+            .Report(handWritten: true),
         S("ContextFlyout", ModifierBucket.Root, ElementType, ModifierFamily.Flyout, ApplyShape.HandCoded)
             .Method("ApplyToolTipAndFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ContextFlyout", UIElement)
             .Equality(SkipEquality.BlocksSkipWhenSet, WriteEquality.Reference).Fluent("WithContextFlyout"),
@@ -211,8 +219,10 @@ internal static class ModifierSchema
             .On(ReceiverRole.Apply | ReceiverRole.Theme, Border)
             .Equality(SkipEquality.BrushValue, WriteEquality.Reference)
             .Analyzer(controlGate: PanelControlBorder),
-        // Hand-coded in ForegroundModifier (#1687): one receiver lookup for the plain write and the
-        // ThemeRef path, and a RichTextBlock's descriptor-written Foreground is coordinated there.
+        // Hand-coded in ForegroundModifier (#1687): the plain write goes through ForegroundModifier.GetProperty,
+        // and a RichTextBlock's descriptor-written Foreground is coordinated there. The ThemeRef row is generated
+        // from the Theme receivers below; GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table
+        // keeps the two in step.
         S("Foreground", ModifierBucket.Visual, Brush, ModifierFamily.Brush, ApplyShape.HandCoded)
             .Method("ForegroundModifier.Apply")
             .On(ReceiverRole.Apply | ReceiverRole.Theme, Control).On(ReceiverRole.Apply | ReceiverRole.Theme, TextBlock)
@@ -356,6 +366,29 @@ internal static class ModifierSchema
     };
 
     private static readonly Dictionary<string, ModifierSlot> s_byName = BuildIndex();
+
+    /// <summary>
+    /// The order <c>ReactorDiagnostics.GetAppliedProperties</c> lists modifiers in, pinned from the
+    /// hand-written <c>AppliedModifierMap</c> this replaced (spec 067 layer 2), so generating the map
+    /// changed no output. It differs from <see cref="Slots"/> (apply order) only in presentation.
+    /// Every reported slot must appear exactly once; the generator throws otherwise.
+    /// </summary>
+    internal static readonly string[] AppliedReportOrder =
+    {
+        "RequestedTheme", "Margin", "MarginInlineStart", "MarginInlineEnd", "Padding", "PaddingInlineStart",
+        "PaddingInlineEnd", "Width", "Height", "MinWidth", "MinHeight", "MaxWidth", "MaxHeight",
+        "HorizontalAlignment", "VerticalAlignment", "HorizontalContentAlignment", "VerticalContentAlignment",
+        "Opacity", "Scale", "Rotation", "Translation", "CenterPoint", "TransformOrigin", "IsVisible",
+        "RichToolTip", "ToolTip", "ToolTipPlacement", "ToolTipPlacementTargetRef", "AttachedFlyout", "ContextFlyout",
+        "IsEnabled", "CornerRadius", "BorderBrush", "BorderThickness", "BorderInlineStart", "Background", "Foreground",
+        "AutomationName", "AutomationId", "IsDragRegion", "ElementSoundMode", "HeadingLevel", "IsTabStop",
+        "IsHitTestVisible", "TabIndex", "AccessKey", "XYFocusKeyboardNavigation",
+        "XYFocusUpRef", "XYFocusDownRef", "XYFocusLeftRef", "XYFocusRightRef",
+        "FontFamily", "FontSize", "FontWeight",
+        "HelpText", "FullDescription", "LandmarkType", "AccessibilityView", "IsRequiredForForm", "LiveSetting",
+        "PositionInSet", "SizeOfSet", "Level", "ItemStatus", "LabeledBy", "LabeledByRef", "DescribedByRefs",
+        "FlowsToRefs", "FlowsFromRefs", "TabFocusNavigation",
+    };
 
     private static Dictionary<string, ModifierSlot> BuildIndex()
     {
