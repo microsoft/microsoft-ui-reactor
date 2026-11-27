@@ -298,11 +298,14 @@ Conventions for contributors:
 ### Fixed
 
 - A pooled `TextBlock`, `Border`, `Grid`, `StackPanel`, `Image` or other non-Button control
-  no longer keeps the previous renter's `.WithFlyout(...)` flyout, and dropping `.WithFlyout(...)`
-  on an update now removes the flyout instead of leaving it attached. In both cases the flyout's
-  content is unmounted too, so components inside it run their effect cleanups. `REACTOR_POOL_001`
-  now also reports `.Set(c => FlyoutBase.SetAttachedFlyout(c, ...))` on a pooled control and
-  suggests `.WithFlyout(element)` (issue #1753).
+  no longer keeps the previous renter's `.WithFlyout(...)` flyout. On any control, including a
+  `Button`, dropping `.WithFlyout(...)` on an update now removes the flyout instead of leaving it
+  attached, and when the control unmounts the flyout's content is unmounted with it, so
+  components inside it run their effect cleanups. `REACTOR_POOL_001` now also reports
+  `.Set(c => FlyoutBase.SetAttachedFlyout(c, ...))` on a pooled non-Button control and suggests
+  `.WithFlyout(element)`, with no code fix (`REACTOR_MOD_002` on a control the pool doesn't
+  recycle). Builds using `TreatWarningsAsErrors` may need to move those writes to
+  `.WithFlyout(...)` (issue #1753).
 
 - Dropping `.Padding(x)` and `.PaddingInlineStart(y)` or `.PaddingInlineEnd(y)` in
   the same render now releases the padding. Before, the control kept `x` as a

@@ -73,6 +73,9 @@ public sealed partial class Reconciler
         internal bool MemoWrapsDecorator;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
+        // The flyout a .WithFlyout(...) modifier installed, whichever element layer declared it, so a
+        // drop or unmount releases that flyout and not one another writer put in the slot (#1753).
+        internal WinPrim.FlyoutBase? ModifierFlyout;
         // Composition and animation bookkeeping, allocated by the first composition feature the
         // control uses and never replaced (see CompositionState).
         internal CompositionState? Composition;
@@ -487,8 +490,6 @@ public sealed partial class Reconciler
         || element.Key is not null
         || (element.Extensions is { } extras && (!SkipsCallSiteOnlyTags || !extras.IsBehaviorallyEmpty))
         || HasReferenceModifiers(element)
-        // Issue #1753: unmount reads the tag to release a .WithFlyout(...) flyout's content.
-        || element.Modifiers?.AttachedFlyout is not null
         || (IsComponentBoundary(element) && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
 
     /// <summary>
@@ -779,6 +780,9 @@ public sealed partial class Reconciler
             // the host's ElementFactory aliases the same instance.
             state.ContextCapture?.Clear();
             state.ContextCapture = null;
+            // The unmount walk released it already; a control pooled without one must not hand
+            // the previous renter's flyout to the next renter's unmount (#1753).
+            state.ModifierFlyout = null;
         }
     }
 
@@ -814,6 +818,7 @@ public sealed partial class Reconciler
         state.MemoWrapsDecorator = false;
         state.OpacityKeyframe = null;
         state.DeclaredOpacity = default;
+        state.ModifierFlyout = null;
         if (state.Composition is { } composition)
         {
             if (composition.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);

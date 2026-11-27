@@ -106,8 +106,9 @@ public static class FlyoutAttachmentPoolFixtures
         }
     }
 
-    // Set → unset on a control that stays mounted, for both flyout slots: the attached slot on
-    // a TextBlock and Button.Flyout on a Button.
+    // Set → unset on a control that stays mounted, for both flyout slots (the attached slot on a
+    // TextBlock, Button.Flyout on a Button) and for a MenuFlyout. The TextBlock's flyout content
+    // carries its own .WithFlyout, which is released by the unmount walk over that content.
     internal class WithFlyoutDroppedOnUpdate(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -119,30 +120,101 @@ public static class FlyoutAttachmentPoolFixtures
                 var (dropped, set) = ctx.UseState(false);
                 Element text = TextBlock("flyout-unset-text");
                 Element button = Button("flyout-unset-button", () => { });
+                Element menu = TextBlock("flyout-unset-menu");
                 return VStack(
                     Button("DropFlyoutModifier", () => set(true)),
-                    dropped ? text : text.WithFlyout(Component<CleanupChild>()),
-                    dropped ? button : button.WithFlyout(Component<CleanupChild>()));
+                    dropped ? text : text.WithFlyout(TextBlock("flyout-nested").WithFlyout(Component<CleanupChild>())),
+                    dropped ? button : button.WithFlyout(Component<CleanupChild>()),
+                    dropped ? menu : menu.WithFlyout(MenuItems(MenuItem("Copy"))));
             });
 
             await Harness.Render();
             var text = H.FindText("flyout-unset-text");
             var button = H.FindButton("flyout-unset-button");
+            var menu = H.FindText("flyout-unset-menu");
             H.Check("WithFlyoutUnset_Phase0_Attached",
                 text is not null && WinPrim.FlyoutBase.GetAttachedFlyout(text) is WinUI.Flyout
-                && button?.Flyout is WinUI.Flyout);
+                && button?.Flyout is WinUI.Flyout
+                && menu is not null && WinPrim.FlyoutBase.GetAttachedFlyout(menu) is WinUI.MenuFlyout);
             H.Check("WithFlyoutUnset_Phase0_NoCleanupYet", s_cleanupCount == 0);
 
             H.ClickButton("DropFlyoutModifier");
             await Harness.Render();
             H.Check("WithFlyoutUnset_Phase1_SameControls",
                 ReferenceEquals(text, H.FindText("flyout-unset-text"))
-                && ReferenceEquals(button, H.FindButton("flyout-unset-button")));
+                && ReferenceEquals(button, H.FindButton("flyout-unset-button"))
+                && ReferenceEquals(menu, H.FindText("flyout-unset-menu")));
             H.Check("WithFlyoutUnset_Phase1_TextFlyoutCleared",
                 text is not null && text.ReadLocalValue(WinPrim.FlyoutBase.AttachedFlyoutProperty) == DependencyProperty.UnsetValue);
             H.Check("WithFlyoutUnset_Phase1_ButtonFlyoutCleared",
                 button is not null && button.ReadLocalValue(WinUI.Button.FlyoutProperty) == DependencyProperty.UnsetValue);
+            H.Check("WithFlyoutUnset_Phase1_MenuFlyoutCleared",
+                menu is not null && menu.ReadLocalValue(WinPrim.FlyoutBase.AttachedFlyoutProperty) == DependencyProperty.UnsetValue);
+            // One from the Button's content, one from the nested flyout inside the TextBlock's.
             H.Check("WithFlyoutUnset_Phase1_ContentUnmounted", s_cleanupCount == 2);
+        }
+    }
+
+    // A keyed Memo's modifiers land on its factory output's control, which carries the inner
+    // element's tag, so the release can't rely on finding .WithFlyout in that tag.
+    internal class KeyedMemoWithFlyoutUnmount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (shown, set) = ctx.UseState(true);
+                return VStack(
+                    Button("DropFlyoutMemo", () => set(false)),
+                    shown
+                        ? Memo("flyout-memo", static () => TextBlock("flyout-memo-carrier")).WithFlyout(Component<CleanupChild>())
+                        : Empty());
+            });
+
+            await Harness.Render();
+            var carrier = H.FindText("flyout-memo-carrier");
+            H.Check("WithFlyoutMemo_Phase0_Attached",
+                carrier is not null && WinPrim.FlyoutBase.GetAttachedFlyout(carrier) is WinUI.Flyout);
+
+            H.ClickButton("DropFlyoutMemo");
+            await Harness.Render();
+            H.Check("WithFlyoutMemo_Phase1_Removed", H.FindText("flyout-memo-carrier") is null);
+            H.Check("WithFlyoutMemo_Phase1_ContentUnmounted", s_cleanupCount == 1);
+        }
+    }
+
+    // Dropping .WithFlyout in the same update that sets the button's own flyout: argument. The
+    // descriptor writes the new flyout first, so the release must take only the flyout the
+    // modifier installed and leave the new one in the slot.
+    internal class WithFlyoutHandsOffToButtonFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (swapped, set) = ctx.UseState(false);
+                return VStack(
+                    Button("SwapFlyoutSource", () => set(true)),
+                    swapped
+                        ? DropDownButton("flyout-handoff", TextBlock("flyout-handoff-own"))
+                        : DropDownButton("flyout-handoff").WithFlyout(Component<CleanupChild>()));
+            });
+
+            await Harness.Render();
+            var dropDown = H.FindButton("flyout-handoff");
+            H.Check("WithFlyoutHandoff_Phase0_ModifierFlyout",
+                dropDown?.Flyout is WinUI.Flyout);
+
+            H.ClickButton("SwapFlyoutSource");
+            await Harness.Render();
+            H.Check("WithFlyoutHandoff_Phase1_SameControl", ReferenceEquals(dropDown, H.FindButton("flyout-handoff")));
+            H.Check("WithFlyoutHandoff_Phase1_OwnFlyoutKept",
+                dropDown?.Flyout is WinUI.Flyout { Content: WinUI.TextBlock { Text: "flyout-handoff-own" } });
+            H.Check("WithFlyoutHandoff_Phase1_ModifierContentUnmounted", s_cleanupCount == 1);
         }
     }
 }

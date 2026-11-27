@@ -42,9 +42,12 @@ public sealed partial class Reconciler
 
         // First mount — create new flyout
         var flyout = CreateFlyoutFromElement(newFlyoutEl, requestRerender);
+        // A flyout this modifier installed earlier is being replaced, so its content goes now.
+        if (UnmountFlyoutAttachmentContent(fe) && flyout is null) fe.ClearValue(FlyoutSlotProperty(fe));
         if (flyout is null) return;
 
         SetFlyoutOnControl(fe, flyout);
+        GetOrCreateReactorState(fe).ModifierFlyout = flyout;
     }
 
     /// <summary>
@@ -173,35 +176,39 @@ public sealed partial class Reconciler
         };
 
     /// <summary>
-    /// Unmounts the content of the flyout a <c>.WithFlyout(...)</c> modifier installed on
-    /// <paramref name="fe"/>, as <c>OverlayLifecycle.ReleaseFlyout</c> does for a flyout
-    /// decorator. The caller then clears the slot (issue #1753). Returns false, touching
-    /// nothing, when the slot is empty or holds a flyout decorator's flyout, which that
-    /// decorator's handler releases.
+    /// Unmounts and detaches a flyout's Reactor-mounted content. Shared by the
+    /// <c>.WithFlyout(...)</c> release and <c>OverlayLifecycle.ReleaseFlyout</c>.
+    /// </summary>
+    internal void UnmountFlyoutContent(WinUI.Flyout flyout)
+    {
+        if (flyout.Content is UIElement content) UnmountChild(content);
+        flyout.Content = null;
+    }
+
+    /// <summary>
+    /// Releases the flyout a <c>.WithFlyout(...)</c> modifier installed on
+    /// <paramref name="fe"/> (issue #1753): unmounts its content and forgets it. Returns true
+    /// when that flyout still occupies the slot, which the caller then clears. Another writer,
+    /// such as a flyout decorator or a button's own <c>flyout:</c> argument set in the same
+    /// update, may have replaced it, and its flyout is left alone.
     /// </summary>
     private bool UnmountFlyoutAttachmentContent(FrameworkElement fe)
     {
-        if (GetFlyoutOnControl(fe) is not { } flyout || V1Protocol.OverlayLifecycle.IsDecoratorFlyout(flyout))
-            return false;
-        if (flyout is WinUI.Flyout contentFlyout)
-        {
-            if (contentFlyout.Content is UIElement content) UnmountChild(content);
-            contentFlyout.Content = null;
-        }
-        return true;
+        if (!TryGetReactorState(fe, out var state) || state.ModifierFlyout is not { } flyout) return false;
+        state.ModifierFlyout = null;
+        if (flyout is WinUI.Flyout contentFlyout) UnmountFlyoutContent(contentFlyout);
+        return ReferenceEquals(GetFlyoutOnControl(fe), flyout);
     }
 
     /// <summary>
     /// Unmount counterpart of the <c>.WithFlyout(...)</c> unset arm in
-    /// <c>ApplyToolTipAndFlyoutModifiers</c>: a control leaving the tree takes its
-    /// modifier flyout's content with it, so the content's components run their cleanups
-    /// and a pooled control holds no flyout from its previous renter (issue #1753).
+    /// <c>ApplyToolTipAndFlyoutModifiers</c>: a control leaving the tree takes its modifier
+    /// flyout's content with it, so the content's components run their cleanups and a pooled
+    /// control holds no flyout from its previous renter (issue #1753).
     /// </summary>
-    private void ReleaseFlyoutAttachment(FrameworkElement fe, Element mounted)
+    private void ReleaseFlyoutAttachment(FrameworkElement fe)
     {
-        if (FindMountedElementValue(fe, static element => element.Modifiers?.AttachedFlyout, mounted) is not null
-            && UnmountFlyoutAttachmentContent(fe))
-            fe.ClearValue(FlyoutSlotProperty(fe));
+        if (UnmountFlyoutAttachmentContent(fe)) fe.ClearValue(FlyoutSlotProperty(fe));
     }
 
     /// <summary>

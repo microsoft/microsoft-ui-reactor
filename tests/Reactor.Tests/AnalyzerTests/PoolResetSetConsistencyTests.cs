@@ -683,15 +683,16 @@ using Microsoft.UI.Reactor;
 namespace Microsoft.UI.Xaml.Controls
 {{
     // The .Set receiver has to be a control ElementPool actually recycles: REACTOR_POOL_001
-    // claims the attached write is cleared on pool return, which is only true of one.
-    public class Button {{ }}
+    // claims the attached write is cleared on pool return, which is only true of one. Not a
+    // Button: AttachedModifierInfo.ExcludedReceivers drops the FlyoutBase row there.
+    public class TextBlock {{ }}
 }}
 
 namespace Microsoft.UI.Reactor
 {{
     public class FakeElement
     {{
-        public FakeElement Set(Action<Microsoft.UI.Xaml.Controls.Button> configure) {{ configure(new Microsoft.UI.Xaml.Controls.Button()); return this; }}
+        public FakeElement Set(Action<Microsoft.UI.Xaml.Controls.TextBlock> configure) {{ configure(new Microsoft.UI.Xaml.Controls.TextBlock()); return this; }}
     }}
 }}
 {declarations}

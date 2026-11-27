@@ -751,6 +751,16 @@ namespace Microsoft.UI.Xaml.Controls
     public class CheckBox
     {
     }
+
+    // Pooled, and not Button-derived, so the FlyoutBase row reports on it.
+    public class TextBlock
+    {
+    }
+
+    // Button-derived: .WithFlyout fills its own Flyout slot, so the FlyoutBase row skips it.
+    public class DropDownButton : Button
+    {
+    }
 }
 
 namespace Microsoft.UI.Xaml.Controls.Primitives
@@ -794,6 +804,16 @@ namespace Microsoft.UI.Reactor
         public UnpooledElement Set(Action<Microsoft.UI.Xaml.Controls.CheckBox> configure) { configure(new Microsoft.UI.Xaml.Controls.CheckBox()); return this; }
     }
 
+    public class FakeTextElement
+    {
+        public FakeTextElement Set(Action<Microsoft.UI.Xaml.Controls.TextBlock> configure) { configure(new Microsoft.UI.Xaml.Controls.TextBlock()); return this; }
+    }
+
+    public class FakeDropDownElement
+    {
+        public FakeDropDownElement Set(Action<Microsoft.UI.Xaml.Controls.DropDownButton> configure) { configure(new Microsoft.UI.Xaml.Controls.DropDownButton()); return this; }
+    }
+
     public static class UnpooledElementExtensions
     {
         public static UnpooledElement AutomationName(this UnpooledElement el, string v) => el;
@@ -810,7 +830,6 @@ namespace Microsoft.UI.Reactor
         public static FakeElement ToolTip(this FakeElement el, string v, int placement) => el;
         public static FakeElement ToolTipPlacement(this FakeElement el, int v) => el;
         public static FakeElement IsDragRegion(this FakeElement el, bool v) => el;
-        public static FakeElement WithFlyout(this FakeElement el, object flyout) => el;
         public static FakeElement Flex(this FakeElement el, double grow = 0) => el;
     }
 }
@@ -823,7 +842,6 @@ namespace Microsoft.UI.Reactor
     [InlineData(@"Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, ""Save"")")]
     [InlineData(@"Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(fe, ""Save (Ctrl+S)"")")]
     [InlineData(@"Microsoft.UI.Xaml.Controls.TitleBar.SetIsDragRegion(fe, false)")]
-    [InlineData(@"Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.SetAttachedFlyout(fe, new object())")]
     [InlineData(@"Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(fe, 1)")]
     public async Task Fires_For_Attached_Setter_On_The_Lambda_Parameter(string call)
     {
@@ -836,6 +854,49 @@ class C
         {{|REACTOR_POOL_001:el.Set(fe => {call})|}};
     }}
 }}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AttachedFlyout_Reports_On_A_Pooled_NonButton_Receiver_Without_A_Fix()
+    {
+        // SetAttachedFlyout takes a FlyoutBase and .WithFlyout a Reactor element, so the row is
+        // diagnostic-only: TestCode == FixedCode proves no rewrite is offered.
+        var code = AttachedStubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeTextElement();
+        {|REACTOR_POOL_001:el.Set(tb => Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.SetAttachedFlyout(tb, new object()))|};
+    }
+}";
+
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = code,
+            FixedCode = code,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AttachedFlyout_Is_Not_Reported_On_Button_Receivers()
+    {
+        // On a Button .WithFlyout writes Button.Flyout, which opens on click, so suggesting it for
+        // an attached flyout would change behaviour. A subclass is skipped too.
+        var source = AttachedStubs + @"
+class C
+{
+    void M()
+    {
+        new FakeElement().Set(b => Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.SetAttachedFlyout(b, new object()));
+        new FakeDropDownElement().Set(d => Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.SetAttachedFlyout(d, new object()));
+    }
+}";
 
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {

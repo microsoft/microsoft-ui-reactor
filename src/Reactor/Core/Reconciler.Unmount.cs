@@ -135,7 +135,7 @@ public sealed partial class Reconciler
 
         var unmountElement = unmountState?.DecoratorElement ?? unmountState?.Element;
         // Issue #1753: a .WithFlyout(...) flyout's content is unmounted with its host.
-        if (unmountElement is not null) ReleaseFlyoutAttachment((FrameworkElement)control, unmountElement);
+        if (unmountState?.ModifierFlyout is not null) ReleaseFlyoutAttachment((FrameworkElement)control);
         // Finish the saved flyout decorator before the existing target dispatch.
         if (unmountState?.DecoratorElement is { } decoratorElement
             && _v1Handlers.TryGet(decoratorElement.GetType(), out var decoratorEntry)
@@ -630,7 +630,7 @@ public sealed partial class Reconciler
             TryGetReactorState(unmountFe, out unmountState);
         var unmountElement = unmountState?.DecoratorElement ?? unmountState?.Element;
         // Issue #1753: a .WithFlyout(...) flyout's content is unmounted with its host.
-        if (unmountElement is not null) ReleaseFlyoutAttachment((FrameworkElement)control, unmountElement);
+        if (unmountState?.ModifierFlyout is not null) ReleaseFlyoutAttachment((FrameworkElement)control);
         // Finish the saved flyout decorator before the existing target dispatch.
         if (unmountState?.DecoratorElement is { } decoratorElement
             && _v1Handlers.TryGet(decoratorElement.GetType(), out var decoratorEntry)
