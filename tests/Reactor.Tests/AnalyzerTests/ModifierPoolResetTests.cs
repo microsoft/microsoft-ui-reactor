@@ -69,7 +69,7 @@ public class ModifierPoolResetTests
             var ok = receiver.Pool switch
             {
                 PoolReset.ClearValue => resets.Any(r => r.Shape == ResetShape.ClearValue),
-                PoolReset.WriteDefault => resets.Any(r => r.Shape == ResetShape.Assignment),
+                PoolReset.WriteDefault => resets.Any(r => r.Shape == ResetShape.Assignment && r.Value == receiver.PoolDefault),
                 PoolReset.NotReset => resets.Count == 0,
                 _ => false,
             };
