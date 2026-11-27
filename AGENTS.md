@@ -344,7 +344,8 @@ point of return: stop and ship.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, the schema
   slot, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
   helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
-  gates scan it), and the fluent extension. Pair a `.HasValue` write
+  gates scan it; a helper listed in `ModifierEmitter.GeneratedHelpers` is generated into
+  `Reconciler.Modifiers.Generated.cs` from the slot instead), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
   Declare the field in `ModifierSchema.Slots` (`src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`)
   at its apply position, with its bucket, receivers, skip-gate comparison and analyzer gates.

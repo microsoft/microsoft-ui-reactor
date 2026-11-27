@@ -12,9 +12,13 @@ namespace Microsoft.UI.Reactor.Analyzers.Modifiers;
 /// <remarks>
 /// <para>
 /// The analyzer's <c>ModifierTable</c> takes its gates from here, and the tests check the facts
-/// below against the hand-written reconciler. Layer 2 generates the skip equality
+/// below against the reconciler: a Roslyn read of the hand-written arms where they still exist.
+/// For the generated helpers that read sees the generator's own output, so their independent
+/// oracle is the frozen §10.2 matrix (<c>ModifierMatrixExpectations</c>, the <c>ModifierMatrix_*</c>
+/// selftests). Layer 2 generates the skip equality
 /// (<c>ModifierEquality</c>), the four <c>Merge</c> bodies, <c>AppliedModifierMap.Entries</c> and the
-/// ThemeRef rows of <c>GetDependencyPropertyName</c> from it; the apply arms are still hand-written.
+/// ThemeRef rows of <c>GetDependencyPropertyName</c> from it, and layer 3 the apply helpers listed in
+/// <c>ModifierEmitter.GeneratedHelpers</c> (tools/Reactor.ModifierGen); the other apply arms are still hand-written.
 /// </para>
 /// <para>
 /// The analyzer facts (<see cref="ModifierSlot.AnalyzerControlGate"/>,

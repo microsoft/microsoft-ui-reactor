@@ -833,7 +833,7 @@ revertible on its own.
 | 0 | Behaviour-preserving extraction of `ApplyModifiers` into per-family private methods in today's order (proposed separately). Retarget the gate reader and `ScannedMethods` to the extracted methods, with the scan-population check. Freeze today's arm order as a literal list. Merge round-trip and two-way skip-equality tests against the hand-written records. Fix §14 in its own PR. | refactor only, plus the §14 fix | existing suites, new headless tests |
 | 1 | Add `ModifierSchema.cs` and the generator tool, emitting only the typed probe table. Schema invariant tests. Retarget `Every_ControlGate_Matches_…` to the slots' `AnalyzerControlGate`. Add the §10.2 matrix selftest against hand-written code and mutation-check it. Analyzer builds `ControlGate`, `ThemeControlGate`, `GateOnlyInReconciler` and `PoolResetGate` from the slots' declared values, proven identical by the literal parity snapshot. | analyzer only | parity snapshot, analyzer tests unchanged, new selftest green |
 | 2 | Generate the cold consumers: `ModifiersEqual(Core)`, `VisualModifiersEqual`, the three `Merge` bodies, `AppliedModifierMap`, `GetDependencyPropertyName`'s modifier rows. Records become `partial`. | `Element.cs`, diagnostics, theme bindings | freshness test, two-way skip-equality test, perf-compare |
-| 3a–3e | Generate rows A–D one family per PR, each arm at its existing position: sizing and alignment; automation, focus and tier-1 accessibility; typography; control state (`IsEnabled`, `ElementSoundMode`, `TabIndex`, content alignment, `CornerRadius`, `Foreground`); visibility and tooltip placement. | `Reconciler.Modifiers.cs` | §10.2 selftest, unset-arm scans, perf-compare |
+| 3a–3e | Generate rows A–D one family per PR, each arm at its existing position: sizing and alignment (including content alignment, which shares that helper); automation, focus and tier-1 accessibility; typography; control state (`IsEnabled`, `ElementSoundMode`, `TabIndex`, `CornerRadius`; `Foreground` is hand-coded since #1687); visibility and tooltip placement. | `Reconciler.Modifiers.cs` | §10.2 selftest, unset-arm scans, perf-compare |
 | 4 | Composite families: the generated `ApplyModifiers` calls the hand-written resolvers. Only their receivers move to the schema. | `Reconciler.Modifiers.cs` | same |
 | 5 | Generate `PoolableTypes` and a `CleanModifierBackedProperties` helper from each receiver's declared `PoolReset`. `ElementPool` becomes `partial`, and `CleanElementScan` follows the helper in the same PR. | `ElementPool.cs` | pool selftests, every `CleanElementScan` consumer unchanged and green |
 | 6 | Composition metadata: generate `DeclaresTransform` and the five transform rows of `VisualOwningModifiers` from `TakesVisualAtMount` (the other rows stay hand-written, guarded by a full key-set snapshot added first), and `HasRestorableModifier`'s field list from `RestorableOwner`. Apply stays hand-coded. | `Reconciler.Pooling.cs`, `Reconciler.Modifiers.cs`, analyzer | `ModifierTransform_*`, visual-lane selftests, `VisualOwningModifiers` snapshot |
@@ -894,6 +894,22 @@ report order is pinned by `ModifierSchema.AppliedReportOrder`, so the diagnostic
 order, and `AppliedModifierMapSnapshotTests` freezes the map captured from the hand-written code.
 `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` is kept, not deleted as §9
 planned: the brush apply arms stay hand-coded, so it still compares two independent sources.
+
+Layer 3 generates whole family helpers, one family per PR, listed in
+`ModifierEmitter.GeneratedHelpers` and emitted into `Reconciler.Modifiers.Generated.cs` under their
+existing names, so each keeps its call site and the apply order does not move. `ApplyModifiers`
+itself and its call sequence stay hand-written (this replaces §4.3's plan to generate the E–F call
+sites). A helper names its slots as an explicit `First`..`Last` range of `ModifierSchema.Slots`,
+because families are labels that cross helpers (`IsEnabled` and `ElementSoundMode` are both
+control state but live in different helpers). 3a generates `ApplySizeAndAlignmentModifiers`
+(sizing, alignment and the content alignments, which share that helper today). The emitter writes
+today's shapes only: an ungated value-typed set/unset pair, and a declared `SharedGate` run of slots
+gated on one receiver type inside one `if (fe is T x)` block. Attached, reference-typed, converted,
+chained and inline-gated arms (`IsEnabled`'s `… && fe is Control c` form) throw until the family that
+needs them adds the shape. The generated method is token-identical to the hand-written one it
+replaced. For generated helpers the source gates read generated code, so the independent oracle is
+the frozen §10.2 matrix.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short
