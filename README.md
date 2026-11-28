@@ -1,29 +1,45 @@
-<a href="https://github.com/microsoft/microsoft-ui-xaml">
-  <img src="docs/images/header.png" alt="WinUI hero image"/>
-</a>
+<p align="center">
+  <a href="https://microsoft.github.io/microsoft-ui-reactor/">
+    <img src="docs/images/header.png" alt="Microsoft.UI.Reactor" />
+  </a>
+</p>
 
 <h1 align="center">Microsoft.UI.Reactor</h1>
 
 <p align="center">
-  <strong>A declarative, component-based C# framework for building <a href="https://github.com/microsoft/microsoft-ui-xaml">WinUI 3</a> desktop apps.</strong>
+  <b>Native Windows apps, in pure C#.</b><br />
+  A declarative UI framework for <a href="https://github.com/microsoft/microsoft-ui-xaml">WinUI</a>:
+  no XAML, no data binding, no view models.
 </p>
 
-<p align="center">
-  <strong>Status:</strong> Experimental · April 2026
-</p>
+<h3 align="center">
+  <a href="https://microsoft.github.io/microsoft-ui-reactor/get-started/first-app/">Get started</a>
+  <span> · </span>
+  <a href="https://microsoft.github.io/microsoft-ui-reactor/">Documentation</a>
+  <span> · </span>
+  <a href="https://microsoft.github.io/microsoft-ui-reactor/showcase/">Showcase</a>
+  <span> · </span>
+  <a href="https://microsoft.github.io/microsoft-ui-reactor/reference/">API reference</a>
+  <span> · </span>
+  <a href="https://microsoft.github.io/microsoft-ui-reactor/changelog/">Changelog</a>
+</h3>
 
----
+<br />
 
-## What Reactor is — and isn't
+> [!IMPORTANT]
+> Reactor is experimental. We build it in the open, and the API can change
+> between previews. Your [feedback](https://github.com/microsoft/microsoft-ui-reactor/discussions)
+> shapes what it becomes.
 
-Reactor is **not** a new UI platform. It is a new way to *describe* WinUI content. Every control you render is a real WinUI control — `Button`, `TextBox`, `NavigationView`, `TreeView` — just authored differently. Apps built with Reactor interop freely with XAML, MVVM, existing controls, and the rest of the WinUI ecosystem.
+## 👋 Hello, Reactor
 
-What Reactor adds on top of WinUI:
+Describe your UI as a function of state. When the state changes, Reactor
+compares the new description with the old one and updates only the WinUI
+controls that changed.
 
-- A virtual element tree and reconciler that diff old vs. new descriptions and patch only what changed on real WinUI controls
-- Hooks-based state (`UseState`, `UseEffect`, `UseReducer`, …) co-located with render logic
-- A C# DSL that replaces XAML markup with typed factory methods and fluent modifiers
-- Higher-level building blocks — flex layout, charting, commanding, navigation, data grid, theming, localization — many of which are candidates to migrate back into WinUI itself
+<table>
+<tr>
+<td>
 
 ```csharp
 using Microsoft.UI.Reactor;
@@ -38,67 +54,106 @@ class MyApp : Component
     {
         var (count, setCount) = UseState(0);
 
-        return VStack(
+        return VStack(12,
             Heading($"Count: {count}"),
             HStack(8,
                 Button("-", () => setCount(count - 1)),
                 Button("+", () => setCount(count + 1))
             )
-        );
+        ).Padding(24);
     }
 }
 ```
 
-No `App.xaml`. No `MainWindow.xaml`. No code-behind. No ViewModels. Just C# with full IntelliSense, refactoring, and compile-time type safety.
+</td>
+<td>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hello-reactor-dark.webp" />
+  <img src="docs/images/hello-reactor-light.webp" width="300" alt="The Hello Reactor window, showing Count: 3 with minus and plus buttons" />
+</picture>
+</td>
+</tr>
+</table>
 
----
+Every control on screen is a real WinUI control. There is no `App.xaml`, no
+`MainWindow.xaml` and no code-behind, and you get IntelliSense, refactoring and
+compile-time checks for all of your UI.
 
-## XAML and MVVM are not going anywhere
+Reactor doesn't replace WinUI, XAML or MVVM. It is a different way to describe
+WinUI content, and it works with the rest of the WinUI ecosystem.
 
-WinUI is a powerful native platform, and the XAML + MVVM programming model is a great fit for a large portion of the WinUI user base. Tooling, designer support, templating, data binding, and years of guidance, samples, and third-party controls are built around it. Reactor does **not** try to replace any of that.
+- **Shipping XAML and MVVM today?** Keep going. Much of the work in this repo,
+  like accessibility APIs, theming, commanding and charting, is meant to move
+  into WinUI itself, so XAML apps benefit too.
+- **Like React, SwiftUI or Jetpack Compose?** Reactor brings hooks, state next
+  to the UI that uses it, and typed UI code to WinUI, on the same runtime and
+  controls.
+- **Want both?** Host Reactor content in a XAML app, or XAML content in a
+  Reactor app. They share one visual tree.
 
-What Reactor does target is a specific gap: developers coming from React, SwiftUI, or Jetpack Compose expect co-located state, declarative composition, and type-safe UI construction. Reactor brings those patterns to WinUI without asking anyone to abandon the platform they already ship on. The two models coexist:
+## 🚀 Get started
 
-- **If you're shipping XAML/MVVM today**, keep shipping XAML/MVVM. The investments we're making in Reactor — improved accessibility APIs, richer theming, better commanding, a stronger data stack — are designed to flow back into WinUI so you benefit too.
-- **If you want a functional MVU model** with no XAML and no ViewModels, Reactor is a path to get there on the same runtime, with the same controls, in the same process.
-- **If you want both**, you can host Reactor content inside a XAML app, or drop XAML content inside a Reactor app. They share the visual tree.
-
-Many of the experiments in this repo — the charting stack, accessibility validators, commanding, flex layout, theming tokens — are likely to land in WinUI directly, where they'll work for XAML and MVVM users too. Others may continue to ship through Reactor. Either way, **WinUI is the foundation**.
-
----
-
-## Quick start
-
-Reactor ships the public preview package [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) on NuGet.org; see the [NuGet page](https://www.nuget.org/packages/Microsoft.UI.Reactor) or [GitHub Releases](https://github.com/microsoft/microsoft-ui-reactor/releases) for the current version. The project templates ship in the official Windows App SDK `dotnet new` pack, so building an app needs no source checkout:
+You need Windows 10 (1809) or Windows 11, the
+[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and the
+Windows App Runtime 2.2 or later. New apps are framework-dependent, so they
+load the runtime that is installed on the machine. If it is missing, install it
+with `winget install Microsoft.WindowsAppRuntime.2`. If an older 2.x runtime is
+installed, update it with `winget upgrade Microsoft.WindowsAppRuntime.2`.
+[Installation](https://microsoft.github.io/microsoft-ui-reactor/get-started/install/)
+has the full list. Create an app with the WinApp CLI:
 
 ```powershell
-# `winapp` is the Windows App SDK CLI; `winapp new` installs the template pack
-# on demand, so there's no separate install step and no version to pin.
 winget install Microsoft.WinAppCli
 winapp new -t reactor -n MyApp
 cd MyApp
 dotnet run
 ```
 
-Scaffolded apps are packaged (single-project MSIX) by default, so `dotnet run` launches them with full package identity — the F5 equivalent. That requires Developer Mode (Settings → System → For developers); `dotnet new reactor -n MyApp --packaging Unpackaged` scaffolds a plain unpackaged `.exe` instead. `reactor-mvu`, `reactor-navview`, and `reactor-tabview` start from richer shells, and `reactor-singlefile` is a single `.cs` file with no project (`winapp new --list` prints them all).
+`winapp new` installs the Reactor templates the first time you use it. New
+apps are packaged, so `dotnet run` needs
+[Developer Mode](https://learn.microsoft.com/windows/apps/get-started/enable-your-device-for-development).
+For a plain `.exe`, use `dotnet new reactor -n MyApp --packaging Unpackaged`
+instead. Run `winapp new --list` to see the other templates, such as
+`reactor-navview` and `reactor-singlefile`.
 
-Prefer plain .NET tooling? `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` followed by `dotnet new reactor -n MyApp` does the same thing. The pack is prerelease-only today and `dotnet new install` resolves stable versions unless you pin one explicitly, which is the step `winapp new` removes.
+Next, [Your first app](https://microsoft.github.io/microsoft-ui-reactor/get-started/first-app/)
+takes you from a counter to a working todo list. If you know XAML,
+[Coming from XAML](https://microsoft.github.io/microsoft-ui-reactor/get-started/xaml-developers/)
+maps what you know to Reactor.
 
-### Contributing to Reactor itself
+## 🤖 Build with AI agents
 
-```powershell
-git clone https://github.com/microsoft/microsoft-ui-reactor.git
-cd microsoft-ui-reactor
-& (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
-```
+Reactor is new, so AI models don't know it well yet. Without help, an agent
+invents API names or falls back to XAML. These tools close that gap:
 
-Clone to a short path such as `C:\src\`. [CONTRIBUTING.md](CONTRIBUTING.md) explains what the bootstrap script installs, how to set things up by hand, and how to build on a restricted network. To learn the framework, start with **[Your first app](https://microsoft.github.io/microsoft-ui-reactor/get-started/first-app/)**.
+| Tool | What it gives your agent | How to get it |
+|---|---|---|
+| Agent plugin | The `reactor-dev` agent and the Reactor skills, for GitHub Copilot CLI and Claude Code | `copilot plugin install microsoft/microsoft-ui-reactor:plugins/reactor` |
+| Skill kit | [`SKILL.md`](SKILL.md), the topic files in [`skills/`](skills/) and an index of every public API, for agents without plugins | The `reactor-skill-kit` zip on the [releases page](https://github.com/microsoft/microsoft-ui-reactor/releases) |
+| `mur check` | Build output with one line per problem and a fix to try | Comes with the skill kit |
+| [Devtools MCP server](https://microsoft.github.io/microsoft-ui-reactor/tools/devtools/) | Eyes on the running app: the visual tree, hook state, screenshots, clicks and typing | Add the `Microsoft.UI.Reactor.Devtools` package to your app, then run `mur devtools` |
+| Docs for AI tools | `llms.txt`, `llms-full.txt` and a Markdown copy of every docs page | [`llms.txt`](https://microsoft.github.io/microsoft-ui-reactor/latest/llms.txt) |
 
----
+[Build with AI](https://microsoft.github.io/microsoft-ui-reactor/tools/build-with-ai/)
+has the setup steps and example prompts. Working on Reactor itself with an
+agent? [`AGENTS.md`](AGENTS.md) has the build commands, test tiers and
+conventions for this repo.
 
-## What's included
+## 🛠️ Tools
 
-Reactor spans a core framework and a set of higher-level features. Each area below is labeled by its current maturity — *Preview* is the most mature, then *Draft*, then *Early*. **All areas are pre-1.0 and the public API surface may change without notice while the project is labeled experimental.**
+| Tool | What it does |
+|---|---|
+| [Hot reload and live preview](https://microsoft.github.io/microsoft-ui-reactor/tools/hot-reload/) | Save a file and see the change without a restart. Preview one component at a time. |
+| [Devtools](https://microsoft.github.io/microsoft-ui-reactor/tools/devtools/) | Inspect the visual tree and hook state of a running app, from a terminal or an MCP client. |
+| [Analyzers](https://microsoft.github.io/microsoft-ui-reactor/tools/analyzers/) | Catch hook-order, accessibility and theming mistakes as you type. |
+| [mur CLI](https://microsoft.github.io/microsoft-ui-reactor/tools/mur-cli/) | `mur check`, `mur doctor`, localization tools and more. |
+| [Editor extensions](https://microsoft.github.io/microsoft-ui-reactor/tools/vs-extension/) | Live preview in VS Code and Visual Studio. |
+
+## 📦 What's included
+
+Every area is pre-1.0. *Preview* areas are the most stable, then *Draft*, then
+*Early*. The labels describe how well tested an area is and how much its API
+may still change, not how complete it is.
 
 | Area | What it does | Maturity |
 |---|---|---|
@@ -126,161 +181,70 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Win2D canvas** | Optional `Reactor.Advanced` package — immediate-mode GPU drawing via `Win2DCanvas` / `Win2DAnimatedCanvas` / `Win2DVirtualCanvas` and draw-state hooks | Early |
 | **Control wrapper generator** | Source generator that turns WinUI controls into Reactor elements via `[GenerateReactorWrapper]` — auto factory methods, descriptors, two-way props | Early |
 | **Preview / hot reload** | `MetadataUpdateHandler` hot reload, CLI `--preview` flag, VS Code live preview | Early |
-| **Visual Studio embedded preview** | Experimental VSIX that reparents a live WinUI app into a Visual Studio tool window | Experimental / roughest |
+| **Visual Studio embedded preview** | Experimental VSIX that reparents a live WinUI app into a Visual Studio tool window | Experimental |
 
-> Maturity labels reflect the breadth of testing and the likelihood of API churn, not feature completeness. *Preview* areas have the broadest unit and selftest coverage (plus end-to-end tests where applicable) and are the most stable — pure-managed subsystems (Flex, Markdown, Commanding) lean on exhaustive unit and selftest suites where end-to-end input isn't applicable. *Draft* areas work on the golden path but may have rough edges or partial AOT support. *Early* areas are usable but expect bigger shape changes as we iterate. The Visual Studio embedded preview is intentionally called out separately: in a repository of experiments, it is currently the roughest and most experimental surface.
+The Visual Studio embedded preview is the roughest part of the repo. Use it to
+try things out and send feedback, not as your daily workflow yet. For Native
+AOT, see the [AOT support matrix](docs/aot-support.md).
 
----
+## 🎨 Samples
 
-## What's in it for you
+The [Showcase](https://microsoft.github.io/microsoft-ui-reactor/showcase/) has
+screenshots of apps built with Reactor. Their source is in this repo:
 
-### Fundamentals — for everyone
+| App | What it shows | Folder |
+|---|---|---|
+| Reactor Gallery | Every WinUI control, rebuilt with Reactor | [`samples/ReactorGallery`](samples/ReactorGallery) |
+| Reactor IDE | Tool windows and documents with the docking system | [`samples/apps/reactor-ide`](samples/apps/reactor-ide) |
+| HeadTrax | A data grid over SQLite and GraphQL data | [`samples/apps/headtrax`](samples/apps/headtrax) |
+| Charting Gallery | Bar and donut charts, force-directed graphs and more | [`samples/ReactorCharting.Gallery`](samples/ReactorCharting.Gallery) |
+| Minesweeper | A complete game with state, timers and input | [`samples/apps/minesweeper`](samples/apps/minesweeper) |
 
-The core framework has been through 13 days of continuous reconciler iteration, a competitive review against React, SwiftUI, and Compose, and a 275-finding code review. It targets the basics every WinUI developer cares about:
+To run one, set up a clone (see [Contributing](#-contributing)) and run:
 
-- **Performance.** Element pooling, render coalescing, skip-unchanged optimization. Keyed lists reconcile with a longest-increasing-subsequence diff so reordering moves the fewest possible controls, virtualized lists recycle realized containers instead of rebuilding them on every scroll, and a dedicated allocation-reduction pass trimmed per-render modifier and hook churn.
-- **Stability.** Built as a system component: high reliability bar, structured logging, stress testing.
-- **Developer experience.** Full IntelliSense, refactoring, and compile-time type safety — no XAML string-typing, no binding errors at runtime.
-- **Localization.** ICU message format with pluralization, CLI extraction, and AI-assisted translation.
-- **Accessibility.** Full exposure of WinUI's built-in accessibility through a simple API, with inline dev-time linting and runtime validation.
-
-### Frontier developers — a new programming model
-
-If you're excited about declarative UI and functional patterns:
-
-- **Functional MVU.** Describe UI as pure C# expressions. Familiar to React, SwiftUI, and Compose users, and a natural fit for AI-agent-assisted authoring.
-- **Hooks-based state** co-located with render logic — no ViewModel boilerplate, no binding expressions.
-- **Immutable element trees** with automatic reconciliation — describe what the UI *should* look like, not how to mutate it.
-- **Flex layout** via a faithful Yoga port — familiar to anyone who has used CSS flexbox.
-- **Declarative animation** driven by compositor-layer features — transitions, keyframes, and connected animations.
-
-### Enterprise developers — data and productivity
-
-If you're building line-of-business applications:
-
-- **DataGrid** with headless state management, column DSL, sort, selection, keyboard navigation, inline editing, column resize, and async validation.
-- **PropertyGrid** with metadata-driven type-to-editor registry, recursive decomposition, and INPC integration.
-- **Forms & validation** pipeline with `FormField`, `ValidationRule`, and auto-validation.
-- **Charting.** Composable services for line, bar, area, pie, tree, and force-directed graphs, built on an industry-standard D3 port.
-- **Commanding** that bundles label, icon, keyboard shortcut, and action into a single definition surfaced across menus, toolbars, and context menus.
-- **WinForms migration.** Tools for incrementally adopting WinUI inside an existing WinForms app.
-
----
-
-
-## Live preview
-
-Reactor includes a built-in preview mode — mount a single component in isolation with hot reload, from the CLI or VS Code.
-
-### CLI preview
-
-Any Reactor app that passes `preview: true` to `ReactorApp.Run` supports the `--preview` flag:
-
-```csharp
-ReactorApp.Run<App>("My App", preview: true);
+```powershell
+dotnet run --project samples/apps/minesweeper -p:Platform=x64
 ```
 
-```bash
-# Preview a specific component with hot reload
-dotnet watch run --project MyApp -p:Platform=x64 -- --preview CounterDemo
+## 🤝 Contributing
 
-# Preview the first component in the project
-dotnet watch run --project MyApp -p:Platform=x64 -- --preview
+We welcome bug reports, ideas and pull requests. Clone to a short path such as
+`C:\src`, because long paths break the Windows App SDK build tools
+([#678](https://github.com/microsoft/microsoft-ui-reactor/issues/678)). Then run
+the bootstrap script once:
 
-# List available components
-dotnet run --project MyApp -p:Platform=x64 -- --preview-list
+```powershell
+git clone https://github.com/microsoft/microsoft-ui-reactor.git C:\src\microsoft-ui-reactor
+cd C:\src\microsoft-ui-reactor
+& (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
+
+# In a new terminal, so that mur is on PATH:
+mur doctor
 ```
 
-### VS Code extension
+The script installs the .NET SDK and runtime it needs, the `mur` CLI, the
+templates and the agent plugin. When you build or run a single app project,
+pass `-p:Platform=x64` or `-p:Platform=ARM64`.
 
-The **Reactor Preview** extension adds a live preview panel to VS Code. It runs a single preview process and switches between components instantly over HTTP — no process restart when you change components.
+| Doc | What's in it |
+|---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, building, project layout and code style |
+| [TESTING.md](TESTING.md) | The four test tiers and how to pick one |
+| [AGENTS.md](AGENTS.md) | Instructions for AI agents that work in this repo |
+| [docs/specs](docs/specs/) | Numbered design specs |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
 
-```bash
-cd src/vscode-reactor
-npm install
-npm run compile
-code --install-extension vscode-reactor
-```
+## 🦀 Prefer Rust?
 
-Open a C# file with a Reactor `Component`, run **Reactor: Preview Component** from the command palette, and a preview panel opens beside your editor. It auto-detects components in the current file, hot-reloads on save via `dotnet watch`, follows your editor between files in the same project, and only relaunches when you cross project boundaries.
-
-### Visual Studio extension
-
-The Visual Studio embedded preview VSIX is available for hands-on experimentation, but it is the roughest surface in this experimental repo. Expect install friction, solution-load races, HWND/DPI edge cases, and breaking changes while it is hardened; use it for smoke testing and feedback, not as a reliable daily-driver workflow yet.
-
----
-
-## How we're releasing it
-
-Reactor is on GitHub as an **experimental** project. The label will stay on for 3–6 months as we iterate on the design in the open.
-
-We are gathering feedback, pressure-testing the API surface, and refining the programming model before broadening adoption. We want the design shaped by real developer experience.
-
-Everything in the repository — framework code, specs, sample apps, test suites — is available for anyone to read, build, and experiment with. Contributions and feedback are welcome from day one.
-
-Expect change. Every line of code in this project is fair game. The DSL syntax may shift as we work with the C# language team, controls may be added or removed, layering may be reorganized. This is your chance to shape the design while the sausage is getting made.
-
----
-
-## Prefer Rust?
-
-The idea isn't tied to C#. Over in [windows-rs](https://github.com/microsoft/windows-rs),
-the Rust for Windows project, the same experiment is running in Rust:
-[**windows-reactor**](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md)
-is a declarative WinUI library where components own their state, controls send
-typed messages back, and only the WinUI controls that changed get updated. It's a
-separate library with its own model, available on
+The same idea is being explored in Rust.
+[windows-reactor](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md),
+part of [windows-rs](https://github.com/microsoft/windows-rs), is a separate
+declarative WinUI library with its own model, on
 [crates.io](https://crates.io/crates/windows-reactor). Different language, same
-native controls underneath.
+native controls.
 
----
+## 📄 License
 
-## Project structure
-
-```
-src/Reactor/                Core framework
-  Core/                     Reconciler, components, hooks, elements
-  Elements/                 DSL factory methods + fluent modifiers
-  Flex/                     FlexPanel — CSS Flexbox via Yoga
-  Yoga/                     Pure C# port of Meta's Yoga layout engine
-  Hosting/                  App bootstrap, render loop, hot reload, preview capture server
-src/Reactor.Cli/            CLI scaffolding tool
-src/vscode-reactor/         VS Code extension — live preview panel
-tests/
-  Reactor.Tests/            xUnit unit tests — 2,200+ tests incl. 543 Yoga fixtures
-  Reactor.AppTests/         MSTest runner — orchestrates selfhost + winapp ui
-  Reactor.AppTests.Host/    Selfhost test app — 60+ in-process fixtures
-  stress_perf/              Performance benchmarks
-samples/
-  apps/                     Sample apps (wordpuzzle, regedit, minesweeper, chat, netpulse, etc.)
-  TodoApp/                  Todo app sample
-```
-
----
-
-## Sample apps
-
-### WordPuzzle — sliding tile puzzle
-
-A sliding tile puzzle demonstrating grid layout, timers, and interactive state.
-
-```bash
-dotnet run --project samples/apps/wordpuzzle -p:Platform=x64
-```
-
----
-
-## Learn more
-
-| Doc | Description |
-|-----|-------------|
-| [Guide](https://microsoft.github.io/microsoft-ui-reactor/) | Documentation on how to use Reactor |
-| [Design Specs](docs/specs/) | Numbered specs covering theming, navigation, animation, data, accessibility |
-| [AOT support matrix](docs/aot-support.md) | Which subsystems work under `PublishAot=true` and which throw at runtime |
-| [Contributing](CONTRIBUTING.md) | Build, test, add features, code style |
-
----
-
-## License
-
-[MIT](LICENSE)
+Reactor is licensed under the [MIT license](LICENSE). This project follows the
+[Microsoft Open Source Code of Conduct](CODE_OF_CONDUCT.md). To report a
+security issue, see [SECURITY.md](SECURITY.md).
